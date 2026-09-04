@@ -237,7 +237,7 @@ popClassPath()
  * Win32 file parsing functions 
  *=======================================================================*/
 
-#ifdef WIN32
+#if defined(WIN32) && !defined(__MINGW32__)
 
 #undef DEBUG_PATH        /* Define this to debug path code */
 

@@ -169,14 +169,14 @@ inline int g_isfinite(jdouble f)                 { return finite(f); }
 // specific)
 
 const jlong min_jlong = ((long long)1 << 63);
-const jlong max_jlong = (min_jlong - 1);
+const jlong max_jlong = (jlong)(((unsigned long long)1 << 63) - 1);
 
 //---------------------------------------------------------------------------
 // Miscellaneous
 //---------------------------------------------------------------------------
 
 // Portability macros
-#ifdef LINUX
+#if defined(GCC) && !defined(_WIN32)
 #define __cdecl
 #define _cdecl
 #endif

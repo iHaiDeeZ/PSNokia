@@ -30,6 +30,7 @@
 
 #ifndef _ANI_H_
 #define _ANI_H_
+#include <cstddef>
 
 /**
  * ANI :== Asynchronous Native Interface

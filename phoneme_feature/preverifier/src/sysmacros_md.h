@@ -58,11 +58,14 @@ void panic (const char *, ...);
 /*
  * File system macros
  */
-#ifdef UNIX
+#if defined(UNIX) && defined(__MINGW32__)
+#include <io.h>
+#define sysOpen(_path, _oflag, _mode)    open(_path, _oflag | O_BINARY, _mode)
+#define sysNativePath(path)            (path)
+#elif defined(UNIX)
 #define sysOpen(_path, _oflag, _mode)    open(_path, _oflag, _mode)
-#define sysNativePath(path)            (path) 
-#endif
-#ifdef WIN32
+#define sysNativePath(path)            (path)
+#elif defined(WIN32)
 #include <io.h>
 #define sysOpen(_path, _oflag, _mode)    open(_path, _oflag | O_BINARY, _mode)
 char *sysNativePath(char *);

@@ -39,6 +39,21 @@
 
 #if ENABLE_MULTIPLE_ISOLATES
 #define MIDP_HEAP_REQUIREMENT (MAX_ISOLATES * 1024 * 1024)
+#elif __has_include(<psp2/kernel/threadmgr.h>)
+/* 1280KB (the shared default below) is far too small for real MIDlets
+ * with dozens of image assets on this platform - confirmed via a live
+ * heap dump (Runtime.freeMemory()/totalMemory()) showing the heap
+ * essentially completely exhausted (156 bytes free out of 1310336) at
+ * the exact point a game's asset-loading sequence started failing.
+ * The Vita has 512MB RAM; this is still a tiny, conservative slice of
+ * it. Guarded to this platform only - other ports keep the original
+ * conservative default. 4MB is CONFIRMED SAFE (multiple games tested).
+ * 8MB was tried (to fix Sonic 2 Dash's missing background visuals) and
+ * caused a real boot hang for that game after running for a while - so
+ * the safe ceiling is somewhere in (4MB, 8MB), narrower than previously
+ * assumed from the old 16MB-hangs finding alone. Do not bump past 4MB
+ * without re-testing carefully. See project memory for the full story. */
+#define MIDP_HEAP_REQUIREMENT (4 * 1024 * 1024)
 #else
 #define MIDP_HEAP_REQUIREMENT (1280 * 1024)
 #endif

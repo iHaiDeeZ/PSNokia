@@ -108,7 +108,7 @@ void CodeGenerator::call_through_gp(address* target_ptr, bool speed JVM_TRAPS)
   }
 #endif
 
-  int offset = int(target_ptr) - int(&gp_base_label);
+  int offset = int(address_word(target_ptr)) - int(address_word(&gp_base_label));
   call_from_compiled_code(gp, offset, parameters_size, indirect, speed
                           JVM_NO_CHECK_AT_BOTTOM);
 }
@@ -985,10 +985,10 @@ int CodeGenerator::get_inline_thrower_gp_index(int rte JVM_TRAPS) {
     long offset;
     if (rte == ThrowExceptionStub::rte_null_pointer) {
       address &target = gp_compiler_throw_NullPointerException_0_ptr;
-      offset = (long)&target - (long)&gp_base_label;
+      offset = (long)(address_word)&target - (long)(address_word)&gp_base_label;
     } else {
       address &target = gp_compiler_throw_ArrayIndexOutOfBoundsException_0_ptr;
-      offset = (long)&target - (long)&gp_base_label;
+      offset = (long)(address_word)&target - (long)(address_word)&gp_base_label;
     }
     offset += long(locals) * BytesPerWord;
     return offset;
@@ -1133,8 +1133,8 @@ void CodeGenerator::overflow(const Assembler::Register& stack_pointer,
     if (stack_pointer != Assembler::r1) {
       mov(r1, reg(stack_pointer));
     }
-    int offset = (int)&gp_interpreter_method_entry_ptr -
-                 (int)&gp_base_label;
+    int offset = (int)(address_word)&gp_interpreter_method_entry_ptr -
+                 (int)(address_word)&gp_base_label;
     ldr(pc, imm_index(gp, offset));
   }
 }
@@ -1233,8 +1233,8 @@ void CodeGenerator::method_prolog(Method *method JVM_TRAPS) {
       // If we go to the stub, we can't be guaranteed it has preserved literals
       frame()->clear_literals();
     } else {
-      int offset = (int)&gp_interpreter_method_entry_ptr -
-                   (int)&gp_base_label;
+      int offset = (int)(address_word)&gp_interpreter_method_entry_ptr -
+                   (int)(address_word)&gp_base_label;
       ldr(pc, imm_index(gp, offset), hi);
     }
   }
@@ -3654,7 +3654,7 @@ void CodeGenerator::return_error(Value& value JVM_TRAPS) {
   COMPILER_COMMENT(("return with error"));
   mov_reg(r1, value.lo_register());
   restore_last_frame(JVM_SINGLE_ARG_CHECK);
-  long offset = (long)&gp_shared_call_vm_exception_ptr - (long)&gp_base_label;
+  long offset = (long)(address_word)&gp_shared_call_vm_exception_ptr - (long)(address_word)&gp_base_label;
   ldr(pc, imm_index(gp, offset));
   write_literals();
 }
@@ -3718,11 +3718,11 @@ void CodeGenerator::throw_simple_exception(int rte JVM_TRAPS) {
     if(Compiler::omit_stack_frame()) {
       address &target = gp_compiler_throw_NullPointerException_10_ptr;
       mov_imm(r0, - params * JavaStackDirection * BytesPerStackElement);
-      offset = (long)&target - (long)&gp_base_label;
+      offset = (long)(address_word)&target - (long)(address_word)&gp_base_label;
     } else {
       address &target = gp_compiler_throw_NullPointerException_ptr;
       mov_imm(r0, method()->max_locals());
-      offset = (long)&target - (long)&gp_base_label;
+      offset = (long)(address_word)&target - (long)(address_word)&gp_base_label;
     }
     ldr_imm_index(pc, gp, offset);
   } else if (rte == ThrowExceptionStub::rte_array_index_out_of_bounds) {
@@ -3731,11 +3731,11 @@ void CodeGenerator::throw_simple_exception(int rte JVM_TRAPS) {
     if(Compiler::omit_stack_frame()) {
       address &target = gp_compiler_throw_ArrayIndexOutOfBoundsException_10_ptr;
       mov_imm(r0, - params * JavaStackDirection * BytesPerStackElement);
-      offset = (long)&target - (long)&gp_base_label;
+      offset = (long)(address_word)&target - (long)(address_word)&gp_base_label;
     } else {
       address &target = gp_compiler_throw_ArrayIndexOutOfBoundsException_ptr;
       mov_imm(r0, method()->max_locals());
-      offset = (long)&target - (long)&gp_base_label;
+      offset = (long)(address_word)&target - (long)(address_word)&gp_base_label;
     }
     ldr_imm_index(pc, gp, offset);
   } else {
@@ -5079,7 +5079,7 @@ bool CodeGenerator::arraycopy(JVM_SINGLE_ARG_TRAPS) {
   };
 
   BasicType array_element_type = T_ILLEGAL;
-  int checks = right_n_bits(CHECK_COUNT); // all bits set
+  intptr_t checks = right_n_bits(CHECK_COUNT); // all bits set
 
   RegisterAllocator::guarantee_all_free();
 

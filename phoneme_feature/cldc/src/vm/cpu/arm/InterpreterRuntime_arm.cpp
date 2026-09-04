@@ -113,15 +113,15 @@ OopDesc* _anewarray(Thread *thread, OopDesc* raw_base_klass, int length
     jint* xsp = (jint*)sp;
     *xsp = TestCompiler;
       xsp += JavaStackDirection;
-    *xsp = (jint)force_terminated;
+    *xsp = (jint)(address_word)force_terminated;
       xsp += JavaStackDirection;
-    *xsp = (jint)Thread::finish;
+    *xsp = (jint)(address_word)Thread::finish;
       xsp += JavaStackDirection;
-    *xsp = (jint)Thread::lightweight_thread_uncaught_exception;
+    *xsp = (jint)(address_word)Thread::lightweight_thread_uncaught_exception;
       xsp += JavaStackDirection;
-    *xsp = (jint)Thread::lightweight_thread_exit;
+    *xsp = (jint)(address_word)Thread::lightweight_thread_exit;
       xsp += JavaStackDirection;
-    *xsp = (jint)start_lightweight_thread_asm;
+    *xsp = (jint)(address_word)start_lightweight_thread_asm;
       xsp += JavaStackDirection;
     *xsp = 0;                   // value of frame pointer
     return (address)xsp;

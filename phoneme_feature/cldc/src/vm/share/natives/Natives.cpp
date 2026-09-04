@@ -27,6 +27,16 @@
 #include "incls/_precompiled.incl"
 #include "incls/_Natives.cpp.incl"
 
+/* See matching comment in Debug.cpp - needed for pss() to actually be
+ * compiled into the PRODUCT CLDC library MIDP links against. */
+#ifndef ENABLE_PRODUCT_PRINT_STACK
+#define ENABLE_PRODUCT_PRINT_STACK 1
+#endif
+
+#if __has_include(<psp2/io/fcntl.h>)
+#include <psp2/io/fcntl.h>
+#endif
+
 // Special VM natives
 
 #if ENABLE_DYNAMIC_NATIVE_METHODS || ENABLE_ROM_GENERATOR
@@ -466,9 +476,22 @@ void Java_illegal_method_execution(JVM_SINGLE_ARG_TRAPS) {
 }
 
 // native public void write(int b)
+// write_marker's weak/strong definitions already exist elsewhere in this
+// merged translation unit (Debug.cpp's host-safe weak fallback, and
+// Main_vita.cpp's real Vita implementation) - just declare it here,
+// don't redefine it (redefining collided with Debug.cpp's copy since
+// both land in the same _MergedSrcNNN.cpp unit).
+extern "C" void write_marker(const char* text, int len);
 void Java_com_sun_cldchi_io_ConsoleOutputStream_write() {
   jint value = KNI_GetParameterAsInt(1);
-  tty->print("%c", value);
+  /* Diagnostic/fix: tty->print() here never produced any observable
+   * output on this port (4 prior attempts at the DefaultStream/tty
+   * pipe failed to fix it - QuickNative removal x2, printf/fflush
+   * removal). Bypass tty/Stream entirely and go straight to
+   * write_marker(), exactly like pss()'s MarkerStream does, to isolate
+   * whether this KNI call is even being reached at all. */
+  char ch = (char)value;
+  write_marker(&ch, 1);
 }
 
   // com.sun.cldchi.jvm natives
@@ -602,6 +625,19 @@ ReturnOop Java_java_lang_System_getProperty0(JVM_SINGLE_ARG_TRAPS) {
 
 #if ENABLE_PRODUCT_PRINT_STACK || !defined(PRODUCT)
   if (jvm_strcmp(name, "__debug.only.pss") == 0) {
+#if __has_include(<psp2/io/fcntl.h>)
+    /* Diagnostic-only: confirm this code path is actually reached,
+     * independent of whether pss()'s own tty output routes anywhere
+     * visible. Writes to the file we already know works. */
+    {
+      int fd = sceIoOpen("ux0:data/renderlog.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
+      if (fd >= 0) {
+        static const char m[] = "PSS_TRIGGER_REACHED\n";
+        sceIoWrite(fd, m, sizeof(m) - 1);
+        sceIoClose(fd);
+      }
+    }
+#endif
     pss();
   }
 #endif

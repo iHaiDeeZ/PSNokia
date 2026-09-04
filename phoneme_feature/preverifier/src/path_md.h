@@ -34,7 +34,7 @@
 
 #include <dirent.h>
 #endif
-#ifdef WIN32
+#if defined(WIN32) && !defined(UNIX)
 
 #define    LOCAL_DIR_SEPARATOR        '\\'
 #define PATH_SEPARATOR          ';'

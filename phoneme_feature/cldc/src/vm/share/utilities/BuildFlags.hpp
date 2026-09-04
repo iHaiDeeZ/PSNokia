@@ -329,7 +329,7 @@
 //                                    counters. These counters may skew
 //                                    execution time.
 //
-// ENABLE_PRODUCT_PRINT_STACK    -,0  Include the debug function
+// ENABLE_PRODUCT_PRINT_STACK    -,1  Include the debug function
 //                                    pss() in product build (useful
 //                                    for diagnosing deadlocks.
 //

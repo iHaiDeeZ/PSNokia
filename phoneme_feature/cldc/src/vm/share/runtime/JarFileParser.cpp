@@ -1457,7 +1457,7 @@ ReturnOop FileDescriptor::allocate(JVM_SINGLE_ARG_TRAPS) {
 }
 
 void FileDescriptor::set_handle(OsFile_Handle value) {
-  int_field_put(handle_offset(), (int)value);
+  int_field_put(handle_offset(), (int)(address_word)value);
   set_valid(true);
 }
 

@@ -105,7 +105,7 @@ public final class PushRegistryImpl {
          *  need this check
          */
         final Class midletCls = Class.forName(midlet);
-        final boolean isMIDlet = javax.microedition.midlet.MIDlet.class
+        final boolean isMIDlet = Class.forName("javax.microedition.midlet.MIDlet")
             .isAssignableFrom(midletCls);
 
         if (!isMIDlet) {

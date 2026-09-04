@@ -626,7 +626,7 @@ void Disassembler::disasm(int* addr, int instr, int instr_offset) {
         if (addr != NULL || instr_offset != NO_OFFSET) {
           stream()->print(GenerateGNUCode & !GenerateROMImage ? "/* " : "; ");
           if (addr != NULL && VerbosePointers) {
-            stream()->print("=0x%08x ", (int)addr + 8 + offset);
+            stream()->print("=0x%08x ", (int)(address_word)addr + 8 + offset);
           }
           if (offset != NO_OFFSET) {
             stream()->print("=%d ", instr_offset + 8 + offset);

@@ -2619,7 +2619,7 @@ ReturnOop ROMOptimizer::get_live_symbols(JVM_SINGLE_ARG_TRAPS) {
   }
 
   for (index = 0; index < Symbols::number_of_system_symbols(); index++) {
-    Oop::Raw oop = (OopDesc*)(system_symbols[index]);
+    Oop::Raw oop = (OopDesc*)(address_word)(system_symbols[index]);
     if (oop.not_null() && oop.is_symbol()
         && !ROMWriter::write_by_reference(&oop)) {
       Symbol::Raw s = oop.obj();

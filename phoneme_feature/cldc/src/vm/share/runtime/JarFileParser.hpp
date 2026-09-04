@@ -46,7 +46,7 @@ public:
   }
 
   OsFile_Handle handle() const {
-    return (OsFile_Handle)int_field(handle_offset());
+    return (OsFile_Handle)(address_word)int_field(handle_offset());
   }
   void set_handle(OsFile_Handle value);
 

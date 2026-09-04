@@ -614,7 +614,7 @@ void Scheduler::wake_up_terminated_sleepers(int task_id JVM_TRAPS) {
         if (TraceThreadsExcessive) {
           TTY_TRACE_CR(("wakeup_timed_terminated_sleepers: signaling "
                         "terminated thread 0x%x",
-                        (int)this_thread().obj()));
+                        (int)(address_word)this_thread().obj()));
         }
         if (Thread::current()->equals(this_thread())) {
           Thread::set_current_pending_exception(&termination_signal);
@@ -672,7 +672,7 @@ void Scheduler::wake_up_timed_out_sleepers(JVM_SINGLE_ARG_TRAPS) {
           (time >= this_thread().wakeup_time())) {
         if (TraceThreadsExcessive) {
           TTY_TRACE_CR(("wakeup_timed_out_sleepers: signaling thread 0x%x"
-                        " (id=%d)", (int)this_thread().obj(),
+                        " (id=%d)", (int)(address_word)this_thread().obj(),
                         this_thread().id()));
         }
         remove_waiting_thread(&this_thread);
@@ -872,7 +872,7 @@ void Scheduler::wait_for(Thread* thread, jlong timeout) {
   // This can be called for either a synchronization variable or for a
   // wait variable.  This may or may not be the current thread.
   if (TraceThreadsExcessive) {
-    TTY_TRACE_CR(("wait_for: Thread 0x%x (id=%d)", (int)thread->obj(),
+    TTY_TRACE_CR(("wait_for: Thread 0x%x (id=%d)", (int)(address_word)thread->obj(),
                   thread->id()));
   }
 
@@ -1280,7 +1280,7 @@ void Scheduler::interrupt_thread(Thread* thread JVM_TRAPS) {
         NOT_PRODUCT(trace("interrupt_thread: thread found", &this_thread));
         if (TraceThreadsExcessive) {
           TTY_TRACE_CR(("interrupt_thread: signaling thread 0x%x (id=%d)",
-                        (int)this_thread().obj(), this_thread().id()));
+                        (int)(address_word)this_thread().obj(), this_thread().id()));
         }
         UsingFastOops fast_oops;
         Throwable::Fast exception;
@@ -1304,7 +1304,7 @@ void Scheduler::interrupt_thread(Thread* thread JVM_TRAPS) {
           // exception at this point
           if (TraceThreadsExcessive) {
             TTY_TRACE_CR(("interrupt_thread: OOME, thread 0x%x",
-                          (int)thread->obj()));
+                          (int)(address_word)thread->obj()));
           }
           thread->set_pending_interrupt();
           return;
@@ -1328,7 +1328,7 @@ void Scheduler::interrupt_thread(Thread* thread JVM_TRAPS) {
   if (!found) {
     if (TraceThreadsExcessive) {
       TTY_TRACE_CR(("interrupt_thread: set pending interrupt for thread 0x%x",
-                   (int)thread->obj()));
+                   (int)(address_word)thread->obj()));
     }
     thread->set_pending_interrupt();
   }

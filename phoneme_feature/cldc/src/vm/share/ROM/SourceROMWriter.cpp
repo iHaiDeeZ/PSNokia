@@ -415,7 +415,7 @@ void SourceROMWriter::write_text_klass_table(JVM_SINGLE_ARG_TRAPS) {
       klass = oop.klass();
       if (GenerateROMComments && VerbosePointers) {
         main_stream()->print("/* (0x%x)->klass = 0x%x*/ ", 
-                      (int)(oop.obj()), (int)(klass.obj()));
+                      (int)(address_word)(oop.obj()), (int)(address_word)(klass.obj()));
       }
       num_written ++;
       write_reference(&oop, TEXT_BLOCK, main_stream() JVM_CHECK);
@@ -774,7 +774,7 @@ void SourceROMWriter::write_objects(JVM_SINGLE_ARG_TRAPS) {
 
 void SourceROMWriter::visit_persistent_handles(JVM_SINGLE_ARG_TRAPS) {
   // Visit all persistent handlers, except the last NUM_HANDLES_SKIP handles.
-  int count = Universe::__number_of_persistent_handles -
+  int count = (int)Universe::__number_of_persistent_handles -
     Universe::NUM_HANDLES_SKIP;
 
   Oop visiting_object;
@@ -1994,7 +1994,7 @@ void OffsetFinder::begin_object(Oop *object JVM_TRAPS) {
 #if ENABLE_HEAP_NEARS_IN_HEAP  
   case ROMWriter::TEXT_AND_HEAP_BLOCK:
 #endif
-    offset = by_ref ? (int)object->obj() : _text_offset;
+    offset = by_ref ? (int)(address_word)object->obj() : _text_offset;
 #if !USE_SEGMENTED_TEXT_BLOCK_WRITER
     if (offset == 0) {
       // if the first text object is a method we can't skip any header info
@@ -2042,7 +2042,7 @@ void OffsetFinder::begin_object(Oop *object JVM_TRAPS) {
 #if ENABLE_HEAP_NEARS_IN_HEAP  
   case ROMWriter::DATA_AND_HEAP_BLOCK:
 #endif
-    offset = by_ref ? (int)object->obj() : _data_offset;
+    offset = by_ref ? (int)(address_word)object->obj() : _data_offset;
     break;
   case ROMWriter::HEAP_BLOCK:
     offset = _heap_offset;

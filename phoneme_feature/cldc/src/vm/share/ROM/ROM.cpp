@@ -127,16 +127,16 @@ void ROM::init_rom_text_constants() {
   ROM::_rom_text_block_segment_sizes[8] = _rom_text_block8_size;
   ROM::_rom_text_block_segment_sizes[9] = _rom_text_block9_size;
 
-  ROM::_rom_text_block_segments[0] = (juint)_rom_text_block0;
-  ROM::_rom_text_block_segments[1] = (juint)_rom_text_block1;
-  ROM::_rom_text_block_segments[2] = (juint)_rom_text_block2;
-  ROM::_rom_text_block_segments[3] = (juint)_rom_text_block3;
-  ROM::_rom_text_block_segments[4] = (juint)_rom_text_block4;
-  ROM::_rom_text_block_segments[5] = (juint)_rom_text_block5;
-  ROM::_rom_text_block_segments[6] = (juint)_rom_text_block6;
-  ROM::_rom_text_block_segments[7] = (juint)_rom_text_block7;
-  ROM::_rom_text_block_segments[8] = (juint)_rom_text_block8;
-  ROM::_rom_text_block_segments[9] = (juint)_rom_text_block9;
+  ROM::_rom_text_block_segments[0] = (juint)(address_word)_rom_text_block0;
+  ROM::_rom_text_block_segments[1] = (juint)(address_word)_rom_text_block1;
+  ROM::_rom_text_block_segments[2] = (juint)(address_word)_rom_text_block2;
+  ROM::_rom_text_block_segments[3] = (juint)(address_word)_rom_text_block3;
+  ROM::_rom_text_block_segments[4] = (juint)(address_word)_rom_text_block4;
+  ROM::_rom_text_block_segments[5] = (juint)(address_word)_rom_text_block5;
+  ROM::_rom_text_block_segments[6] = (juint)(address_word)_rom_text_block6;
+  ROM::_rom_text_block_segments[7] = (juint)(address_word)_rom_text_block7;
+  ROM::_rom_text_block_segments[8] = (juint)(address_word)_rom_text_block8;
+  ROM::_rom_text_block_segments[9] = (juint)(address_word)_rom_text_block9;
 }
 
 void ROM::arrange_text_block() {
@@ -183,7 +183,7 @@ int ROM::text_segment_of(const OopDesc* obj) {
   const int seg_count = ROM::TEXT_BLOCK_SEGMENTS_COUNT;
   int offset;
   for (int pass = 0; pass < seg_count; pass++) {
-    offset = ((int)obj) - ((int)_rom_text_block_segments[pass]);
+    offset = ((int)(address_word)obj) - ((int)(address_word)_rom_text_block_segments[pass]);
     if (offset >= 0 && (juint)offset < _rom_text_block_segment_sizes[pass]) {
       return pass;
     }
@@ -223,7 +223,7 @@ ROMWriter* _rom_writer;
 // here we optimize in the subtle way - we save one comparision
 // by using unsigned math
 inline bool ROM::heap_src_block_contains(address target) {
-  juint p = ((juint)target) - ((juint)&_rom_heap_block[0]);
+  juint p = ((juint)(address_word)target) - ((juint)(address_word)&_rom_heap_block[0]);
   bool ret = p < (juint)_rom_heap_block_size;
   return ret;
 }
@@ -424,7 +424,7 @@ void ROM::initialize_original_method_info_list(JVM_SINGLE_ARG_TRAPS) {
     const OriginalMethodInfo *minfo = clsinfo->methods;
 
     for (int n=0; n<clsinfo->num_methods; n++, minfo++) {
-      Method method = (OopDesc*)minfo->method;
+      Method method = (OopDesc*)(address_word)minfo->method;
       if (method.not_null()) {
         ObjArray old  = info_list.obj_at(i);
         ObjArray info = Universe::new_obj_array(3 JVM_CHECK);
@@ -920,7 +920,7 @@ ReturnOop ROM::alternate_constant_pool(InstanceClass *klass) {
 OopDesc* ROM::raw_text_klass_of(const OopDesc* obj) {
 #if ENABLE_SEGMENTED_ROM_TEXT_BLOCK
   const int pass = text_segment_of(obj);
-  juint byte_offset = (juint)obj - _rom_text_block_segments[pass];  
+  juint byte_offset = (juint)(address_word)obj - _rom_text_block_segments[pass];  
 #else
   juint byte_offset = ((juint)obj) - ((juint)&_rom_text_block[0]);
   GUARANTEE((byte_offset < (juint)_rom_text_block_size), "must be in TEXT");

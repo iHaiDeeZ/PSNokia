@@ -155,7 +155,7 @@ void ensure_tmpdir_exists(char *dir)
 #ifdef WIN32
         mkdir(dir);
 #endif
-#ifdef UNIX
+#if defined(UNIX) && !defined(__MINGW32__)
         mkdir(dir, 0755);
 #endif
     }

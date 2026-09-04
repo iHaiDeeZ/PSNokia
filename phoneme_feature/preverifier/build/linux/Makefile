@@ -49,7 +49,7 @@ CFLAGS = \
 	-DUNIX -DLINUX \
 	-DJAVAVERIFY \
 	-DTRIMMED \
-	-D$(ARCH) $(EXTRACFLAGS)
+	-D$(ARCH) $(EXTRACFLAGS) -fcommon
 
 CC = gcc
 LD = gcc
@@ -64,7 +64,7 @@ endif
 all: preverify
 
 preverify: $(OBJS)
-	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+	$(LD) $(LDFLAGS) -o $@ $(OBJS) -lws2_32
 
 %.o: $(SRC_DIR)/%.c
 	$(CC) -c $(CFLAGS) $(DEBUG_FLAG) $<

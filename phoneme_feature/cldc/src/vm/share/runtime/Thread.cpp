@@ -31,6 +31,18 @@
 # include "incls/_precompiled.incl"
 # include "incls/_Thread.cpp.incl"
 
+/* Diagnostic: trace_stack()/trace_stack_from() below are wrapped in
+ * #if !defined(PRODUCT) || ENABLE_TTY_TRACE, and their body is further
+ * gated by ENABLE_STACK_TRACE. Without both, pss() (Debug.cpp, enabled
+ * for PRODUCT via ENABLE_PRODUCT_PRINT_STACK) runs but trace_stack()
+ * silently no-ops - it "succeeds" but prints nothing. */
+#ifndef ENABLE_TTY_TRACE
+#define ENABLE_TTY_TRACE 1
+#endif
+#ifndef ENABLE_STACK_TRACE
+#define ENABLE_STACK_TRACE 1
+#endif
+
 int Thread::_shrunk_stack_count;
 bool Thread::_real_time_has_ticked;
 
@@ -87,7 +99,7 @@ void Thread::setup_lightweight_stack(JVM_SINGLE_ARG_TRAPS) {
   set_stack_limit();
 
   sp = setup_stack_asm(sp);
-  set_stack_pointer((jint)sp);
+  set_stack_pointer((jint)(address_word)sp);
 }
 
 void force_terminated(Thread* thread) {
@@ -453,7 +465,7 @@ void Thread::stack_oops_do(void do_oop(OopDesc**)) {
 
 void Thread::nonstack_oops_do(void do_oop(OopDesc**)) {
   if (_debugger_active) {
-    OopDesc *step = (OopDesc *)int_field(step_info_offset());
+    OopDesc *step = (OopDesc *)(address_word)int_field(step_info_offset());
     if (step != NULL) {
       do_oop(&step);
     }
@@ -598,7 +610,7 @@ void Thread::set_stack_limit(address value) {
 #ifdef UNDER_CE
   value = (address)((int)value | _system_address);
 #endif
-  int_field_put(stack_limit_offset(), (jint) value);
+  int_field_put(stack_limit_offset(), (jint)(address_word) value);
   if (Scheduler::get_gc_current_thread() != NULL) {
     // in a gc so check the old current thread pointer
     if (this->obj() == Scheduler:: get_gc_current_thread()) {
@@ -626,7 +638,7 @@ void Thread::grow_execution_stack(int new_stack_size JVM_TRAPS) {
 
   GCDisabler dont_gc_for_rest_of_this_method;
 
-  address   old_stack_ptr   = (address)stack_pointer();
+  address   old_stack_ptr   = (address)(address_word)stack_pointer();
   jint      stack_used_size;
   jint      delta;
   if (JavaStackDirection < 0) {
@@ -656,7 +668,7 @@ void Thread::grow_execution_stack(int new_stack_size JVM_TRAPS) {
   ((ExecutionStackDesc*)(old_stack.obj()))->relocate_internal_pointers(delta,
                                                                        this,
                                                                        true);
-  GUARANTEE((address)stack_pointer() == new_stack_ptr, "sanity");
+  GUARANTEE((address)(address_word)stack_pointer() == new_stack_ptr, "sanity");
 
   if (JavaStackDirection < 0) {
     jvm_memcpy(new_stack_ptr, old_stack_ptr  , stack_used_size);
@@ -684,7 +696,7 @@ void Thread::maybe_shrink_execution_stack(Thread* thread, oop_doer /*dummy*/) {
   const jint stack_size = stack().length();
 
   if (stack_size > StackSize) {
-    address stack_limit = (address)thread->stack_pointer();
+    address stack_limit = (address)(address_word)thread->stack_pointer();
     {
       const Frame frame(thread);
       if (frame.is_java_frame()) {

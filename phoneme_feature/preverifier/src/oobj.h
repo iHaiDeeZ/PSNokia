@@ -79,7 +79,7 @@ extern unicode    *str2unicode(char *, unicode *, long);
 extern char    *int642CString(int64_t number, char *buf, int buflen);
 
 #define ALIGN(n) (((n)+3)&~3)
-#define UCALIGN(n) ((unsigned char *)ALIGN((int)(n)))
+#define UCALIGN(n) ((unsigned char *)ALIGN((unsigned long long)(n)))
 
 struct Hjava_lang_Class;    /* forward reference for some compilers */
 struct Classjava_lang_Class;    /* forward reference for some compilers */

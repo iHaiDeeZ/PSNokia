@@ -32,7 +32,7 @@ class Instruction: public StackObj {
 
  protected:
   void check_alignment(address addr) const {
-    GUARANTEE(((int)addr & 3) == 0, "unaligned addr");
+    GUARANTEE(((int)(address_word)addr & 3) == 0, "unaligned addr");
     (void)addr;
   }
 
@@ -133,7 +133,7 @@ class Branch: public Instruction {
   }
 
   void relocate(int delta) const {
-    check_alignment((address)delta);
+    check_alignment((address)(address_word)delta);
     set_imm24(imm24() - (delta >> 2));
   }
 

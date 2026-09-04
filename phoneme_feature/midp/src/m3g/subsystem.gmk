@@ -1,0 +1,37 @@
+######################################################################
+# JSR 184 (M3G) minimal software-renderer subsystem
+#
+# Scoped to what real bundled MIDlets (Tower Bloxx) actually use: static
+# unlit scene graphs loaded from a .m3g file. See Loader.java/Graphics3D.java
+# for what's modeled vs. intentionally skipped (animation, skinning,
+# morphing, lighting, fog, sprites). Always included, unconditional,
+# matching the mmapi/nokia_ui stub-subsystem pattern.
+######################################################################
+
+SUBSYSTEM_M3G_JAVA_FILES = \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/Object3D.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/Transform.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/Node.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/Group.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/World.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/Camera.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/Background.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/Material.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/Image2D.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/Texture2D.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/Appearance.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/VertexArray.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/VertexBuffer.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/Mesh.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/Graphics3D.java \
+    $(SUBSYSTEM_DIR)/m3g/classes/javax/microedition/m3g/Loader.java
+
+vpath %.c $(SUBSYSTEM_DIR)/m3g/reference/native
+
+SUBSYSTEM_M3G_NATIVE_FILES = m3g_graphics3d.c
+
+m3g:
+
+SUBSYSTEM_M3G_SOURCEPATH = $(SUBSYSTEM_DIR)/m3g/classes
+
+MIDP_JAVADOC_SOURCEPATH += $(SUBSYSTEM_M3G_SOURCEPATH)

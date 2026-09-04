@@ -487,6 +487,9 @@ public class Display {
     /** Device <code>Graphics</code> associated with this Display. */
     private Graphics screenGraphics;
 
+    /** Temporary diagnostic counter, caps flush() logging to avoid I/O throttling. */
+    private static int diagFlushLogCount = 0;
+
     /** wantsForeground state when the MIDlet wants to be in the background. */
     private static final int WANTS_BACKGROUND = 0;
 
@@ -2533,7 +2536,18 @@ public class Display {
                     || !hasForeground
                     || d.displayableLF != current
                     || ((Display.this.window).systemMenuUp())) {
+                    if (diagFlushLogCount < 40) {
+                        diagFlushLogCount++;
+                        System.out.println("FLUSH_SKIP susp=" + paintSuspended
+                            + " fg=" + hasForeground
+                            + " mismatch=" + (d.displayableLF != current)
+                            + " menuUp=" + ((Display.this.window).systemMenuUp()));
+                    }
                     return;
+                }
+                if (diagFlushLogCount < 40) {
+                    diagFlushLogCount++;
+                    System.out.println("FLUSH_OK");
                 }
                 // #else
                 if (paintSuspended

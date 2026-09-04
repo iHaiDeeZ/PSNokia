@@ -561,14 +561,23 @@ public final class Manager {
      * @exception  IOException               Thrown if there was a problem connecting
      * with the source pointed to by the <code>locator</code>.
      */
-    public static Player createPlayer(String locator) throws IOException, MediaException 
+    public static Player createPlayer(String locator) throws IOException, MediaException
     { Player Ret = null;
       if (locator == null) { throw new IllegalArgumentException(); }
+      /* catch(Throwable), not catch(Exception): if the concrete Player
+       * implementation classes (GenericPlayer/MIDIPlayer/etc) aren't
+       * built into this port (see SUBSYSTEM_MMAPI_MODULES), the "new"
+       * below throws NoClassDefFoundError - an Error, not an Exception,
+       * so it previously escaped uncaught here. If that happened on a
+       * MIDlet's background resource-loading thread while its main
+       * thread waited on a completion flag that thread would then
+       * never set, the MIDlet would hang forever instead of getting a
+       * normal, expected MediaException it already knows how to handle. */
       try { if (locator.compareTo(TONE_DEVICE_LOCATOR) == 0) Ret = new ToneSequencePlayer();
             else { if (locator.compareTo(MIDI_DEVICE_LOCATOR) == 0) Ret = new MIDIPlayer();
                    else Ret = new GenericPlayer(locator);
                  }
-          } catch(Exception E) {}
+          } catch(Throwable E) {}
       if (Ret == null) { throw new MediaException("Cannot create Player"); }
       return Ret;
     }
@@ -596,15 +605,23 @@ public final class Manager {
      * @exception  IOException               Thrown if there was a problem reading data
      * from the <code>InputStream</code>.
      */
-    public static Player createPlayer(InputStream stream, String type) throws IOException, MediaException 
+    public static Player createPlayer(InputStream stream, String type) throws IOException, MediaException
     { ABBBasicPlayer Ret;
       if (stream == null) { throw new IllegalArgumentException(); }
       if (type == null) { throw new MediaException(PL_ERR + "NULL content-type"); }
-      if (type == "audio/midi") 
-         { try { Ret = new MIDIPlayer();
-               } catch(Exception E) { throw new MediaException("Cannot create Player"); }
-         }
-      else Ret = new GenericPlayer(type);
+      /* See the matching comment on createPlayer(String) above - must
+       * catch Throwable, not just Exception, so a missing concrete
+       * Player class fails as a normal MediaException instead of an
+       * uncaught NoClassDefFoundError that can hang a caller waiting
+       * on a background loading thread that dies silently. */
+      try {
+        if (type == "audio/midi")
+           { Ret = new MIDIPlayer();
+           }
+        else Ret = new GenericPlayer(type);
+      } catch (Throwable E) {
+        throw new MediaException("Media type not supported: " + type);
+      }
       if (Ret == null) { throw new MediaException("Cannot create Player"); }
       Ret.setSource(stream);
       return Ret;

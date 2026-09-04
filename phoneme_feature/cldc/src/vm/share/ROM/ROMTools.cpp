@@ -329,8 +329,8 @@ jint ROMVector::compare_to(String *s1, String *s2) {
           return 1;
         }
       }
-      int o1 = (int)(s1->obj());
-      int o2 = (int)(s2->obj());
+      int o1 = (int)(address_word)(s1->obj());
+      int o2 = (int)(address_word)(s2->obj());
 
       if (o1 > o2) {
         return -1;
@@ -411,7 +411,7 @@ void ROMTools::shrink_object(Oop *obj, size_t old_size, size_t reduction) {
     return;
   }
 
-  OopDesc *stuffing = (OopDesc*)(((int)obj->obj()) + old_size - reduction);
+  OopDesc *stuffing = (OopDesc*)(((address_word)obj->obj()) + old_size - reduction);
   Oop *oop = (Oop*)&stuffing;
 
   if (reduction == sizeof(OopDesc)) {

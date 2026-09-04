@@ -54,7 +54,25 @@ typedef long long jlong;
 #define INTERP_LOG_SIZE 8
 #define method_execution_sensor_size 1
 
-typedef int JVMFastGlobals;
+// NOTE (Vita port fix): the real JVMFastGlobals struct (defined via
+// FORALL_JVM_FAST_GLOBALS in GlobalDefinitions.hpp) is not reachable in this
+// fallback path -- KNI_FALSE is undefined here because this build uses
+// merged/"-sourceMergerLimit"-style translation units, so incls/_Oop.cpp.incl
+// (which this file parasitically borrows, per the comment above) came up
+// empty. This used to fall back to "typedef int JVMFastGlobals;", a bogus
+// 4-byte stand-in, while every other translation unit in the program (which
+// DOES see the real header) computes field offsets against the true,
+// correctly-sized struct (confirmed via gdb: sizeof(JVMFastGlobals) == 176
+// bytes in this build). That mismatch let jvm_fast_globals.slice_size /
+// .near_mask / .slice_offset_mask writes from ObjectHeap.cpp run off the end
+// of this file's undersized 4-byte placeholder and corrupt whatever globals
+// the linker packed next in .bss -- specifically _gp_bytecode_counter,
+// _bytecode_counter, and _jvm_in_quick_native_method -- causing the
+// "cannot GC in quick native methods" assertion during -romize.
+// Fix: give the placeholder the correct size so it can never overlap
+// neighboring globals again. Nothing in this file actually reads or writes
+// through jvm_fast_globals's fields, so an opaque same-size blob is enough.
+struct JVMFastGlobals { char _opaque_storage[176]; };
 
 #endif
 

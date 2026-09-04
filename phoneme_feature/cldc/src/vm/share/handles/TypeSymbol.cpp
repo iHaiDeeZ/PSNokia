@@ -103,9 +103,9 @@ void TypeSymbol::ParseStream::gc_prologue() {
       if (VerboseGC) {
         TTY_TRACE_CR(("GC: Updating ParseStream relative pointers"));
       }
-      int base = (int)(p->_heap_input->base_address());
-      int cur  = (int)(p->_current_ptr);
-      p->_current_ptr = (char*)(cur - base);
+      int base = (int)(address_word)(p->_heap_input->base_address());
+      int cur  = (int)(address_word)(p->_current_ptr);
+      p->_current_ptr = (char*)(address_word)(cur - base);
 
       // Mangle it so we can catch errors sooner
       AZZERT_ONLY(p->_start_ptr = (char*)0xffffffff);
@@ -118,7 +118,7 @@ void TypeSymbol::ParseStream::gc_epilogue() {
   for (ParseStream*p = _list; p; p=p->_next) {
     if (p->_heap_input != NULL) {
       char *base = (char*)(p->_heap_input->base_address());
-      int pos = (int)p->_current_ptr;
+      int pos = (int)(address_word)p->_current_ptr;
 
       p->_start_ptr = base;
       p->_current_ptr = base + pos;

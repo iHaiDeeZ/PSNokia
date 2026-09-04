@@ -78,6 +78,7 @@ public class Throwable {
      */
     private transient Object backtrace;
 
+
     /**
      * Constructs a new <code>Throwable</code> with <code>null</code> as
      * its error message string.

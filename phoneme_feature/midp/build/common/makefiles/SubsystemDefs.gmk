@@ -279,6 +279,22 @@ LD_FLAGS		+= $(SUBSYSTEM_MMAPI_LD_FLAGS)
 LIBS			+= $(SUBSYSTEM_MMAPI_LIBS)
 
 #######################################################################
+# Nokia UI API stub (com.nokia.mid.ui)
+#######################################################################
+
+$(MIDP_CLASSES_ZIP):: $(SUBSYSTEM_NOKIAUI_JAVA_FILES)
+	$(appendjavafiles)
+
+#######################################################################
+# JSR 184 (M3G) minimal software 3D renderer
+#######################################################################
+
+$(MIDP_CLASSES_ZIP):: $(SUBSYSTEM_M3G_JAVA_FILES)
+	$(appendjavafiles)
+
+JTWI_NATIVE_FILES	+= $(SUBSYSTEM_M3G_NATIVE_FILES)
+
+#######################################################################
 # JSRs
 #######################################################################
 # JSR 135/234/ABB Multimedia

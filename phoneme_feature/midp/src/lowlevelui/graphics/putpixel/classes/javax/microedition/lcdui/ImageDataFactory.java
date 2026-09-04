@@ -155,7 +155,7 @@ class ImageDataFactory implements AbstractImageDataFactory {
          */
         if (!loadCachedImage(data, name)) {
             createImageFromStream(data,
-                                  ImageData.class.getResourceAsStream(name));
+                                  getClass().getResourceAsStream(name));
         }
 
         return data;

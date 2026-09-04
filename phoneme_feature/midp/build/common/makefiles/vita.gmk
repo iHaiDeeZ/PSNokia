@@ -1,0 +1,13 @@
+######################################################################
+#
+# OS specific defines for the Vita target
+#
+######################################################################
+ifndef _VITA_GMK_
+_VITA_GMK_      =
+PATHSEP         = :
+EXE             =
+BAT             =
+EXTRA_CFLAGS    += -DLINUX -DUNIX
+WHOAMI          = whoami
+endif

@@ -876,7 +876,7 @@ OopDesc* ObjectHeap::allocate(size_t size JVM_TRAPS) {
   }
 #endif
 
-  GUARANTEE((int)_inline_allocation_top % 4 == 0, "Sanity");
+  GUARANTEE((int)(address_word)_inline_allocation_top % 4 == 0, "Sanity");
   PERFORMANCE_COUNTER_INCREMENT(num_of_c_alloc_objs, 1);
 
 #if ENABLE_ISOLATES
@@ -1432,7 +1432,7 @@ bool ObjectHeap::adjust_heap_size(size_t target_heap_size) {
   const size_t max_slices_size = update_slices_size(_heap_capacity);
   const size_t slices_size = update_slices_size(target_heap_size);
 
-  const size_t extra_size = _preallocated_space_size + _glue_code_size;
+  const size_t extra_size = (int)_preallocated_space_size + _glue_code_size;
   const size_t heap_chunk_size = 
      extra_size + target_heap_size + minimum_marking_stack_size;
   const size_t bitv_chunk_size = bitvector_size + slices_size;
@@ -1496,8 +1496,8 @@ bool ObjectHeap::adjust_heap_size(size_t target_heap_size) {
     }
   }
 
-  must_be_aligned( unsigned(_heap_chunk));
-  must_be_aligned( unsigned(_bitv_chunk));
+  must_be_aligned( unsigned(address_word(_heap_chunk)));
+  must_be_aligned( unsigned(address_word(_bitv_chunk)));
 
   _heap_size       = target_heap_size;
   _heap_start      = DERIVED(OopDesc**, _heap_chunk, extra_size);
@@ -1648,7 +1648,7 @@ ObjectHeap::set_collection_area_boundary(size_t min_free_after_collection,
       _old_generation_end[0] = Universe::object_class()->prototypical_near();
     } else {
       _old_generation_end[0] = Universe::byte_array_class()->prototypical_near();
-      _old_generation_end[1] = (OopDesc*)(delta - Array::base_offset());
+      _old_generation_end[1] = (OopDesc*)(address_word)(delta - Array::base_offset());
     }
   } else {
     GUARANTEE(DISTANCE(_old_generation_end, _young_generation_start) == 0,
@@ -2009,23 +2009,23 @@ inline size_t ObjectHeap::rom_offset_of(OopDesc* obj) {
 inline OopDesc* ObjectHeap::rom_oop_from_offset(size_t offset,
                                                 const QuickVars& qv) {
   if ((offset & 0x1) == 0) {
-    return (OopDesc*)(int(qv.rom_text_start) + offset);
+    return (OopDesc*)(address_word(qv.rom_text_start) + offset);
   } else {
     offset --;
-    return (OopDesc*)(int(qv.rom_data_start) + offset);
+    return (OopDesc*)(address_word(qv.rom_data_start) + offset);
   }
 }
 
 inline OopDesc* ObjectHeap::rom_oop_from_offset(size_t offset) {
   if ((offset & 0x1) == 0) {
 #if ENABLE_SEGMENTED_ROM_TEXT_BLOCK
-    return (OopDesc*)(int(ROM::min_text_seg_addr()) + offset);
+    return (OopDesc*)(address_word(ROM::min_text_seg_addr()) + offset);
 #else
-    return (OopDesc*)(int(&_rom_text_block[0]) + offset);
+    return (OopDesc*)(address_word(&_rom_text_block[0]) + offset);
 #endif
   } else {
     offset --;
-    return (OopDesc*)(int(&_rom_data_block[0]) + offset);
+    return (OopDesc*)(address_word(&_rom_data_block[0]) + offset);
   }
 }
 #endif // !ENABLE_HEAP_NEARS_IN_HEAP 
@@ -2313,7 +2313,7 @@ inline void ObjectHeap::update_execution_stack_interior_pointers() {
       // This is a stack that is about to be relocated;
       ExecutionStackDesc* destination =
         (ExecutionStackDesc*)decode_destination((OopDesc*)this_stack);
-      int delta = (int)destination - (int)this_stack;
+      int delta = (int)((address_word)destination - (address_word)this_stack);
 
       if (TraceGC) {
         TTY_TRACE_CR(("TraceGC: Stack 0x%x relocated => 0x%x",
@@ -2455,7 +2455,7 @@ void ObjectHeap::write_barrier_oops_update_moving_object_interior_pointers(
 
 #if ENABLE_COMPILER
       if (instance_size == InstanceSize::size_compiled_method) {
-        int delta = (int)destination - (int)p;
+        int delta = (int)((address_word)destination - (address_word)p);
         ((CompiledMethodDesc*) p)->update_relative_offsets(delta);
       }
 #endif
@@ -2463,7 +2463,7 @@ void ObjectHeap::write_barrier_oops_update_moving_object_interior_pointers(
       ((OopDesc*) p)->oops_do_for(far_class, update_interior_pointer);
 
       if (instance_size == InstanceSize::size_method) {
-        int delta = (int)destination - (int)p;
+        int delta = (int)((address_word)destination - (address_word)p);
         ((MethodDesc*) p)->relocate_variable_part(delta);
       }
     }
@@ -2997,7 +2997,7 @@ inline void ObjectHeap::internal_collect_prologue(size_t min_free_after_collecti
   CACHE_QUICK_VAR(slice_offset_mask);
 
 #if ENABLE_SEGMENTED_ROM_TEXT_BLOCK
-  _quick_vars.rom_text_start = (OopDesc**)ROM::min_text_seg_addr();
+  _quick_vars.rom_text_start = (OopDesc**)(address_word)ROM::min_text_seg_addr();
   _quick_vars.rom_text_size  = ROM::text_total_size();
 #else
   _quick_vars.rom_text_start = (OopDesc**)&_rom_text_block[0];
@@ -3379,11 +3379,11 @@ OopDesc* ObjectHeap::decode_near(OopDesc* obj, const QuickVars& qv ) {
   const size_t near_offset = (size_t) klass & qv.near_mask;
   OopDesc* n;
 #if ENABLE_HEAP_NEARS_IN_HEAP 
-    GUARANTEE((int) klass >= 0, "optimization check");
+    GUARANTEE((int)(address_word) klass >= 0, "optimization check");
     n = (OopDesc*)((OopDesc**) qv.heap_start + near_offset);
     GUARANTEE(contains(n), "must be in heap");
 #else
-  if (((int) klass) >= 0) {
+  if (((int)(address_word) klass) >= 0) {
     // bit 31 is not set -- this means we're in heap
 
     // Lower bits contains relative offset to heap start
@@ -3410,11 +3410,11 @@ inline OopDesc* ObjectHeap::decode_near(OopDesc* obj, OopDesc **heap_start,
   const size_t near_offset = (size_t) klass & near_mask;
   OopDesc* n;
 #if ENABLE_HEAP_NEARS_IN_HEAP 
-    GUARANTEE((int) klass >= 0, "optimization check");
+    GUARANTEE((int)(address_word) klass >= 0, "optimization check");
     n = (OopDesc*)((OopDesc**) heap_start + near_offset);
     GUARANTEE(contains(n), "must be in heap");
 #else
-  if (((int) klass) >= 0) {
+  if (((int)(address_word) klass) >= 0) {
     // bit 31 is not set -- this means we're in heap
 
     // Lower bits contains relative offset to heap start
@@ -3654,7 +3654,7 @@ ObjectHeap::compiler_area_compute_new_locations ( CompiledMethodDesc* dst ) {
     }
 
     // Store delta in _klass to relocate frames.
-    p->_klass = (OopDesc*)delta;
+    p->_klass = (OopDesc*)(address_word)delta;
 
     if (TraceGC || TraceCompilerGC) {
       TTY_TRACE_CR(("TraceGC: 0x%p (%u bytes) => 0x%p (delta=%d)", p,
@@ -3705,7 +3705,7 @@ inline void ObjectHeap::compiler_area_compact( const int last_moving_up ) {
     for( int i = last_moving_up; i >= 0; --i ) {
       const CompiledMethodDesc* const src = CompiledMethodCache::Map[i];
       CompiledMethodDesc* const dst =
-        DERIVED(CompiledMethodDesc*, src, (int)src->_klass);
+        DERIVED(CompiledMethodDesc*, src, (int)(address_word)src->_klass);
 
 #if ENABLE_JVMPI_PROFILE 
       // compiled code has been moved, so send compiled method unload event
@@ -3739,7 +3739,7 @@ inline void ObjectHeap::compiler_area_compact( const int last_moving_up ) {
     for( int i = last_moving_up; ++i <= upb; ) {
       const CompiledMethodDesc* const src = CompiledMethodCache::Map[i];
       CompiledMethodDesc* const dst =
-        DERIVED(CompiledMethodDesc*, src, (int)src->_klass);
+        DERIVED(CompiledMethodDesc*, src, (int)(address_word)src->_klass);
       if( src != dst ) {
         
 #if ENABLE_JVMPI_PROFILE 
@@ -3789,7 +3789,7 @@ inline void ObjectHeap::compiler_area_update_pointers( void ) {
     ForAllHandles( handle ) {
       const CompiledMethodDesc* p = (const CompiledMethodDesc*)handle->obj();
       if( compiler_area_contains( p ) ) {
-        const int delta = (int)p->_klass;
+        const int delta = (int)(address_word)p->_klass;
         if( delta ) {
           handle->set_obj( DERIVED( OopDesc*, p, delta ) );
         }
@@ -3811,7 +3811,7 @@ inline void ObjectHeap::compiler_area_update_pointers( void ) {
           CompiledMethodDesc* p = 
             (CompiledMethodDesc*)java_frame.compiled_method();
           if( compiler_area_contains( p ) ) {
-            const int delta = (int)p->_klass;
+            const int delta = (int)(address_word)p->_klass;
             if( delta ) {
               JavaFrame copy = java_frame;
               java_frame.caller_is(frame);
@@ -3832,8 +3832,8 @@ CompiledMethodDesc* ObjectHeap::method_contain_instruction_of(void* pc){
   CompiledMethodDesc * p   = (CompiledMethodDesc *)_compiler_area_start;
   CompiledMethodDesc * end = (CompiledMethodDesc *)_compiler_area_top;
   while (p < end) {
-    if( ( (unsigned long) pc >(unsigned long) p) && 
-        ( (unsigned long) pc <( (unsigned long)p + p->object_size() ))  ){
+    if( ( (unsigned long)(address_word) pc >(unsigned long)(address_word) p) && 
+        ( (unsigned long)(address_word) pc <( (unsigned long)(address_word)p + p->object_size() ))  ){
         return p;
     }
     p = DERIVED(CompiledMethodDesc*, p, p->object_size());
@@ -4534,7 +4534,7 @@ inline void* ObjectHeap::set_heap_limit( void* new_heap_limit ) {
   if( !in_use && _heap_min == _heap_capacity ) {
     in_use = true;
 
-    new_heap_limit = (void*)align_down(unsigned(new_heap_limit));
+    new_heap_limit = (void*)(address_word)align_down(address_word(new_heap_limit));
 #ifdef AZZERT
     const size_t minimum_marking_stack_size = DISTANCE(_heap_top, _heap_limit);
     GUARANTEE(minimum_marking_stack_size
@@ -4629,7 +4629,7 @@ void ObjectHeap::save_java_stack_snapshot() {
 void ObjectHeap::print(Stream* st) {
   st->print_cr("Object heap       [0x%x,0x%x), %d bytes", 
                                    _heap_start, _heap_top,
-                                   int(_heap_top) - int(_heap_start));
+                                   (int)((address_word)(_heap_top) - (address_word)(_heap_start)));
   st->print_cr("total/free bytes    [%d,%d]", total_memory(), free_memory());
   st->print_cr("- Collection area   [0x%x,0x%x, 0x%x)",
     _collection_area_start, _inline_allocation_top, _inline_allocation_end);
@@ -4640,7 +4640,7 @@ void ObjectHeap::print(Stream* st) {
   st->print_cr("Min marking stack   [0x%x,0x%x)", _heap_top, _bitvector_start);
   st->print_cr("Bit vector          [0x%x,0x%x), %d bytes",
                                   _bitvector_start, _slices_start,
-                                  int(_slices_start) - int(_bitvector_start));
+                                  (int)((address_word)(_slices_start) - (address_word)(_bitvector_start)));
   st->print_cr("Slices start      0x%x",        _slices_start);
   st->print_cr("Slice size        %d",          _slice_size);
   st->print_cr("Number of slices  %d (=%d bytes)", _nof_slices,

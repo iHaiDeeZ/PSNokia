@@ -64,9 +64,9 @@ static void SigBreakHandler(int junk) {
   signal(SIGBREAK, SigBreakHandler);
 }
 
-#define EXCEPTION_CASE(c) case c: name = #c;
+#define EXCEPTION_CASE(c) case (int)c: name = #c;
 #define PRINT_REGISTER(x) \
-    printf("Register %6s = 0x%8x\n", #x, exptr->ContextRecord->x)
+    printf("Register %6s = 0x%8x\n", #x, (unsigned int)exptr->ContextRecord->x)
 
 #endif // !PRODUCT
 
@@ -122,6 +122,7 @@ int CheckException(int n_except, LPEXCEPTION_POINTERS exptr) {
   PRINT_REGISTER(SegGs);
   PRINT_REGISTER(SegFs);
   PRINT_REGISTER(SegSs);
+#if !defined(__GNUC__)
   PRINT_REGISTER(Eax);
   PRINT_REGISTER(Ebx);
   PRINT_REGISTER(Ecx);
@@ -132,13 +133,18 @@ int CheckException(int n_except, LPEXCEPTION_POINTERS exptr) {
   PRINT_REGISTER(Esp);
   PRINT_REGISTER(Eip);
   PRINT_REGISTER(EFlags);
+#endif // !defined(__GNUC__) -- 64-bit CONTEXT lacks 32-bit register field names
 
   if (!printing_stack && PrintStackTraceOnCrash) {
     printing_stack = 1;
+#if !defined(__GNUC__)
     __try {
       pss();
     }
     __except (EXCEPTION_EXECUTE_HANDLER) {;}
+#else
+    pss();
+#endif // !defined(__GNUC__) -- MSVC SEH (__try/__except) unsupported by GCC
   }
 
   if (ExitOnCrash) {
@@ -156,12 +162,16 @@ static int executeVM() {
 #endif
   
   int result = 0;
+#if !defined(__GNUC__)
   __try {
     result = JVM::start();
   }
   __except (CheckException(GetExceptionCode(), GetExceptionInformation())) {
     ;
   }
+#else
+  result = JVM::start();
+#endif // !defined(__GNUC__) -- MSVC SEH (__try/__except) unsupported by GCC
   return result;
 }
 

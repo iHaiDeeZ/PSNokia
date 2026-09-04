@@ -267,7 +267,7 @@ void CompiledMethod::print_code_on(Stream* st) {
       st->print("0x%08x: ", instruction_start);
     }
     if (is_oop) { 
-      Oop o = (OopDesc*)*instruction_start;
+      Oop o = (OopDesc*)(address_word)*instruction_start;
       o.print_value_on(st);
     } else if (is_address) { 
       st->print("Address");

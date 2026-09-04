@@ -435,7 +435,7 @@ class ConstantPool: public Oop {
                              BasicType type, bool is_static)
   {
     tag_at_put(index, 
-               (jubyte)((is_static ? JVM_CONSTANT_ResolvedStaticBooleanFieldref : JVM_CONSTANT_ResolvedBooleanFieldref) + type - T_BOOLEAN));
+               (jubyte)((int)(is_static ? JVM_CONSTANT_ResolvedStaticBooleanFieldref : JVM_CONSTANT_ResolvedBooleanFieldref) + (int)type - (int)T_BOOLEAN));
     int_field_put(offset_from_index(index),
            construct_jint_from_jushorts(offset, class_id));
   }
@@ -444,7 +444,7 @@ class ConstantPool: public Oop {
   void resolved_virtual_method_at_put(int index, jushort class_id,
                                       jushort vtable_index, BasicType type) {
     tag_at_put(index, 
-         (jubyte)(JVM_CONSTANT_ResolvedBooleanVirtualMethod + type - T_BOOLEAN));
+         (jubyte)((int)JVM_CONSTANT_ResolvedBooleanVirtualMethod + (int)type - (int)T_BOOLEAN));
     int_field_put(offset_from_index(index),
          construct_jint_from_jushorts(class_id, vtable_index));
   }
@@ -452,7 +452,7 @@ class ConstantPool: public Oop {
   void resolved_interface_method_at_put(int index, jushort vtable_index, 
                                         jushort class_id, BasicType type) {
     tag_at_put(index, 
-       (jubyte)(JVM_CONSTANT_ResolvedBooleanInterfaceMethod + type - T_BOOLEAN));
+       (jubyte)((int)JVM_CONSTANT_ResolvedBooleanInterfaceMethod + (int)type - (int)T_BOOLEAN));
     int_field_put(offset_from_index(index),
        construct_jint_from_jushorts(class_id, vtable_index));
   }

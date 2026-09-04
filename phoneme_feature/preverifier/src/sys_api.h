@@ -100,7 +100,7 @@ void     sysThreadInitializeSystemThreads(void);
 int     sysThreadCreate(long, uint_t flags, void *(*)(void *),
             sys_thread_t **, void *);
 #else
-int    sysThreadCreate(long, uint flags, void *(*)(void *),
+int    sysThreadCreate(long, unsigned int flags, void *(*)(void *),
             sys_thread_t **, void *);
 #endif
 

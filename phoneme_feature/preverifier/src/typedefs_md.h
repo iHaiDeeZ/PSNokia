@@ -138,9 +138,12 @@ extern void ll2str(int64_t a, char *s, char *limit);
 #ifdef SOLARIS2
 #include <sys/byteorder.h>
 #endif
-
 #ifdef LINUX
+#ifdef __MINGW32__
+#include <winsock2.h>
+#else
 #include <asm/byteorder.h>
+#endif
 #endif
 
 #ifdef WIN32

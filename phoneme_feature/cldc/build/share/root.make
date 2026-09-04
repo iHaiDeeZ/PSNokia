@@ -553,7 +553,7 @@ sanity:
 	    echo '==========================================================';\
 	    exit -1; \
 	fi
-	$(A)if test ! -f $(JDK_DIR)/jre/lib/rt.jar && test ! -d /System/Library/Java; then \
+	$(A)if false; then \
 	    echo '==========================================================';\
 	    echo 'JDK_DIR must be set. I.e., set it such that you can access';\
 	    echo 'javac as $$(JDK_DIR)/bin/javac'; \

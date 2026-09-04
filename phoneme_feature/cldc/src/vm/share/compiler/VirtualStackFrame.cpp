@@ -1130,7 +1130,7 @@ class TransferGraph : public StackObj {
 #define DEFINE_SETTER(name)                                  \
   void set_ ## name(Register reg) {                          \
     check_register(reg);                                     \
-    GUARANTEE((name ## _mark & NODE_MARK_MASK) == 0 ||       \
+    GUARANTEE((name ## _mark & (int)NODE_MARK_MASK) == 0 ||       \
               mark(reg) == zero_mark, "Already marked");     \
     GUARANTEE((_flags[reg] & name ## _mark) == 0,            \
               "Already marked");                             \

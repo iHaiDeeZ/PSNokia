@@ -135,6 +135,21 @@ final class ConnectionRegistry
                     Logging.trace(e, null);
                 }
             }
+
+            /*
+             * poll0()/currentTimeMillis() are both native calls, so a loop
+             * that only ever invokes natives never passes through an
+             * interpreted method entry -- the only place the VM's
+             * cooperative scheduler checks for a thread switch. Without a
+             * real yield here, this thread can monopolize the CPU forever
+             * and starve every other thread (including the one that
+             * renders the screen).
+             */
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException ie) {
+                // ignore, loop again
+            }
         }
     }
 

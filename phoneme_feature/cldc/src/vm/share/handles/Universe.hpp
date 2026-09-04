@@ -631,7 +631,7 @@ private:
     // numeric order.
     GUARANTEE(index >= T_BOOLEAN && index <= T_LONG, "bad BasicType");
     return (TypeArrayClass*)
-      &persistent_handles[index + (bool_array_class_index - T_BOOLEAN)];
+      &persistent_handles[index + ((int)bool_array_class_index - (int)T_BOOLEAN)];
   }
   static ReturnOop class_from_id(jint class_id) {
     ReturnOop cls = ((ReturnOop*)_class_list_base)[class_id];

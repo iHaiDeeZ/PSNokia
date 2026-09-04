@@ -1,0 +1,23 @@
+######################################################################
+#
+# To be included for vita_arm_gcc platform
+#
+######################################################################
+PCSL_OS=linux
+PCSL_CPU=arm
+
+FILE_MODULE=posix
+NETWORK_MODULE=stubs
+PRINT_MODULE=stubs
+MEMORY_MODULE=malloc
+
+include $(PCSL_DIR)/makefiles/share/gcc.gmk
+include $(PCSL_DIR)/makefiles/share/linux.gmk
+
+VITASDK_BIN = /usr/local/vitasdk/bin/
+CC              = $(VITASDK_BIN)arm-vita-eabi-gcc
+CPP             = $(VITASDK_BIN)arm-vita-eabi-g++
+LD              = $(VITASDK_BIN)arm-vita-eabi-g++
+AR              = $(VITASDK_BIN)arm-vita-eabi-ar -rc
+
+CFLAGS          += -I/usr/local/vitasdk/arm-vita-eabi/include

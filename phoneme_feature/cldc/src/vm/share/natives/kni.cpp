@@ -248,7 +248,7 @@ jfieldID _KNI_field_lookup_helper(jclass classHandle, const char* name,
       (field.is_static() && !holder().equals(&ic))) {
     return (jfieldID)0;
   } else {
-    return (jfieldID)((jint)field.offset());
+    return (jfieldID)(address_word)((jint)field.offset());
   }
 }
 
@@ -264,7 +264,7 @@ KNIEXPORT void
 KNI_GetObjectField(jobject objectHandle, jfieldID fieldID, jobject toHandle) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_GetObjectField");
-  kni_set_handle(toHandle, *object->obj_field_addr((int)fieldID));
+  kni_set_handle(toHandle, *object->obj_field_addr((int)(address_word)fieldID));
 }
 
 KNIEXPORT void
@@ -272,14 +272,14 @@ KNI_SetObjectField(jobject objectHandle, jfieldID fieldID, jobject fromHandle)
 {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_SetObjectField");
-  oop_write_barrier(object->obj_field_addr((int)fieldID),
+  oop_write_barrier(object->obj_field_addr((int)(address_word)fieldID),
                     kni_read_handle(fromHandle));
 }
 
 KNIEXPORT jint KNI_GetIntField(jobject objectHandle, jfieldID fieldID) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_GetIntField");
-  return *object->int_field_addr((int)fieldID);
+  return *object->int_field_addr((int)(address_word)fieldID);
 }
 
 //

@@ -277,8 +277,8 @@ define generate_configuration
 	@echo " ... generating localized strings"
 	@$(INT_INVOKE_L10N_GENERATOR) \
 		$(GENERATE_L10N_STRINGS)
-	@echo $(foreach package, $(INT_PACKAGES_NAMES),\
-		"$(GENERATED_DIR)/classes/$(subst .,/,$(package)).java") \
+	@$(call fixcygpath,$(foreach package, $(INT_PACKAGES_NAMES),\
+		"$(GENERATED_DIR)/classes/$(subst .,/,$(package)).java")) \
 		>> $(GENERATED_JAVA_LIST)
 endef
 

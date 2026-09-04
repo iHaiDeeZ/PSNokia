@@ -381,7 +381,7 @@ void JavaFrame::deoptimize(const Method * callee) {
 
   if (in_gc_state()) { 
     // Set the appropriate bci.
-    set_raw_bcp((address)bci);
+    set_raw_bcp((address)(address_word)bci);
   } else { 
     // Set the appropriate bcp for this function
     set_raw_bcp(bci + method().code_base());
@@ -457,7 +457,7 @@ bool JavaFrame::is_compiled_frame( void ) const {
 #else
   if (in_gc_state()) { 
     // In gc state, the high bit indicates a compiled frame
-    return ((jint)raw_bcp() & compiled_frame_flag) != 0;
+    return ((jint)(address_word)raw_bcp() & compiled_frame_flag) != 0;
   } else {
 #if ENABLE_APPENDED_CALLINFO
 
@@ -626,7 +626,7 @@ void JavaFrame::relocate_starting_frame_pointers(Thread *thread, int delta) {
 
 jint JavaFrame::bci_with_flags() const { 
   if (in_gc_state()) { 
-    return ((jint)raw_bcp());
+    return ((jint)(address_word)raw_bcp());
   }  
 #if ENABLE_COMPILER
   if (is_compiled_frame()) {
@@ -719,7 +719,7 @@ void JavaFrame::gc_prologue(void do_oop(OopDesc**)) {
 #endif // ENABLE_APPENDED_CALLINFO
 
     set_raw_compiled_method(cm);
-    set_raw_pc((address)delta);
+    set_raw_pc((address)(address_word)delta);
 
 #if ENABLE_APPENDED_CALLINFO
     CompiledMethod::Raw compiled_method(cm);
@@ -729,7 +729,7 @@ void JavaFrame::gc_prologue(void do_oop(OopDesc**)) {
     // Check that appended callinfo is consistent with embedded callinfo.
     GUARANTEE(bci == call_info->bci(), "Consistency check");
 #endif // ENABLE_EMBEDDED_CALLINFO    
-    set_raw_bcp((address)( bci + compiled_frame_flag));
+    set_raw_bcp((address)(address_word)( bci + compiled_frame_flag));
 #else // ENABLE_APPENDED_CALLINFO
     set_raw_bcp((address)( call_info->bci() + compiled_frame_flag));
 #endif // ENABLE_APPENDED_CALLINFO
@@ -748,11 +748,11 @@ void JavaFrame::gc_prologue(void do_oop(OopDesc**)) {
     jint    frame_bci  = DISTANCE(rm, frame_bcp);
     jint    actual_bci = frame_bci & actual_bci_mask;
     address actual_bcp = DERIVED(address, rm, actual_bci);
-    jint    flags      = (int)frame_bcp - (int)actual_bcp;
+    jint    flags      = (jint)((address_word)frame_bcp - (address_word)actual_bcp);
     GUARANTEE(actual_bci >= Method::base_offset(), "Sanity check");
     GUARANTEE((juint)actual_bci < rm->object_size(), 
               "Must be within appropriate limits");
-    set_raw_bcp((address)(flags + (actual_bci - Method::base_offset())));
+    set_raw_bcp((address)(address_word)(flags + (actual_bci - Method::base_offset())));
     // This is just to make sure that we really do fix it up after the GC.
     AZZERT_ONLY(set_cpool((address)0xdeadc0de));
   }
@@ -787,17 +787,17 @@ void JavaFrame::gc_epilogue(void) {
     GUARANTEE(cooked_call_info()->in_compiled_code(), "Sanity check");
 #endif // ENABLE_APPENDED_CALLINFO
     GUARANTEE(raw_compiled_method()->is_compiled_method(), "sanity check");
-    GUARANTEE((juint)raw_bcp() & compiled_frame_flag,  "Quick check works");
+    GUARANTEE((juint)(address_word)raw_bcp() & compiled_frame_flag,  "Quick check works");
     set_raw_pc(DERIVED(address, raw_compiled_method(), pc()));
   } else 
 #endif
   {
     Method::Raw method = raw_method();
-    int     saved_bcp  = (int)raw_bcp();
+    int     saved_bcp  = (int)(address_word)raw_bcp();
     int     flags      = saved_bcp & ~actual_bci_mask;
     int     actual_bci = (saved_bcp & actual_bci_mask) + Method::base_offset();
     address actual_bcp = DERIVED(address, method.obj(), actual_bci);
-    address frame_bcp  = (address)((int)actual_bcp + flags);
+    address frame_bcp  = (address)((address_word)actual_bcp + flags);
     set_raw_bcp(frame_bcp);
 
     set_cpool(DERIVED(address, 
@@ -954,7 +954,7 @@ JavaFrame::find_exception_frame(Thread* thread,
   }
   // Update the end of the stack, which always points to the correct value
   // for fp.
-  address* stack_pointer = (address*)thread->stack_pointer();
+  address* stack_pointer = (address*)(address_word)thread->stack_pointer();
   stack_pointer[0] = frame.fp();
   if (bci >= 0) {
 #if ENABLE_COMPILER
@@ -1139,8 +1139,8 @@ void Frame::init(Thread *thread, address guessed_fp) {
     limit = (address)stk.obj();
   }
 
-  guessed_fp = (address) (((jint)guessed_fp) & (~0x03));
-  limit      = (address) (((jint)limit)      & (~0x03));
+  guessed_fp = (address) (((address_word)guessed_fp) & (~(address_word)0x03));
+  limit      = (address) (((address_word)limit)      & (~(address_word)0x03));
   start      = guessed_fp;
 
   // (2) Start from the current top of the stack and search downwards.
@@ -1282,7 +1282,7 @@ void JavaFrame::print_stack_address(Stream *st, address addr) {
     st->print("        ");
   }
 
-  st->print_hex8((int)addr);
+  st->print_hex8((int)(address_word)addr);
   st->print(" ");
 }
 
@@ -1554,7 +1554,7 @@ void EntryFrame::print_raw_frame_on(Stream *st) {
     } else {
       st->print("        ");
     }
-    st->print_hex8((int)addr);
+    st->print_hex8((int)(address_word)addr);
     st->print(" ");
 
     if (offset == stored_last_sp_offset()) {

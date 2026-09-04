@@ -48,13 +48,13 @@ class RefArray: public Array {
     ValueMask = ~TypeMask
   };
   static unsigned get_type ( const OopDesc* obj ) {
-    return unsigned(obj) & TypeMask;
+    return unsigned(address_word(obj)) & TypeMask;
   }
   static OopDesc* get_value ( OopDesc* obj ) {
-    return (OopDesc*) (unsigned(obj) & ValueMask);
+    return (OopDesc*) (address_word(obj) & ValueMask);
   }
   static OopDesc* make ( OopDesc* obj, const unsigned type ) {
-    return (OopDesc*) (unsigned(obj) | type);
+    return (OopDesc*) (address_word(obj) | type);
   }
   static OopDesc* null ( void ) {
     return (OopDesc*) NULL;
@@ -63,7 +63,7 @@ class RefArray: public Array {
     return (OopDesc*) -1;
   }
   static bool not_null_or_dead( OopDesc* obj ) {
-    return unsigned(unsigned(obj)+1) > unsigned(1);
+    return address_word(address_word(obj)+1) > address_word(1);
   }
 
   OopDesc** base( void ) const {

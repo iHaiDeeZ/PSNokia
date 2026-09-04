@@ -474,7 +474,7 @@ public:
   inline static bool system_text_contains(const OopDesc* target) {
 #if ENABLE_SEGMENTED_ROM_TEXT_BLOCK
     GUARANTEE(_text_total_size > 0, "Sanity");
-    const juint offset = ((juint)target) - _min_text_seg_addr;
+    const juint offset = (juint)(((address_word)target) - _min_text_seg_addr);
     if (offset < _text_total_size) {
       return true;
     }
@@ -488,7 +488,7 @@ public:
   }
 
   static bool system_data_contains(const OopDesc* target) {
-    juint offset = ((juint)target) - ((juint)&_rom_data_block[0]);
+    juint offset = (juint)(((address_word)target) - ((address_word)&_rom_data_block[0]));
     if (offset < (juint)_rom_data_block_size_fast) {
       return true;
     } else {

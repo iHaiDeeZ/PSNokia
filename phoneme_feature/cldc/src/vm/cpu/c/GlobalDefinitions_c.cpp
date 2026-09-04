@@ -53,6 +53,8 @@ OopDesc*        _interned_string_near_addr = NULL;
 OopDesc**       _persistent_handles_addr   = NULL;
 int		_jvm_in_quick_native_method= 0;
 char*		_jvm_quick_native_exception= NULL;
+int*            _rom_constant_pool_fast    = NULL;
+void start_lightweight_thread_asm() {}
 
 #if ENABLE_ISOLATES
 OopDesc*        _current_task;

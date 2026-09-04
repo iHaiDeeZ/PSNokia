@@ -92,7 +92,7 @@ public:
     bool_field_put(on_native_heap_offset(), val);
   }
   OsFile_Handle file_pointer() {
-    return (OsFile_Handle)int_field(file_pointer_offset());
+    return (OsFile_Handle)(address_word)int_field(file_pointer_offset());
   }
 #ifdef AZZERT
   void junk_file_pointer() {

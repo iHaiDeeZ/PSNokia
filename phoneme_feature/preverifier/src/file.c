@@ -574,7 +574,7 @@ void ensure_dir_exists(char *dir)
 #ifdef WIN32
         mkdir(dir);
 #endif
-#ifdef UNIX
+#if defined(UNIX) && !defined(__MINGW32__)
         mkdir(dir, 0755);
 #endif
     }
@@ -590,7 +590,7 @@ void ensure_dir_writable(char *dir)
 #ifdef WIN32
         if (access(dir, 06) < 0) {
 #endif
-#ifdef UNIX
+#if defined(UNIX) && !defined(__MINGW32__)
         if (access(dir, R_OK | W_OK) < 0) {
 #endif
             panic("%s is write protected\n", dir);

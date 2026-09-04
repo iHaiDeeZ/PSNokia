@@ -37,6 +37,14 @@
 #include <gxutl_graphics.h>
 #include <gx_image.h>
 
+#if __has_include(<psp2/io/fcntl.h>)
+#include <psp2/io/fcntl.h>
+#endif
+/* Diagnostic-only: disabled — decode_png fires this on every image decode,
+ * and with no bitmap caching that can mean every frame; file-I/O there
+ * was throttling rendering badly. */
+static void img_write_marker(const char* text) { (void)text; }
+
 #include "gxj_intern_graphics.h"
 #include "gxj_intern_image.h"
 #include "gxj_intern_putpixel.h"
@@ -170,6 +178,8 @@ decode_png
     REPORT_CALL_TRACE(LC_LOWUI,
                      "LF:decode_PNG()\n");
 
+    img_write_marker("IMARKER1: decode_png ENTER\n");
+
     /* Create the image from the buffered data */
     initImageDst(&dstData);
 
@@ -180,18 +190,25 @@ decode_png
     if ((src = create_imagesrc_from_data((char **)(void*)&srcBuffer,
                                              length)) == NULL) {
       *creationErrorPtr = GXUTL_NATIVE_IMAGE_OUT_OF_MEMORY_ERROR;
-    } else if (!decode_png_image(src, (imageDstData *)(&dstData))) {
-      *creationErrorPtr = GXUTL_NATIVE_IMAGE_DECODING_ERROR;
+      img_write_marker("IMARKER2: create_imagesrc_from_data FAILED (OOM)\n");
     } else {
-      *creationErrorPtr = GXUTL_NATIVE_IMAGE_NO_ERROR;
+      img_write_marker("IMARKER3: calling decode_png_image\n");
+      if (!decode_png_image(src, (imageDstData *)(&dstData))) {
+        *creationErrorPtr = GXUTL_NATIVE_IMAGE_DECODING_ERROR;
+        img_write_marker("IMARKER4: decode_png_image FAILED\n");
+      } else {
+        *creationErrorPtr = GXUTL_NATIVE_IMAGE_NO_ERROR;
+        img_write_marker("IMARKER5: decode_png_image SUCCESS\n");
 
-      /* dstData.hasAlpha == KNI_FALSE */
+        /* dstData.hasAlpha == KNI_FALSE */
+      }
     }
 
     if(src != NULL) {
         midpFree(src);
     }
 
+    img_write_marker("IMARKER6: decode_png RETURN\n");
     return dstData.hasAlpha;
 }
 

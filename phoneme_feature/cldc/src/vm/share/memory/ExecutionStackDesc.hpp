@@ -62,9 +62,9 @@ class ExecutionStackDesc: public OopDesc {
 
   // Returns true if the address is within this stack.
   bool contains(address ptr) {
-    juint t = (juint) this;
-    juint p = (juint) ptr;
-    return ((p - t) < (juint)object_size());
+    address_word t = (address_word) this;
+    address_word p = (address_word) ptr;
+    return ((juint)(p - t) < (juint)object_size());
   }
   
   // update stack list replacing old_stack with new_stack

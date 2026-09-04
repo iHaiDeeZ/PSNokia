@@ -361,11 +361,11 @@ define appendjavafiles
     fi
     @_javalist="$(wordlist 1,100,$?)"; ( \
     if [ -n "$$_javalist" ]; then \
-        echo "$$_javalist" >> $(REBUILD_JAVA_LIST); \
+        $(call fixcygpath,$$_javalist) >> $(REBUILD_JAVA_LIST); \
     fi )
     @_javalist="$(wordlist 101,200,$?)"; ( \
     if [ -n "$$_javalist" ]; then \
-        echo "$$_javalist" >> $(REBUILD_JAVA_LIST); \
+        $(call fixcygpath,$$_javalist) >> $(REBUILD_JAVA_LIST); \
     fi )
 endef
 
@@ -417,7 +417,7 @@ define compilefiles
 		else \
 			f2= ; \
 		fi ; \
-		$(JAVAC_CMD) -g$(JAVAC_DEBUG) -d $(JAVAC_OUT_DIR) \
+		$(JAVAC_CMD) -source 1.4 -target 1.4 -g$(JAVAC_DEBUG) -d $(JAVAC_OUT_DIR) \
 			-bootclasspath $(BOOTCLASSPATH) \
 			-classpath $(CLASSBINDIR) $$f1 $$f2 || exit 1; \
 		if test "$(TARGET_VM)" = "cldc_vm"; then \

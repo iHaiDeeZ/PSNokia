@@ -64,10 +64,10 @@ protected:
 public:
   OsFile_Handle file_handle() {
     guarantee_jar_file_handle();
-    return (OsFile_Handle) int_field(file_handle_offset());
+    return (OsFile_Handle)(address_word)int_field(file_handle_offset());
   }
   void set_file_handle(OsFile_Handle value) {
-    int_field_put(file_handle_offset(), (int) value);
+    int_field_put(file_handle_offset(), (int)(address_word) value);
   }
 
   ReturnOop jar_file_name() {

@@ -908,9 +908,7 @@ void SharedStubs::generate_shared_monitor_enter() {
 
     comment("Go to next stack lock in monitor block");
     cmp(tmp0, reg(tmp1));
-    if (GenerateDebugAssembly) {
-      breakpoint(JavaStackDirection < 0 ? hi : lo);
-    }
+    breakpoint(JavaStackDirection < 0 ? hi : lo);
     b(find_monitor_loop, ne);
 
   bind(exit_find_monitor_loop);
@@ -1119,9 +1117,7 @@ void SharedStubs::generate_shared_monitor_exit() {
 
     eol_comment("at the end of the monitor block?");
     cmp(lock, reg(tmp1));
-    if (GenerateDebugAssembly) {
-      breakpoint(JavaStackDirection < 0 ? hi : lo);
-    }
+    breakpoint(JavaStackDirection < 0 ? hi : lo);
     b(find_monitor_loop, ne);
   }
 

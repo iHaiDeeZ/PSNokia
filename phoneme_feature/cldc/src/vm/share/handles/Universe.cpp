@@ -630,7 +630,7 @@ bool Universe::bootstrap_with_rom(const JvmPathChar* classpath) {
   // Load ROM::heap_block[] into the heap and relocate all heap pointers
   // NOTE: last <NUM_HANDLES_SKIP> handles not ROMIZED.
   {
-    int num_rom_handles = __number_of_persistent_handles - NUM_HANDLES_SKIP;
+    int num_rom_handles = (int)__number_of_persistent_handles - NUM_HANDLES_SKIP;
 #if ENABLE_HEAP_NEARS_IN_HEAP
     //num_rom_handles is number of handles in PERS_HANDLES_BLOCK of ROM Image
     //last NUM_DUPLICATE_ROM_HANDLES are in other block and must be treated differently

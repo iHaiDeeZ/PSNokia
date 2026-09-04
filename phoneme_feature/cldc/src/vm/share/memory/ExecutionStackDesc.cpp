@@ -82,7 +82,7 @@ void ExecutionStackDesc::relocate_internal_pointers(int delta,
 
   // Relocate this stack's thread's saved frame pointer,
   // stack_pointer, and stack_limit.
-  jint* stored_fp_addr = (jint*)thread->stack_pointer();
+  jint* stored_fp_addr = (jint*)(address_word)thread->stack_pointer();
   if (*stored_fp_addr != 0) {
     *stored_fp_addr = *stored_fp_addr + delta;
   }

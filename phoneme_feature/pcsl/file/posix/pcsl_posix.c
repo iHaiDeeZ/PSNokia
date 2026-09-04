@@ -73,6 +73,29 @@ int pcsl_file_finalize() {
  * file is at the beginning of the file.
  * 
  */
+#if __has_include(<psp2/io/fcntl.h>)
+/* PCSL_FILE_O_* (pcsl_file.h) use Linux glibc's O_CREAT/O_TRUNC/O_APPEND
+ * bit values (0x40/0x200/0x400) - this file passes `flags` straight
+ * through to open() with no translation, which is correct for glibc but
+ * wrong for vitasdk's newlib, whose real O_CREAT/O_TRUNC/O_APPEND are
+ * 0x200/0x400/0x008 (see sys/_default_fcntl.h). PCSL_FILE_O_CREAT (0x40)
+ * isn't a real flag bit in newlib's scheme, so it was silently doing
+ * nothing: every "create if missing" file open (all of RMS/RecordStore
+ * storage) was opening as a plain read/write with no create, failing
+ * ENOENT on any file that didn't already exist and never creating one.
+ * Translate PCSL's flag bits to the real O_* values actually understood
+ * by this platform's open(). */
+static int pcsl_to_os_flags(int flags) {
+    int osFlags = flags & (PCSL_FILE_O_RDONLY | PCSL_FILE_O_WRONLY | PCSL_FILE_O_RDWR);
+    if (flags & PCSL_FILE_O_CREAT)  osFlags |= O_CREAT;
+    if (flags & PCSL_FILE_O_TRUNC)  osFlags |= O_TRUNC;
+    if (flags & PCSL_FILE_O_APPEND) osFlags |= O_APPEND;
+    return osFlags;
+}
+#else
+static int pcsl_to_os_flags(int flags) { return flags; }
+#endif
+
 int pcsl_file_open(const pcsl_string * fileName, int flags, void **handle)
 {
     int   fd;
@@ -87,7 +110,7 @@ int pcsl_file_open(const pcsl_string * fileName, int flags, void **handle)
         creationMode = DEFAULT_FILE_CREATION_MODE;
     }
 
-    fd = open((char*)pszOsFilename, flags, creationMode);
+    fd = open((char*)pszOsFilename, pcsl_to_os_flags(flags), creationMode);
 
     pcsl_string_release_utf8_data(pszOsFilename, fileName);
 

@@ -143,7 +143,7 @@ void BinaryAssembler::bl(address target, Condition cond) {
   int glue_offset = DISTANCE(&compiler_glue_code_start, target);
   address glue = ObjectHeap::glue_code_start() + glue_offset;
   address cur_pc = addr_at(code_size()) + 8;
-  int branch_offset = int(glue) - int(cur_pc);
+  int branch_offset = int(address_word(glue)) - int(address_word(cur_pc));
 
   emit_long_branch();
   compiled_method()->set_has_branch_relocation();
@@ -358,10 +358,10 @@ void BinaryAssembler::mov_imm(Register rd, address target, Condition cond) {
   }
   if (GenerateROMImage) { 
     GUARANTEE(target != 0, "Must not be null address");
-    ldr_literal(rd, compiled_method(), (int)target, cond);
+    ldr_literal(rd, compiled_method(), (int)(address_word)target, cond);
   } else { 
     Oop::Raw null_oop;          // ::Raw since don't need to tell GC about NULL
-    ldr_literal(rd, &null_oop, (int)target, cond);
+    ldr_literal(rd, &null_oop, (int)(address_word)target, cond);
   }
 }
 
@@ -579,7 +579,7 @@ void BinaryAssembler::write_literal(LiteralPoolElement* literal) {
       _relocation.emit(Relocation::rom_oop_type, _code_offset);
 #endif
     }
-    emit_raw(literal->literal_int() + (int)oop.obj()); // inline oop in code
+    emit_raw(literal->literal_int() + (int)(address_word)oop.obj()); // inline oop in code
   }
 
   // Indicate that we know this literal's position in the code

@@ -223,7 +223,7 @@ void Synchronizer::signal_waiters(StackLock* stack_lock) {
                     Thread::current()->id(),
                     first_waiter().wait_obj(),
                     next_waiter().obj(),
-                    (int)stack_lock));
+                    (int)(address_word)stack_lock));
     }
     Scheduler::add_to_active(&first_waiter);
     JavaOop::Raw obj = first_waiter().wait_obj();
@@ -308,7 +308,7 @@ void StackLock::relocate_internal_pointers(int delta) {
     if (obj != NULL) {
       GUARANTEE(stack_near == obj->klass(), "check loop");
       // Locked object, relocate pointer to stack near
-      obj->_klass = (OopDesc *)((int)obj->_klass + delta);
+      obj->_klass = (OopDesc *)((address_word)obj->_klass + delta);
       if (TraceGC) {
         TTY_TRACE_CR(("TraceGC: 0x%p relocate object near from "
                       "stack lock 0x%p", obj, stack_near));

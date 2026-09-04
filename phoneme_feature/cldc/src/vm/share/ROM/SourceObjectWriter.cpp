@@ -491,7 +491,7 @@ void SourceObjectWriter::put_symbolic(Oop *owner, int offset JVM_TRAPS) {
     return;
   }
 
-  address addr = (address)owner->int_field(offset);
+  address addr = (address)(address_word)owner->int_field(offset);
 
   if (_word_position != 0) {
     _stream->print("\n\t");
@@ -599,7 +599,7 @@ void SourceObjectWriter::put_compiled_method_symbolic(CompiledMethod *cm,
   Method method = cm->method();
   JavaClass holder = method.holder();
 
-  const address value = (address)cm->int_field(offset);
+  const address value = (address)(address_word)cm->int_field(offset);
 
   if (value == (address)Java_unimplemented) {
     // For midp and the like, we occassionally compile things that are

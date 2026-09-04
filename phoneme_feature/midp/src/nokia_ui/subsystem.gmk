@@ -1,0 +1,23 @@
+######################################################################
+# Nokia UI API (com.nokia.mid.ui) minimal stub subsystem
+#
+# Added because many real-world MIDlets (games ported from Nokia S40
+# devices in particular) reference com.nokia.mid.ui.DirectGraphics /
+# DirectUtils even for effects they do not critically depend on; without
+# even a stub, CLDC preverification fails with a confusing
+# ClassFormatError (cannot resolve the referenced class) instead of a
+# clean, catchable NoClassDefFoundError. Always included, unconditional,
+# matching the mmapi stub subsystem pattern.
+######################################################################
+
+SUBSYSTEM_NOKIAUI_JAVA_FILES = \
+    $(SUBSYSTEM_DIR)/nokia_ui/classes/com/nokia/mid/ui/DirectGraphics.java \
+    $(SUBSYSTEM_DIR)/nokia_ui/classes/com/nokia/mid/ui/DirectGraphicsImpl.java \
+    $(SUBSYSTEM_DIR)/nokia_ui/classes/com/nokia/mid/ui/DirectUtils.java \
+    $(SUBSYSTEM_DIR)/nokia_ui/classes/com/nokia/mid/ui/FullCanvas.java
+
+nokia_ui:
+
+SUBSYSTEM_NOKIAUI_SOURCEPATH = $(SUBSYSTEM_DIR)/nokia_ui/classes
+
+MIDP_JAVADOC_SOURCEPATH += $(SUBSYSTEM_NOKIAUI_SOURCEPATH)

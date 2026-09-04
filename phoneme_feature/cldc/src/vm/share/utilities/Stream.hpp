@@ -124,7 +124,7 @@ public:
   // Print a hex number with 8 digits, including leading zeros.
   void print_hex8(int n);
   void print_hex8(address a) {
-    print_hex8((int)a);
+    print_hex8((int)(address_word)a);
   }
 
 #endif

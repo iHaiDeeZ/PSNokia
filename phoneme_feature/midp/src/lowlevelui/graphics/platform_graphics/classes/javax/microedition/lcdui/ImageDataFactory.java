@@ -162,7 +162,7 @@ class ImageDataFactory implements AbstractImageDataFactory {
          * allocate an array and read in the bits using
          * Class.getResourceAsStream(name);
          */
-        InputStream is = ImageData.class.getResourceAsStream(name);
+        InputStream is = getClass().getResourceAsStream(name);
 
         /*
          * If the InputStream "is" is null, when "name" is

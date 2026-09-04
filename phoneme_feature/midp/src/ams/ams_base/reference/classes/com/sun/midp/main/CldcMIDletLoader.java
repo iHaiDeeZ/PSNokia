@@ -67,7 +67,7 @@ class CldcMIDletLoader implements MIDletLoader {
         Class midletClass;
 
         midletClass = Class.forName(className);
-        if (!MIDlet.class.isAssignableFrom(midletClass)) {
+        if (!Class.forName("javax.microedition.midlet.MIDlet").isAssignableFrom(midletClass)) {
             throw new InstantiationException("Class not a MIDlet");
         }
 

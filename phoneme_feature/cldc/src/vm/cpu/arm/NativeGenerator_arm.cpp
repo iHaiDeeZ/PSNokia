@@ -1981,12 +1981,12 @@ void NativeGenerator::generate_native_misc_entries() {
     mov(num, imm_shift(quotient, lsr, 3), set_CC);
     sub(remainder, remainder, imm_shift(num, lsl, 3));
     sub(remainder, remainder, imm_shift(num, lsl, 1));
-    strh(remainder, imm_index3(ptr, -sizeof(jchar), pre_indexed));
+    strh(remainder, imm_index3(ptr, -(int)sizeof(jchar), pre_indexed));
     b(div_loop, ne);
 
     comment("Add '-' sign if the original number was negative");
     orr(sign, sign, imm('-'), set_CC);
-    strh(sign, imm_index3(ptr, -sizeof(jchar), pre_indexed), mi);
+    strh(sign, imm_index3(ptr, -(int)sizeof(jchar), pre_indexed), mi);
 
     comment("Fill in remained fields");
     eol_comment("pointer to result string");

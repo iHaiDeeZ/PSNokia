@@ -144,7 +144,7 @@ public class Helper {
              String className;
 
              /* Get the reader class name */
-             className = defaultMEPath + '.' + name + suffix;
+             className = new StringBuffer(defaultMEPath).append('.').append(name).append(suffix).toString();
 
              /* Using the decoder names lookup the implementation class */
              Class clazz = Class.forName(className);

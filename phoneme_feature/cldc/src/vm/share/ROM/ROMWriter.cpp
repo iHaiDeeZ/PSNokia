@@ -390,7 +390,7 @@ void ROMWriter::visit_all_objects(RomOopVisitor *visitor, int npass JVM_TRAPS)
   // the persistent handles
   // Visit all entries of system symbols[].
   for (index = 0; index < Symbols::number_of_system_symbols(); index++) {
-    visiting_object = ((OopDesc*)system_symbols[index]);
+    visiting_object = ((OopDesc*)(address_word)system_symbols[index]);
     visit_object(&visiting_object, NULL JVM_CHECK);
   }
 #endif 
@@ -860,7 +860,7 @@ void ROMWriter::set_skip_words_of(Oop* object, int skip JVM_TRAPS) {
 
 int ROMWriter::offset_of(Oop* object JVM_TRAPS) {
   if (write_by_reference(object)) {
-    return (int)(object->obj());
+    return (int)(address_word)(object->obj());
   }
   ROMizerHashEntry::Raw entry = info_for(object JVM_CHECK_(-1));
   return entry().offset();
@@ -1382,7 +1382,7 @@ int ROMWriter::stream_instance_fields(InstanceClass* /*klass*/,
 #endif
 
 void ROMWriter::generate_fieldmap_by_oops_do(OopDesc**p) {
-  int offset = (int)p - (int)_streaming_oop;
+  int offset = (int)((address_word)p - (address_word)_streaming_oop);
   for (int i = _last_oop_streaming_offset + sizeof(OopDesc*); i < offset;
        i += sizeof(OopDesc*)) {
     _streaming_fieldmap->byte_at_put(_streaming_index++, T_INT);
@@ -1900,7 +1900,7 @@ void ROMWriter::write_persistent_handles(ObjectWriter *obj_writer JVM_TRAPS) {
   }
   // we don't write the last NUM_HANDLES_SKIP handles
   // we should write the last ROM_DUPLICATED_HANDLES other way!
-  int count = Universe::__number_of_persistent_handles -
+  int count = (int)Universe::__number_of_persistent_handles -
               Universe::NUM_HANDLES_SKIP - Universe::NUM_DUPLICATE_ROM_HANDLES;
   for (int index= 0; index < count; index++) {
 #ifndef PRODUCT
@@ -1942,7 +1942,7 @@ void ROMWriter::write_system_symbols(ObjectWriter *obj_writer JVM_TRAPS) {
   obj_writer->start_block(SYSTEM_SYMBOLS_BLOCK, 0 JVM_CHECK);
   int count = Symbols::number_of_system_symbols();
   for (int index= 0; index < count; index++) {
-    Oop object((OopDesc*)system_symbols[index]);
+    Oop object((OopDesc*)(address_word)system_symbols[index]);
     obj_writer->put_reference(&null_owner, -1, &object JVM_CHECK);
   }
   obj_writer->end_block(JVM_SINGLE_ARG_CHECK);

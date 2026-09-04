@@ -670,8 +670,8 @@ inline address_word castable_address(void* x) {
 #define CAST_FROM_FN_PTR(new_type, func_ptr) \
     ((new_type)((address_word) (func_ptr)))
 
-#define DISTANCE(low, high)        (((jint) (high)) - ((jint) (low)))
-#define DERIVED(type, ptr, offset) ((type) (((jint) (ptr))+((jint) (offset))))
+#define DISTANCE(low, high)        (((address_word) (high)) - ((address_word) (low)))
+#define DERIVED(type, ptr, offset) ((type) (((address_word) (ptr))+((address_word) (offset))))
 
 #ifdef FIELD_OFFSET
 #undef FIELD_OFFSET
@@ -847,14 +847,14 @@ inline intptr_t align_size_down(intptr_t size, intptr_t alignment) {
 class ArrayPointer {
 protected:
   Array*   _heap_array;
-  int      _offset;
+  address_word _offset;
 
 public:
   ArrayPointer(Array* heap_array, int offset = 0) :
     _heap_array(heap_array), _offset(offset) {}
 
   ArrayPointer(address native_addr) :
-    _heap_array(NULL), _offset((int) native_addr) {}
+    _heap_array(NULL), _offset((address_word) native_addr) {}
 
   bool in_java_heap() {
     return _heap_array != NULL;
@@ -2450,7 +2450,7 @@ extern "C" int   jvm_memcmp(const void *s1, const void *s2, int n);
 #define DIRTY_HEAP(start, length)
 #endif
 
-#if ARM_EXECUTABLE && ENABLE_ZERO_YOUNG_GENERATION
+#if ARM_EXECUTABLE && ENABLE_ZERO_YOUNG_GENERATION && !ENABLE_C_INTERPRETER
 extern "C" void fast_memclear(void* start, int length);
 #else
 inline void fast_memclear(void* start, int length) {

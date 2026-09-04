@@ -36,7 +36,7 @@ bool SourceAssembler::_in_glue_code = false;
 static int GenerateSDTCode = 0;
 
 void SourceAssembler::Label::import(Stream* s) {
-  char *cmd;
+  const char *cmd;
   if (GenerateGNUCode) {
     cmd = ".extern";
   } else {
@@ -53,7 +53,7 @@ void SourceAssembler::Label::import(Stream* s) {
 }
 
 void SourceAssembler::Label::global(Stream* s) {
-  char *cmd;
+  const char *cmd;
   if (GenerateGNUCode) {
     cmd = ".global";
   } else {
@@ -156,7 +156,7 @@ void SourceAssembler::Literal::print_value_on(SourceAssembler* sasm) {
       sasm->define_bytes(_svalue);
       break;
     case label  : {
-      char *tag;
+      const char *tag;
       if (GenerateGNUCode) {
         tag = ".word";
       } else {
@@ -475,7 +475,7 @@ void SourceAssembler::define_byte(int x) {
 }
 
 void SourceAssembler::define_long(int x) {
-  char *tag, *spec = "0x%x";
+  const char *tag, *spec = "0x%x";
   if (GenerateGNUCode) {
     tag = ".long";
   } else {
@@ -488,7 +488,7 @@ void SourceAssembler::define_long(int x) {
 }
 
 void SourceAssembler::define_long(const Label& L) {
-  char *tag;
+  const char *tag;
   if (GenerateGNUCode) {
     tag = ".long";
   } else {
@@ -531,12 +531,12 @@ void SourceAssembler::define_call_info() {
 
 int SourceAssembler::find_gp_offset(const char *name) {
 #if !ENABLE_THUMB_GP_TABLE
-  int offset = 256 * sizeof(OopDesc*); // skip the bytecode table
+  int offset = 256 * BytesPerWord; // skip the bytecode table
   if (ENABLE_DISPATCH_TABLE_PADDING) {
-    offset += 8 * sizeof(OopDesc*);    // 8 extra bytecodes.
+    offset += 8 * BytesPerWord;    // 8 extra bytecodes.
   }
 #else
-  int offset = 1 * sizeof(OopDesc*); // skip the nop bytecode
+  int offset = 1 * BytesPerWord; // skip the nop bytecode
 #endif
 
   static const GPTemplate gp_templates[] = {

@@ -51,7 +51,7 @@ address OsMemory_allocate_chunk(size_t initial_size,
 {
   address chunk = (address)VirtualAlloc(NULL, max_size, MEM_RESERVE, 
                                         PAGE_EXECUTE_READWRITE);
-  GUARANTEE(((int)chunk) % alignment == 0, "must be aligned");
+  GUARANTEE(((int)(address_word)chunk) % alignment == 0, "must be aligned");
 
   if (chunk != NULL) {
     if (VirtualAlloc((LPVOID)chunk, initial_size, MEM_COMMIT,

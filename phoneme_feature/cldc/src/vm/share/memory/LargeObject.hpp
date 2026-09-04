@@ -40,7 +40,7 @@ protected:
   }
 
   static void must_be_aligned ( const void* const x ) {
-    must_be_aligned( unsigned(x) );
+    must_be_aligned( unsigned(address_word(x)) );
   }
 
   const LargeObject* next ( const unsigned size ) const {

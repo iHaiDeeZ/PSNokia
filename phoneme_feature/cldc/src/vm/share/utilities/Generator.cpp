@@ -340,7 +340,7 @@ void Generator::generate_oopmaps() {
     }
 
     output->print("}\n\n");
-    generate_oopmap_checks("loopgen", output);
+    generate_oopmap_checks((char*)"loopgen", output);
 
     output->flush();
   }

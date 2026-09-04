@@ -82,17 +82,33 @@
     </xsl:variable>        
 
     <xsl:variable name="pass2Results">
-        <xsl:apply-templates select="xalan:nodeset($pass1Results)" 
-            mode="joinClasses"/>
+        <xsl:apply-templates select="xalan:nodeset($pass1Results)"
+            mode="joinClasses">
+            <xsl:with-param name="rootNode" select="xalan:nodeset($pass1Results)"/>
+        </xsl:apply-templates>
     </xsl:variable>            
+    <xsl:message>
+DEBUG pass2 SkinPropertiesIDs constants = <xsl:value-of select="count(xalan:nodeset($pass2Results)//constant_class[@Name='SkinPropertiesIDs']/constant)"/>
+    </xsl:message>
 
     <xsl:variable name="pass3Results">
         <xsl:apply-templates select="xalan:nodeset($pass2Results)/configuration" 
             mode="generateAutoValues"/>
     </xsl:variable>
+    <xsl:message>
+DEBUG pass1 constant_class total = <xsl:value-of select="count(xalan:nodeset($pass1Results)//constant_class)"/>
+DEBUG pass1 SkinPropertiesIDs count = <xsl:value-of select="count(xalan:nodeset($pass1Results)//constant_class[@Name='SkinPropertiesIDs'])"/>
+DEBUG pass1 SkinPropertiesIDs constants = <xsl:value-of select="count(xalan:nodeset($pass1Results)//constant_class[@Name='SkinPropertiesIDs']/constant)"/>
+DEBUG pass3 SkinPropertiesIDs constants = <xsl:value-of select="count(xalan:nodeset($pass3Results)//constant_class[@Name='SkinPropertiesIDs']/constant)"/>
+DEBUG pass3 SCREEN_TEXT_ORIENT count = <xsl:value-of select="count(xalan:nodeset($pass3Results)//constant[@Name='SCREEN_TEXT_ORIENT'])"/>
+DEBUG pass1 skin_properties count = <xsl:value-of select="count(xalan:nodeset($pass1Results)//skin_properties)"/>
+DEBUG pass1 skin_properties SCREEN_TEXT_ORIENT users = <xsl:value-of select="count(xalan:nodeset($pass1Results)//skin_properties/*[@Key='SCREEN_TEXT_ORIENT'])"/>
+    </xsl:message>
 
     <xsl:apply-templates select="xalan:nodeset($pass3Results)/configuration" 
-        mode="assignKeysValues"/>
+        mode="assignKeysValues">
+        <xsl:with-param name="rootNode" select="xalan:nodeset($pass3Results)"/>
+    </xsl:apply-templates>
     
 </xsl:template>
 
@@ -146,27 +162,35 @@
 
 <!-- join nodes which map to same class to one node -->
 <xsl:template match="constant_class | localized_strings" mode="joinClasses">
+    <xsl:param name="rootNode"/>
     <!-- name of the class to which this node maps to -->
     <xsl:variable name="className" select="concat(@Package,'.',@Name)"/>
+    <!-- nodes mapping to the same class name (workaround: plain XPath instead of key(), which fails on nodeset()-cast RTFs under this JDK) -->
+    <xsl:variable name="sameClassNodes" select="$rootNode/configuration/constants/constant_class[concat(@Package,'.',@Name)=$className] | $rootNode/configuration/localized_strings[concat(@Package,'.',@Name)=$className]"/>
     <!-- if we havent seen this class name yet -->
-    <xsl:if test="generate-id()=generate-id(key('classesNodes', $className)[1])">
+    <xsl:if test="generate-id()=generate-id($sameClassNodes[1])">
         <!-- output matched node -->
         <xsl:copy>
             <!-- output all matched node attributes -->
             <xsl:copy-of select="@*"/>
             <!-- for each child of nodes with same class name -->
-            <xsl:for-each select="key('classesNodes', $className)/child::*">
+            <xsl:for-each select="$sameClassNodes/child::*">
                 <!-- output child node -->
-                <xsl:apply-templates select="." mode="joinClasses"/>
+                <xsl:apply-templates select="." mode="joinClasses">
+                    <xsl:with-param name="rootNode" select="$rootNode"/>
+                </xsl:apply-templates>
             </xsl:for-each>
         </xsl:copy>
-    </xsl:if>        
+    </xsl:if>
 </xsl:template>
 
 <!-- copy all other nodes or attributes to the output -->
 <xsl:template match="@* | node()" mode="joinClasses">
+    <xsl:param name="rootNode"/>
     <xsl:copy>
-        <xsl:apply-templates select="@* | node()" mode="joinClasses"/>
+        <xsl:apply-templates select="@* | node()" mode="joinClasses">
+            <xsl:with-param name="rootNode" select="$rootNode"/>
+        </xsl:apply-templates>
     </xsl:copy>
 </xsl:template>
 
@@ -226,6 +250,7 @@
 
 <xsl:template match="node()[@KeysClass != '']" 
     mode="assignKeysValues">
+    <xsl:param name="rootNode"/>
 
     <xsl:variable name="nodeName" select="name(.)"/>
     <xsl:variable name="nodePackage" select="./@Package"/>
@@ -242,7 +267,7 @@
     
     <!-- nodes providing keys values for this relationship -->
     <xsl:variable name="keysValuesNodes" 
-        select="/configuration/constants/constant_class[$keysClassName=concat(
+        select="$rootNode/configuration/constants/constant_class[$keysClassName=concat(
         @Package,'.',@Name)]/constant"/>
 
     <!-- for each key -->
@@ -252,7 +277,7 @@
         
         <!-- nodes that use this key (refer to it) -->
         <xsl:variable name="keyUsersNodes" 
-        select="key('keysUsersNodes', concat($nodePackage,'.',$nodeClass,':',$keyName))"/>
+        select="$rootNode/configuration/localized_strings/child::*[concat(../@Package,'.',../@Name,':',../@KeysClass,'.',@Key)=concat($nodePackage,'.',$nodeClass,':',$keyName)] | $rootNode/configuration/skin/skin_properties/child::*[concat(../@Package,'.',../@Name,':',../@KeysClass,'.',@Key)=concat($nodePackage,'.',$nodeClass,':',$keyName)]"/>
     
         <!-- error: this key is not used -->
         <xsl:if test="count($keyUsersNodes)=0">
@@ -282,7 +307,7 @@ is used more than once in '<xsl:value-of select="$nodeName"/>'
         
             <!-- constant nodes providing value for this key -->
             <xsl:variable name="keyValueNodes" 
-                select="key('keysValuesNodes', $keyName)"/>
+                select="$rootNode/configuration/constants/constant_class[@KeysValuesProvider='true']/constant[concat(../@Package,'.',../@Name,'.',@Name)=$keyName]"/>
     
             <!-- error: there is no constant corresponding to this key -->
             <xsl:if test="count($keyValueNodes)=0">
@@ -317,8 +342,11 @@ corresponding to key '<xsl:value-of select="@Key"/>'
 
 <!-- copy all other nodes or attributes to the output -->
 <xsl:template match="@* | node()" mode="assignKeysValues">
+    <xsl:param name="rootNode"/>
     <xsl:copy>
-        <xsl:apply-templates select="@* | node()" mode="assignKeysValues"/>
+        <xsl:apply-templates select="@* | node()" mode="assignKeysValues">
+            <xsl:with-param name="rootNode" select="$rootNode"/>
+        </xsl:apply-templates>
     </xsl:copy>
 </xsl:template>
 

@@ -150,6 +150,19 @@ include $(SUBSYSTEM_DIR)/tool/$(SUBSYSTEM_MAKE_FILE)
 include $(SUBSYSTEM_DIR)/mmapi/$(SUBSYSTEM_MAKE_FILE)
 
 #####################################################################
+# Nokia UI API Subsystem stub
+# Description: com.nokia.mid.ui.DirectGraphics/DirectUtils minimal impl
+#####################################################################
+
+include $(SUBSYSTEM_DIR)/nokia_ui/$(SUBSYSTEM_MAKE_FILE)
+
+#####################################################################
+# JSR 184 (M3G) minimal software 3D renderer
+#####################################################################
+
+include $(SUBSYSTEM_DIR)/m3g/$(SUBSYSTEM_MAKE_FILE)
+
+#####################################################################
 # EXTRA
 #####################################################################
 

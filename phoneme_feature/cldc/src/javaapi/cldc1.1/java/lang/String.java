@@ -268,6 +268,15 @@ class String {
         }
     }
 
+    public String (StringBuilder buffer) {
+        synchronized(buffer) {
+            buffer.setShared();
+            this.value = buffer.getValue();
+            this.offset = 0;
+            this.count = buffer.length();
+        }
+    }
+
     // Package private constructor which shares value array for speed.
     String(int offset, int count, char value[]) {
         this.value = value;

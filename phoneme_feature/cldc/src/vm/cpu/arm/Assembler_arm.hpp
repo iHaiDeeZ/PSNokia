@@ -771,7 +771,7 @@ friend struct OpcodeInfo;
 #endif
 
   void pld(Address2 addr) {
-    GUARANTEE((addr & mode_flags) == offset, "must be offset");
+    GUARANTEE(((int)addr & (int)mode_flags) == (int)offset, "must be offset");
     emit(0xF450F000 | addr);
   }
 

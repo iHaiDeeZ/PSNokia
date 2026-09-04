@@ -29,7 +29,7 @@
 
 void MethodDesc::relocate_variable_part(int delta) {
   GUARANTEE(ObjectHeap::contains((OopDesc*)this), "sanity");
-  _variable_part = (MethodVariablePart*)(int(_variable_part) + delta);
+  _variable_part = (MethodVariablePart*)(address_word(_variable_part) + delta);
 }
 
 #if ENABLE_METHOD_TRAPS

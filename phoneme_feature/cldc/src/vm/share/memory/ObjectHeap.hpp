@@ -668,7 +668,7 @@ private:
   // Bitvector access implementation
   static unsigned oop_index (OopDesc** p) {
     GUARANTEE(contains(p), "Should be in object heap");
-    return unsigned(p) >> LogBytesPerWord;
+    return unsigned(address_word(p) >> LogBytesPerWord);
   }
 
   static unsigned bitvector_word_index  (const unsigned i) {

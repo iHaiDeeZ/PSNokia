@@ -501,7 +501,7 @@ public:
 
   static inline int info_hashcode(Oop *object) {
     // Note: hash code will be recomputed after each GC.
-    return (((int)(object->obj())) & 0x7fffffff) % INFO_TABLE_SIZE;
+    return (((int)(address_word)(object->obj())) & 0x7fffffff) % INFO_TABLE_SIZE;
   }
 
   static bool write_by_reference(OopDesc *obj) {

@@ -668,7 +668,7 @@ int ConstantPool::name_and_type_ref_index_at(int index JVM_TRAPS) {
   //WAS: jint ref_index = field_or_method_at(index JVM_ZCHECK(ref_index));
   TypeArray::Raw ta = tags();
   jubyte *tag_base = (jubyte*)ta().base_address();
-  jint   *val_base = (jint*) ( (int)(obj()) + base_offset() );
+  jint   *val_base = (jint*) ( (address_word)(obj()) + base_offset() );
   const jushort len = length();
   jint ref_index;
   jushort name_and_type_index;

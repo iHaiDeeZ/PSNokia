@@ -37,7 +37,7 @@
  * suit your platform.
  */
 
-#if defined(LINUX) || defined (CYGWIN)
+#if defined(LINUX) || defined (CYGWIN) || defined(__vita__)
 #define USE_UNISTD_SOCKETS 1
 #else
 #if defined(WIN32) || defined(UNDER_CE)

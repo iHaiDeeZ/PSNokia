@@ -303,16 +303,16 @@ class Thread: public Oop {
 
   // Accessors for last java stack pointer and last java frame pointer
   address last_java_sp() const {
-    return (address)int_field(last_java_sp_offset());
+    return (address)(address_word)int_field(last_java_sp_offset());
   }
   void set_last_java_sp(address value) {
-    int_field_put(last_java_sp_offset(), (jint)value);
+    int_field_put(last_java_sp_offset(), (jint)(address_word)value);
   }
   address last_java_fp() const {
-    return (address)int_field(last_java_fp_offset());
+    return (address)(address_word)int_field(last_java_fp_offset());
   }
   void set_last_java_fp(address value) {
-    int_field_put(last_java_fp_offset(), (jint)value);
+    int_field_put(last_java_fp_offset(), (jint)(address_word)value);
   }
   bool last_java_frame_exists() const {
     return (last_java_sp() != NULL) && (last_java_fp() != NULL);
@@ -411,7 +411,7 @@ class Thread: public Oop {
 
   // Accessors for the stack limit
   address stack_limit()         const {
-    return (address) int_field(stack_limit_offset());
+    return (address)(address_word)int_field(stack_limit_offset());
   }
   void set_stack_limit();
   void set_stack_limit(address value);

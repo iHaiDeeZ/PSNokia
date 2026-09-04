@@ -550,7 +550,7 @@ InterpreterGenerator::generate_quick_native_method_entry(BasicType return_type)
 {
   Segment seg(this, code_segment);
   GUARANTEE(word_size_for(return_type) <= 1, "2-word return not supported");
-  char *type;
+  const char *type;
   char name[64];
 
   switch (return_type) {
@@ -589,6 +589,20 @@ InterpreterGenerator::generate_quick_native_method_entry(BasicType return_type)
 
   mov_imm(tmp1, 1);
   set_jvm_in_quick_native_method(tmp1);
+
+  {
+    comment("Unconditional native-call entry marker (diagnostic)");
+    ldr(tmp1, imm_index(callee, Method::quick_native_code_offset()));
+    ldr_label(tmp2, "_my_last_native_call");
+    str(tmp1, imm_index(tmp2));
+
+    mov(cpool, reg(callee));
+    mov(saved_lr, reg(lr));
+    ldr_label(r0, "my_trace_native_entry");
+    bl("call_on_primordial_stack");
+    mov(lr, reg(saved_lr));
+    mov(callee, reg(cpool));
+  }
 
 #if ENABLE_TTY_TRACE
   if (GenerateDebugAssembly) {

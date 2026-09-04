@@ -137,6 +137,7 @@ endif
 MakeDepsMain_win32    = WinGammaPlatform
 MakeDepsMain_wince    = WinCEGammaPlatform
 MakeDepsMain_linux    = UnixPlatform
+MakeDepsMain_vita     = UnixPlatform
 ifneq ($(MakeDepsMain_$(os_family)_$(compiler)),)
 MakeDepsMain          = $(MakeDepsMain_$(os_family)_$(compiler))
 else
@@ -282,7 +283,9 @@ OBJ_SUFFIX_visCPP    = .obj
 OBJ_SUFFIX_evc       = .obj
 OBJ_SUFFIX_gcc       = .o
 ifeq ($(host_os), cygwin)
+ifneq ($(os_family), vita)
 OBJ_SUFFIX_gcc       = .obj
+endif
 endif
 OBJ_SUFFIX           = $(OBJ_SUFFIX_$(compiler))
 
@@ -747,37 +750,37 @@ endif
 #
 VPATH_PATTERNS = %.cpp %.hpp %.incl %.rc %.h
 vpath
-vpath $(VPATH_PATTERNS) $(GEN_DIR)
-vpath $(VPATH_PATTERNS) $(GEN_DIR)/incls
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/cpu/arm
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/cpu/c
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/cpu/i386
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/cpu/sh
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/cpu/thumb
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/os/$(os_family)
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/os/utilities
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/compiler
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/debugger
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/handles
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/interpreter
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/isolate
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/memory
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/natives
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/ROM
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/reflection
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/runtime
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/verifier
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/utilities
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/memoryprofiler
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/share/float
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/anilib/share
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/anilib/$(os_family)
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(GEN_DIR)))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(GEN_DIR)/incls))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/cpu/arm))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/cpu/c))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/cpu/i386))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/cpu/sh))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/cpu/thumb))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/os/$(os_family)))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/os/utilities))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/compiler))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/debugger))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/handles))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/interpreter))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/isolate))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/memory))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/natives))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/ROM))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/reflection))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/runtime))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/verifier))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/utilities))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/memoryprofiler))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/share/float))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/anilib/share))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/anilib/$(os_family)))
 
 ifdef CPU_VARIANT
 CPP_INCLUDE_DIRS += -I"$(WorkSpace)/src/vm/cpu/$(arch)/$(CPU_VARIANT)"
 CPP_INCLUDE_DIRS += -I"$(WorkSpace)/src/vm/cpu/$(carch)/$(CPU_VARIANT)"
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/cpu/$(arch)/$(CPU_VARIANT)
-vpath $(VPATH_PATTERNS) $(WorkSpace)/src/vm/cpu/$(carch)/$(CPU_VARIANT)
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/cpu/$(arch)/$(CPU_VARIANT)))
+$(foreach vpp,$(VPATH_PATTERNS),$(eval vpath $(vpp) $(WorkSpace)/src/vm/cpu/$(carch)/$(CPU_VARIANT)))
 endif
 
 #----------------------------------------------------------------------
@@ -926,11 +929,13 @@ endif
 # Can't use precompiled headers
 ifneq ($(CompileROMImageSeparately), true)
 ROMImage.obj: $(GENERATED_ROM_FILE)
-	$(A)$(CPP) $(CPP_OPT_FLAGS) $(CPP_FLAGS) -c `$(call fixcygpath, $<)`
+	$(A)$(CPP) $(CPP_OPT_FLAGS) $(CPP_FLAGS) -Wno-narrowing -c `$(call fixcygpath, $<)`
 else
 ROMImage_%.obj: ROMImage_%.cpp
-	$(A)$(CPP) $(CPP_OPT_FLAGS) $(CPP_FLAGS) -c `$(call fixcygpath, $<)`
+	$(A)$(CPP) $(CPP_OPT_FLAGS) $(CPP_FLAGS) -Wno-narrowing -c `$(call fixcygpath, $<)`
 endif
+ROMImage$(OBJ_SUFFIX): $(GENERATED_ROM_FILE)
+	$(A)$(CPP) $(CPP_OPT_FLAGS) $(CPP_FLAGS) $(CPP_USE_PCH) -Wno-narrowing -c `$(call fixcygpath, $<)`
 
 # Can't use precompiled headers
 
@@ -1278,11 +1283,13 @@ OS_$(os_family).obj: $(WorkSpace)/src/vm/os/$(os_family)/OS_$(os_family).cpp
 # Can't use precompiled headers
 ifneq ($(CompileROMImageSeparately), true)
 ROMImage.obj: $(GENERATED_ROM_FILE)
-	$(A)$(CPP) $(CPP_OPT_FLAGS) $(CPP_FLAGS) -c $<
+	$(A)$(CPP) $(CPP_OPT_FLAGS) $(CPP_FLAGS) -Wno-narrowing -c $<
 else
 ROMImage_%.obj: ROMImage_%.cpp
-	$(A)$(CPP) $(CPP_OPT_FLAGS) $(CPP_FLAGS) -c $<
+	$(A)$(CPP) $(CPP_OPT_FLAGS) $(CPP_FLAGS) -Wno-narrowing -c $<
 endif
+ROMImage$(OBJ_SUFFIX): $(GENERATED_ROM_FILE)
+	$(A)$(CPP) $(CPP_OPT_FLAGS) $(CPP_FLAGS) $(CPP_USE_PCH) -Wno-narrowing -c `$(call fixcygpath, $<)`
 
 # Can't use precompiled headers
 NativesTable.obj: $(NATIVES_TABLE)
@@ -1546,7 +1553,9 @@ CPP_DEF_FLAGS_arm	 =
 CPP_DEF_FLAGS_win32      = -DWIN32 -D_WINDOWS
 CPP_DEF_FLAGS_linux      = -DLINUX
 ifeq ($(host_os), cygwin)
+ifneq ($(BUILD_DIR_NAME), vita_arm)
 CPP_DEF_FLAGS            += -DCYGWIN
+endif
 ENABLE_MAP_FILE          = false
 endif
 CPP_DEF_FLAGS           += $(CPP_DEF_FLAGS_$(BUILD)) $(CPP_DEF_FLAGS_$(arch)) \
@@ -1560,13 +1569,13 @@ CPP_DEF_FLAGS           += -DREQUIRES_JVMCONFIG_H=1 \
 CC_FLAGS_EXPORT          = $(CPP_DEF_FLAGS)
 CC_OPT_FLAGS             = $(CPP_OPT_FLAGS)
 CPP_FLAGS_EXPORT         = $(CPP_DEF_FLAGS) $(CPLUSPLUS_FLAGS)
-
 CPP_FLAGS                = $(CPP_FLAGS_EXPORT) $(CPP_INCLUDE_DIRS)
-
-ifneq ($(ENABLE_COMPILATION_WARNINGS), true)
-CPP_FLAGS               += -Werror
+ifeq ($(BUILD_DIR_NAME), vita_arm)
+CPP_FLAGS               += -Wno-error=parentheses -Wno-error=maybe-uninitialized -Wno-error=register -Wno-error=stringop-overflow -Wno-error=write-strings
 endif
-
+ifneq ($(ENABLE_COMPILATION_WARNINGS), true)
+CPP_FLAGS               += 
+endif
 LINK_OPT_FLAGS_debug    = $(DEBUG_SYMBOLS_FLAGS)
 LINK_OPT_FLAGS_release  =
 ifeq ($(PRODUCT_DEBUG), true)
@@ -1616,6 +1625,14 @@ endif
 ifeq ($(PROFILING), true)
 CPP_FLAGS              += -pg
 LINK_FLAGS             += -pg
+endif
+
+ifeq ($(BUILD_DIR_NAME), vita_arm)
+# BSDSocket.cpp takes the real WINSOCK code path for vita_arm (see the
+# -DCYGWIN exclusion above), so it needs Winsock'"'"'s import library.
+ifneq ($(IsTarget), true)
+LINK_FLAGS             += -lws2_32
+endif
 endif
 
 ifeq ($(ENABLE_XSCALE_WMMX_INSTRUCTIONS)-$(IsTarget)-$(arch), true-true-arm)
@@ -1813,6 +1830,9 @@ endif
 ifneq ($(ENABLE_C_INTERPRETER), true)
 LIB_OBJS += Interpreter_$(arch)$(OBJ_SUFFIX)
 endif
+ifeq ($(ENABLE_C_INTERPRETER), true)
+LIB_OBJS += FloatSupport_c$(OBJ_SUFFIX) GlobalDefinitions_c$(OBJ_SUFFIX)
+endif
 
 $(JVM_LIB): $(BUILD_PCH) $(LIB_OBJS)
 	$(A)echo "creating $@ ... "
@@ -1889,6 +1909,9 @@ endif
 # files with the %$(OBJ_SUFFIX): %.cpp rule.
 #
 #----------------------------------------------------------------------
+ROMImage$(OBJ_SUFFIX): $(GENERATED_ROM_FILE)
+	$(A)$(CPP) $(CPP_OPT_FLAGS) $(CPP_FLAGS) $(THUMB_CFLAGS) -Wno-narrowing -c $< -o $@
+
 %$(OBJ_SUFFIX): %.cpp
 	$(BUILD_C_TARGET)
 

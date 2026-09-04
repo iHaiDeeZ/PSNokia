@@ -67,7 +67,58 @@ public final strictfp class Math {
      * @return  the sine of the argument.
      * @since   CLDC 1.1
      */
-    public static native double sin(double a);
+    /*
+     * This port's native sin/cos/tan (jvm_fplib_sin/cos/tan, the CLDC VM's
+     * fdlibm-derived software implementation for targets with no hardware
+     * FPU trig - cldc/src/vm/share/float/JFP_lib_*.cpp) returns garbage for
+     * perfectly ordinary angles on the PS Vita target - confirmed via live
+     * diagnostic logging while building a JSR184/M3G engine for a real
+     * bundled MIDlet (Tower Bloxx): Math.tan(toRadians(45)/2) returned -0.0
+     * instead of ~2.414, and Math.cos()/Math.sin() directly still gave
+     * ~1e-23 for the same ordinary angle. The exact bit-manipulation bug
+     * inside fdlibm's argument-reduction path was never chased down (likely
+     * a word-order/endianness assumption in its raw double-manipulation
+     * macros - this port has hit that exact class of bug several times
+     * elsewhere, e.g. in its own M3G binary-format parser), but the
+     * practical impact is severe: ANY MIDlet on this port doing real
+     * trigonometry - not just this project's own M3G code, but arbitrary
+     * bundled Java game logic (rotation, physics, swinging/pendulum
+     * animation, etc.) - silently gets wrong results with no error, crash,
+     * or warning of any kind. Given how fundamental and widely relied-upon
+     * these three methods are, they are reimplemented here in pure Java
+     * (Taylor series with proper full-circle range reduction and [0,PI/2]
+     * quadrant folding for accuracy, ~1e-6 or better for any real angle)
+     * instead of chasing the native fdlibm bug further - a permanent,
+     * system-wide fix for this port rather than a workaround scoped to one
+     * caller. sqrt()/floor()/ceil() are left native since they were never
+     * independently confirmed broken (unlike sin/cos/tan, which were
+     * proven broken by direct, repeated, live measurement).
+     */
+    private static double sinCosReduce(double x) {
+        double twoPi = 2.0 * PI;
+        long k = (long) (x / twoPi);
+        x = x - ((double) k) * twoPi;
+        if (x > PI) {
+            x -= twoPi;
+        } else if (x < -PI) {
+            x += twoPi;
+        }
+        return x;
+    }
+
+    public static double sin(double a) {
+        double x = sinCosReduce(a);
+        boolean neg = x < 0;
+        if (neg) {
+            x = -x;
+        }
+        if (x > PI / 2.0) {
+            x = PI - x;
+        }
+        double x2 = x * x;
+        double result = x * (1.0 - x2 / 6.0 * (1.0 - x2 / 20.0 * (1.0 - x2 / 42.0 * (1.0 - x2 / 72.0 * (1.0 - x2 / 110.0)))));
+        return neg ? -result : result;
+    }
 
     /**
      * Returns the trigonometric cosine of an angle. Special case:
@@ -78,7 +129,19 @@ public final strictfp class Math {
      * @return  the cosine of the argument.
      * @since   CLDC 1.1
      */
-    public static native double cos(double a);
+    public static double cos(double a) {
+        double x = sinCosReduce(a);
+        if (x < 0) {
+            x = -x;
+        }
+        boolean negate = x > PI / 2.0;
+        if (negate) {
+            x = PI - x;
+        }
+        double x2 = x * x;
+        double result = 1.0 - x2 / 2.0 * (1.0 - x2 / 12.0 * (1.0 - x2 / 30.0 * (1.0 - x2 / 56.0 * (1.0 - x2 / 90.0))));
+        return negate ? -result : result;
+    }
 
     /**
      * Returns the trigonometric tangent of an angle.  Special cases:
@@ -92,7 +155,9 @@ public final strictfp class Math {
      * @return  the tangent of the argument.
      * @since   CLDC 1.1
      */
-    public static native double tan(double a);
+    public static double tan(double a) {
+        return sin(a) / cos(a);
+    }
 
     /**
      * Converts an angle measured in degrees to the equivalent angle

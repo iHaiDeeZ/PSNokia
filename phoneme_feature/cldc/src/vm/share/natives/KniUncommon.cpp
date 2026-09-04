@@ -52,31 +52,31 @@ KNIEXPORT jboolean KNI_GetBooleanField(jobject objectHandle, jfieldID fieldID)
 {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_GetBooleanField");
-  return *object->bool_field_addr((int)fieldID);
+  return *object->bool_field_addr((int)(address_word)fieldID);
 }
 
 KNIEXPORT jbyte KNI_GetByteField(jobject objectHandle, jfieldID fieldID) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_GetByteField");
-  return *object->byte_field_addr((int)fieldID);
+  return *object->byte_field_addr((int)(address_word)fieldID);
 }
 
 KNIEXPORT jchar KNI_GetCharField(jobject objectHandle, jfieldID fieldID) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_GetCharField");
-  return *object->char_field_addr((int)fieldID);
+  return *object->char_field_addr((int)(address_word)fieldID);
 }
 
 KNIEXPORT jshort KNI_GetShortField(jobject objectHandle, jfieldID fieldID) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_GetShortField");
-  return *object->short_field_addr((int)fieldID);
+  return *object->short_field_addr((int)(address_word)fieldID);
 }
 
 KNIEXPORT jlong KNI_GetLongField(jobject objectHandle, jfieldID fieldID) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_GetLongField");
-  return *object->long_field_addr((int)fieldID);
+  return *object->long_field_addr((int)(address_word)fieldID);
 }
 
 #if ENABLE_FLOAT
@@ -84,13 +84,13 @@ KNIEXPORT jlong KNI_GetLongField(jobject objectHandle, jfieldID fieldID) {
 KNIEXPORT jfloat KNI_GetFloatField(jobject objectHandle, jfieldID fieldID) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_GetFloatField");
-  return *object->float_field_addr((int)fieldID);
+  return *object->float_field_addr((int)(address_word)fieldID);
 }
 
 KNIEXPORT jdouble KNI_GetDoubleField(jobject objectHandle, jfieldID fieldID) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_GetDoubleField");
-  return *object->double_field_addr((int)fieldID);
+  return *object->double_field_addr((int)(address_word)fieldID);
 }
 
 #endif // ENABLE_FLOAT
@@ -99,42 +99,42 @@ KNIEXPORT void
 KNI_SetBooleanField(jobject objectHandle, jfieldID fieldID, jboolean value) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_SetBooleanField");
-  *object->bool_field_addr((int)fieldID) = value;
+  *object->bool_field_addr((int)(address_word)fieldID) = value;
 }
 
 KNIEXPORT void
 KNI_SetByteField(jobject objectHandle, jfieldID fieldID, jbyte value) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_SetByteField");
-  *object->byte_field_addr((int)fieldID) = value;
+  *object->byte_field_addr((int)(address_word)fieldID) = value;
 }
 
 KNIEXPORT void
 KNI_SetCharField(jobject objectHandle, jfieldID fieldID, jchar value) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_SetCharField");
-  *object->char_field_addr((int)fieldID) = value;
+  *object->char_field_addr((int)(address_word)fieldID) = value;
 }
 
 KNIEXPORT void
 KNI_SetShortField(jobject objectHandle, jfieldID fieldID, jshort value) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_SetShortField");
-  *object->short_field_addr((int)fieldID) = value;
+  *object->short_field_addr((int)(address_word)fieldID) = value;
 }
 
 KNIEXPORT void
 KNI_SetIntField(jobject objectHandle, jfieldID fieldID, jint value) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_SetIntField");
-  *object->int_field_addr((int)fieldID) = value;
+  *object->int_field_addr((int)(address_word)fieldID) = value;
 }
 
 KNIEXPORT void
 KNI_SetLongField(jobject objectHandle, jfieldID fieldID, jlong value) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_SetLongField");
-  *object->long_field_addr((int)fieldID) = value;
+  *object->long_field_addr((int)(address_word)fieldID) = value;
 }
 
 #if ENABLE_FLOAT
@@ -143,14 +143,14 @@ KNIEXPORT void
 KNI_SetFloatField(jobject objectHandle, jfieldID fieldID, jfloat value) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_SetFloatField");
-  *object->float_field_addr((int)fieldID) = value;
+  *object->float_field_addr((int)(address_word)fieldID) = value;
 }
 
 KNIEXPORT void
 KNI_SetDoubleField(jobject objectHandle, jfieldID fieldID, jdouble value) {
   OopDesc* object = kni_read_handle(objectHandle);
   GUARANTEE(object != 0, "null argument to KNI_SetDoubleField");
-  *object->double_field_addr((int)fieldID) = value;
+  *object->double_field_addr((int)(address_word)fieldID) = value;
 }
 
 #endif // ENABLE_FLOAT
@@ -166,33 +166,33 @@ KNIEXPORT jfieldID KNI_GetStaticFieldID(jclass classHandle, const char* name,
 KNIEXPORT jboolean
 KNI_GetStaticBooleanField(jclass classHandle, jfieldID fieldID) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  return (jboolean) (*static_vars->int_field_addr((int)fieldID));
+  return (jboolean) (*static_vars->int_field_addr((int)(address_word)fieldID));
 }
 
 KNIEXPORT jbyte KNI_GetStaticByteField(jclass classHandle, jfieldID fieldID) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  return (jbyte) (*static_vars->int_field_addr((int)fieldID));
+  return (jbyte) (*static_vars->int_field_addr((int)(address_word)fieldID));
 }
 
 KNIEXPORT jchar KNI_GetStaticCharField(jclass classHandle, jfieldID fieldID) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  return (jchar) (*static_vars->uint_field_addr((int)fieldID));
+  return (jchar) (*static_vars->uint_field_addr((int)(address_word)fieldID));
 }
 
 KNIEXPORT jshort KNI_GetStaticShortField(jclass classHandle, jfieldID fieldID)
 {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  return (jshort) (*static_vars->int_field_addr((int)fieldID));
+  return (jshort) (*static_vars->int_field_addr((int)(address_word)fieldID));
 }
 
 KNIEXPORT jint KNI_GetStaticIntField(jclass classHandle, jfieldID fieldID) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  return *static_vars->int_field_addr((int)fieldID);
+  return *static_vars->int_field_addr((int)(address_word)fieldID);
 }
 
 KNIEXPORT jlong KNI_GetStaticLongField(jclass classHandle, jfieldID fieldID) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  return *static_vars->long_field_addr((int)fieldID);
+  return *static_vars->long_field_addr((int)(address_word)fieldID);
 }
 
 #if ENABLE_FLOAT
@@ -200,13 +200,13 @@ KNIEXPORT jlong KNI_GetStaticLongField(jclass classHandle, jfieldID fieldID) {
 KNIEXPORT jfloat KNI_GetStaticFloatField(jclass classHandle, jfieldID fieldID)
 {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  return *static_vars->float_field_addr((int)fieldID);
+  return *static_vars->float_field_addr((int)(address_word)fieldID);
 }
 
 KNIEXPORT jdouble
 KNI_GetStaticDoubleField(jclass classHandle, jfieldID fieldID) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  return *static_vars->double_field_addr((int)fieldID);
+  return *static_vars->double_field_addr((int)(address_word)fieldID);
 }
 
 #endif // ENABLE_FLOAT
@@ -218,37 +218,37 @@ KNIEXPORT void
 KNI_SetStaticBooleanField(jclass classHandle, jfieldID fieldID, jboolean value)
 {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  *static_vars->int_field_addr((int)fieldID) = (jint)value;
+  *static_vars->int_field_addr((int)(address_word)fieldID) = (jint)value;
 }
 
 KNIEXPORT void
 KNI_SetStaticByteField(jclass classHandle, jfieldID fieldID, jbyte value) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  *static_vars->int_field_addr((int)fieldID) = (jint)value;
+  *static_vars->int_field_addr((int)(address_word)fieldID) = (jint)value;
 }
 
 KNIEXPORT void
 KNI_SetStaticCharField(jclass classHandle, jfieldID fieldID, jchar value) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  *static_vars->uint_field_addr((int)fieldID) = (juint)value;
+  *static_vars->uint_field_addr((int)(address_word)fieldID) = (juint)value;
 }
 
 KNIEXPORT void
 KNI_SetStaticShortField(jclass classHandle, jfieldID fieldID, jshort value) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  *static_vars->int_field_addr((int)fieldID) = (jint)value;
+  *static_vars->int_field_addr((int)(address_word)fieldID) = (jint)value;
 }
 
 KNIEXPORT void
 KNI_SetStaticIntField(jclass classHandle, jfieldID fieldID, jint value) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  *static_vars->int_field_addr((int)fieldID) = value;
+  *static_vars->int_field_addr((int)(address_word)fieldID) = value;
 }
 
 KNIEXPORT void
 KNI_SetStaticLongField(jclass classHandle, jfieldID fieldID, jlong value) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  *static_vars->long_field_addr((int)fieldID) = value;
+  *static_vars->long_field_addr((int)(address_word)fieldID) = value;
 }
 
 #if ENABLE_FLOAT
@@ -256,13 +256,13 @@ KNI_SetStaticLongField(jclass classHandle, jfieldID fieldID, jlong value) {
 KNIEXPORT void
 KNI_SetStaticFloatField(jclass classHandle, jfieldID fieldID, jfloat value) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  *static_vars->float_field_addr((int)fieldID) = value;
+  *static_vars->float_field_addr((int)(address_word)fieldID) = value;
 }
 
 KNIEXPORT void
 KNI_SetStaticDoubleField(jclass classHandle, jfieldID fieldID, jdouble value) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  *static_vars->double_field_addr((int)fieldID) = value;
+  *static_vars->double_field_addr((int)(address_word)fieldID) = value;
 }
 
 #endif // ENABLE_FLOAT
@@ -270,12 +270,12 @@ KNI_SetStaticDoubleField(jclass classHandle, jfieldID fieldID, jdouble value) {
 KNIEXPORT void KNI_GetStaticObjectField(jclass classHandle, jfieldID fieldID,
                                         jobject toHandle) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  kni_set_handle(toHandle, *static_vars->obj_field_addr((int)fieldID));
+  kni_set_handle(toHandle, *static_vars->obj_field_addr((int)(address_word)fieldID));
 }
 
 KNIEXPORT void KNI_SetStaticObjectField(jclass classHandle, jfieldID fieldID,
                                         jobject fromHandle) {
   OopDesc* static_vars = (OopDesc*)kni_get_java_class_statics(classHandle);
-  oop_write_barrier(static_vars->obj_field_addr((int)fieldID),
+  oop_write_barrier(static_vars->obj_field_addr((int)(address_word)fieldID),
                    kni_read_handle(fromHandle));
 }

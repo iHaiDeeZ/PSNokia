@@ -59,7 +59,11 @@ else
               ifeq ($(PLATFORM), sdl)
                   include $(NATIVE_THREAD_DIR)/sdl/lib.gmk
               else
-                  include $(NATIVE_THREAD_DIR)/pthread/lib.gmk
+                  ifeq ($(PLATFORM), vita)
+                      include $(NATIVE_THREAD_DIR)/vita/lib.gmk
+                  else
+                      include $(NATIVE_THREAD_DIR)/pthread/lib.gmk
+                  endif
               endif
           endif
       endif

@@ -332,7 +332,7 @@ ResolveMethods(ClassClass *cb)
     return JAVAPKG "OutOfMemoryError";
     }
     cbMethodTableMem(cb) = ptr;
-    new_table = (struct methodtable *)((((long)ptr) + FLAG_MASK) & LENGTH_MASK);
+    new_table = (struct methodtable *)((((unsigned long long)ptr) + FLAG_MASK) & LENGTH_MASK);
     new_table->classdescriptor = cb;
     memset((char *)new_table->methods, 0, mslot * sizeof(struct methodblock *));
     if (super_methods) 

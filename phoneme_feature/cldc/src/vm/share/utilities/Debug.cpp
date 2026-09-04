@@ -52,6 +52,16 @@
 # include "incls/_precompiled.incl"
 # include "incls/_Debug.cpp.incl"
 
+/* Diagnostic: enable the pss() (print-all-thread-stacks) hook even in
+ * PRODUCT builds. MIDP always links against the PRODUCT CLDC library
+ * (libcldc_vm.a) regardless of MIDP's own debug/release setting, so
+ * without this, pss() - triggered by System.getProperty("__debug.only.pss"),
+ * see Natives.cpp - is silently compiled out and the DEBUG_TRACE1 key
+ * (see midp_msgQueue_md.c on vita) does nothing. */
+#ifndef ENABLE_PRODUCT_PRINT_STACK
+#define ENABLE_PRODUCT_PRINT_STACK 1
+#endif
+
 #ifndef AZZERT
 #  ifdef _DEBUG
    // NOTE: don't turn the lines below into a comment -- if you're getting
@@ -275,7 +285,7 @@ void report_unimplemented() {
 #endif
 
 void find(int x) {
-  OopDesc** p = (OopDesc**) x;
+  OopDesc** p = (OopDesc**)(address_word) x;
   if (ObjectHeap::contains_live(p)) {
     Oop o = ObjectHeap::slow_object_start(p);
     tty->print_cr("0x%p in object 0x%p", x, o.obj());
@@ -297,7 +307,7 @@ void ppv(int x) {
 void pp(int x) {
   DebugHandleMarker debug_handle_marker;
 
-  OopDesc** p = (OopDesc**) x;
+  OopDesc** p = (OopDesc**)(address_word) x;
   Oop::Raw o;
 
   Oop::disable_on_stack_check();
@@ -320,7 +330,7 @@ void pp(int x) {
   }
 
   if (!o.is_null()) {
-    if (o.obj() == (OopDesc*) x) {
+    if (o.obj() == (OopDesc*)(address_word) x) {
 #if ENABLE_ISOLATES
       // We must switch to the context of the task
       int task_id =  ObjectHeap::owner_task_id(o.obj());
@@ -343,7 +353,7 @@ void pp(int x) {
 #endif
     } else {
       tty->print_cr("0x%x points inside object 0x%lx + %ld",
-                    x, (long)o.obj(), x - (long)o.obj());
+                    x, (long)(address_word)o.obj(), x - (long)(address_word)o.obj());
     }
   } else {
     tty->print_cr("0x%x not in object space", x);
@@ -365,14 +375,14 @@ void pps(int x) {
 }
 
 void ppx(int x) {
-  Oop o = (OopDesc*)x;
+  Oop o = (OopDesc*)(address_word)x;
   o.print();
 }
 
 void ppxv(int x) {
   bool oldVerbose = Verbose;
   Verbose = true;
-  Oop o = (OopDesc*)x;
+  Oop o = (OopDesc*)(address_word)x;
   o.print();
   Verbose = oldVerbose;
 }
@@ -395,8 +405,8 @@ void poh() {
 }
 
 void ref(int x) {
-  ObjectHeap::check_reach_root((OopDesc*)x, NULL, -1);
-  ObjectHeap::find((OopDesc*)x, false);
+  ObjectHeap::check_reach_root((OopDesc*)(address_word)x, NULL, -1);
+  ObjectHeap::find((OopDesc*)(address_word)x, false);
 }
 #endif
 
@@ -425,7 +435,15 @@ void new_pss() {
   tty->print_cr("[Finished dumping all threads]");
 }
 
-extern "C" void pss() {
+// Renamed from pss() and disabled: this used to silently shadow the
+// MarkerStream-based pss() below whenever !defined(PRODUCT) - which,
+// contrary to this file's own old assumption (see top of file), is
+// exactly the CLDC variant MIDP actually links against when built with
+// USE_DEBUG=true (the debug variant, libcldc_vm_g.a), i.e. this WAS the
+// real active pss() all along, and its tty-based output never reaching
+// any observable channel was the actual original mystery. Kept here
+// disabled rather than deleted in case tty ever needs revisiting.
+void old_unused_pss() {
   DebugHandleMarker debug_handle_marker;
 
   Thread* head = Universe::global_threadlist();
@@ -688,7 +706,68 @@ void psgc() {
 
 #endif
 
-#if ENABLE_PRODUCT_PRINT_STACK && defined(PRODUCT)
+// Widened to match Debug.hpp's declaration guard exactly (ENABLE_PRODUCT_PRINT_STACK
+// || !defined(PRODUCT)) instead of requiring PRODUCT - the actual deployed
+// binary (MIDP built with USE_DEBUG=true) links CLDC's debug variant, where
+// PRODUCT is not defined, so a PRODUCT-only guard here never compiled in.
+#if ENABLE_PRODUCT_PRINT_STACK || !defined(PRODUCT)
+
+// This file is also compiled into the HOST-side loopgen/romgen tools
+// (mingw32), which don't link Main_vita.cpp's real write_marker (Vita-only,
+// uses sceIoOpen) - so provide the same weak self-contained fallback
+// pattern already used in Interpreter_c.cpp for exactly this duality:
+// real implementation wins (strong symbol) when actually building for
+// the Vita target, no-op otherwise.
+extern "C" {
+#if __has_include(<psp2/io/fcntl.h>)
+#include <psp2/io/fcntl.h>
+  __attribute__((weak)) void write_marker(const char* text, int len) {
+    int fd = sceIoOpen("ux0:data/renderlog.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
+    if (fd >= 0) {
+      sceIoWrite(fd, text, len);
+      sceIoClose(fd);
+    }
+  }
+#else
+  __attribute__((weak)) void write_marker(const char* text, int len) { (void)text; (void)len; }
+#endif
+}
+
+// pss()'s output through the normal `tty` Stream was confirmed to never
+// reach any observable channel on the Vita port (not a crash - it just
+// silently produces nothing). MarkerStream bypasses tty/DefaultStream
+// entirely and writes straight through write_marker(), the one output
+// path already proven reliable elsewhere in this port (renderlog.txt).
+class MarkerStream : public Stream {
+ public:
+  MarkerStream() : Stream() {}
+  virtual void print_raw(const char* s) {
+    int len = 0;
+    while (s[len] != 0) len++;
+    write_marker(s, len);
+  }
+  // Stream's base class (GlobalObj) already declares a member
+  // operator new(size_t), which hides the global placement-new operator
+  // from lookup entirely - so MarkerStream needs its own placement
+  // overload to support constructing it into a static buffer below.
+  void* operator new(size_t, void* p) throw() { return p; }
+};
+
+// Lazily placement-constructed into a static POD buffer on first actual
+// use (only ever reached from pss(), long after boot) - mirrors
+// DefaultStream's own placement-new-into-static-buffer trick in OS.cpp,
+// avoiding both early static C++ construction and any dependency on
+// compiler-generated function-local-static guard variables on this
+// embedded target.
+static char marker_stream_storage[sizeof(MarkerStream)];
+static MarkerStream* marker_stream_ptr = NULL;
+static MarkerStream& marker_stream_instance() {
+  if (marker_stream_ptr == NULL) {
+    marker_stream_ptr = new (marker_stream_storage) MarkerStream();
+  }
+  return *marker_stream_ptr;
+}
+#define marker_stream marker_stream_instance()
 
 static void product_trace_stack_from(Frame* frame, Stream* st) {
   st->print_cr("Stack Trace [");
@@ -726,33 +805,45 @@ static void product_trace_stack_from(Frame* frame, Stream* st) {
 
 static void product_print_trace_do(Thread* thread, void do_oop(OopDesc**)) {
   (void)do_oop;
-  tty->print("[Thread: 0x%x", thread->obj());
+  marker_stream.print("[Thread: 0x%x", thread->obj());
   if (thread->obj() == Thread::current()->obj()) {
-    tty->print_cr(" *** CURRENT ***]");
+    marker_stream.print_cr(" *** CURRENT ***]");
     if (_jvm_in_quick_native_method) {
-      tty->print_cr("Cannot list current thread inside quick native function");
+      marker_stream.print_cr("Cannot list current thread inside quick native function");
       return;
     }
   } else {
-    tty->print_cr("]");
+    marker_stream.print_cr("]");
   }
 
   Frame fr(thread);
   if (fr.fp() == 0x0) {
-    tty->print_cr("not started yet");
+    marker_stream.print_cr("not started yet");
   } else {
-    product_trace_stack_from(&fr, tty);
+    product_trace_stack_from(&fr, &marker_stream);
   }
 }
 
 extern "C" void pss() {
-  tty->print_cr("[Dumping all threads]");
-  tty->print_cr("Current thread = 0x%x", Thread::current()->obj());
-  tty->print_cr("");
+  write_marker("PSS_RAW_ENTRY\n", 14);
 
-  Scheduler::threads_do_list(product_print_trace_do, NULL, 
+  MarkerStream& ms = marker_stream;
+  write_marker("PSS_GOT_STREAM_REF\n", 20);
+
+  ms.print_raw("PSS_DIRECT_PRINT_RAW\n");
+  write_marker("PSS_AFTER_DIRECT_PRINT_RAW\n", 28);
+
+  ms.print_cr("PSS_VIA_PRINT_CR");
+  write_marker("PSS_AFTER_PRINT_CR\n", 20);
+
+  marker_stream.print_cr("[Dumping all threads]");
+  marker_stream.print_cr("Current thread = 0x%x", Thread::current()->obj());
+  marker_stream.print_cr("");
+
+  Scheduler::threads_do_list(product_print_trace_do, NULL,
                              Universe::global_threadlist()->obj());
 
-  tty->print_cr("[Finished dumping all threads]");
+  marker_stream.print_cr("[Finished dumping all threads]");
+  write_marker("PSS_RAW_EXIT\n", 13);
 }
 #endif

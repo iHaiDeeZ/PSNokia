@@ -27,7 +27,7 @@
 #include <errno.h>
 #include <string.h>
 
-#ifdef UNIX
+#if defined(UNIX) && !defined(__MINGW32__)
 #include <langinfo.h>
 #include <iconv.h>
 #include <locale.h>

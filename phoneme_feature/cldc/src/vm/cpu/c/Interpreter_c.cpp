@@ -28,8 +28,24 @@
 #include "incls/_Interpreter_c.cpp.incl"
 #include <stdarg.h>
 #include <setjmp.h>
+#include <stdio.h>
+#if __has_include(<psp2/io/fcntl.h>)
+#include <psp2/io/fcntl.h>
+#define HAVE_VITA_SCEIO 1
+#endif
 
 extern "C" {
+#if HAVE_VITA_SCEIO
+  __attribute__((weak)) void write_marker(const char* text, int len) {
+    int fd = sceIoOpen("ux0:data/renderlog.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
+    if (fd >= 0) {
+      sceIoWrite(fd, text, len);
+      sceIoClose(fd);
+    }
+  }
+#else
+  __attribute__((weak)) void write_marker(const char* text, int len) { (void)text; (void)len; }
+#endif
 
   // external routines used when quickening
   extern Bytecodes::Code quicken(Thread* THREAD);
@@ -139,7 +155,7 @@ extern "C" {
   ( ((jint)(GET_BYTE(x))    << 24)  | ((jint)(GET_BYTE(x+1)) << 16) | \
     ((jint)(GET_BYTE(x+2))  <<  8)  | ((jint)(GET_BYTE(x+3))) )
 #define ADVANCE(x)           (g_jpc += (x))
-#define ADVANCE_FOR_RETURN() ADVANCE((int)(GET_FRAME(return_advance)))
+#define ADVANCE_FOR_RETURN() ADVANCE((int)(address_word)(GET_FRAME(return_advance)))
 
 #define NULL_CHECK(obj) \
     if (obj == NULL) {                           \
@@ -455,11 +471,11 @@ enum {
   }
 
   static inline address callee_method() {
-    return (address)GET_THREAD_INT(obj_value);
+    return (address)(address_word)GET_THREAD_INT(obj_value);
   }
 
   static inline void set_callee_method(address method) {
-    SET_THREAD_INT(obj_value, (int)method);
+    SET_THREAD_INT(obj_value, (int)(address_word)method);
     write_barrier((address)_current_thread + Thread::obj_value_offset());
   }
 
@@ -483,7 +499,7 @@ enum {
     _protected_page[INTERPRETER_TIMER_TICK_SLOT] = (int)g_jpc;
 #else
     if (_rt_timer_ticks > 0) {
-      interpreter_call_vm_1((address)&timer_tick, T_VOID, (jint)NATIVE_ARG);
+      interpreter_call_vm_1((address)&timer_tick, T_VOID, (jint)(address_word)NATIVE_ARG);
     }
 #endif
   }
@@ -510,7 +526,7 @@ enum {
     if (invoker_size) {
       SET_FRAME(locals_pointer, g_jlocals);
       SET_FRAME(bcp_store, g_jpc);
-      SET_FRAME(return_advance, (address)invoker_size);
+      SET_FRAME(return_advance, (address)(address_word)invoker_size);
     }
 
     address exec_entry =
@@ -796,10 +812,12 @@ enum {
 
     // Store the object in the stack lock and lock it
     *(address*)(lock + StackLock::size()) = object;
+    { char __tbLW[128]; int __tlLW = snprintf(__tbLW, sizeof(__tbLW), "LOCKWRITE lock=%p addr=%p wrote=%p readback=%p | ", (void*)lock, (void*)(lock+StackLock::size()), (void*)object, (void*)(*(address*)(lock+StackLock::size()))); if (__tlLW>0) write_marker(__tbLW, __tlLW); }
 
     // Get the near object
     address near_obj = *(address*)object;
     address tmp1;
+    { char __tb[160]; int __tl = snprintf(__tb, sizeof(__tb), "LOCKOBJ obj=%p near=%p interned=%p bit=%d | ", (void*)object, (void*)near_obj, (void*)_interned_string_near_addr, (int)((jint)(address_word)GET_NEAR(near_obj, raw_value) & 0x1)); if (__tl>0) write_marker(__tb, __tl); }
 
     // see if it's an interned string
     if  (near_obj == (address)_interned_string_near_addr) {
@@ -808,7 +826,7 @@ enum {
     }
 
     // object already locked?
-    if ((jint)GET_NEAR(near_obj, raw_value) & 0x1) {
+    if ((jint)(address_word)GET_NEAR(near_obj, raw_value) & 0x1) {
       // maybe slow case
 
       // thread of object's lock
@@ -849,13 +867,14 @@ enum {
     // set lock bit
     jint raw_value =  *(jint*)(near_obj+8) | 0x1;
     SET_STACKLOCK_OFFSET(lock, copied_near, 8,
-                         (address)raw_value);
+                         (address)(address_word)raw_value);
     return false;
   }
 
   static bool unlock_object(address object, address lock) {
     // Get near object
     address tmp1 =  *(address*)object;
+    { char __tb[128]; int __tl = snprintf(__tb, sizeof(__tb), "UNLOCKOBJ1 tmp1=%p interned=%p | ", (void*)tmp1, (void*)_interned_string_near_addr); if (__tl>0) write_marker(__tb, __tl); }
     if (tmp1 == (address)_interned_string_near_addr) {
        return shared_call_vm_internal((address)&unlock_special_stack_lock, NULL,
                                       T_VOID, 1, object);
@@ -863,6 +882,7 @@ enum {
 
     // Get the real java near pointer from the stack lock
     tmp1 = GET_STACKLOCK(lock, real_java_near);
+    { char __tb[128]; int __tl = snprintf(__tb, sizeof(__tb), "UNLOCKOBJ2 realjavanear=%p | ", (void*)tmp1); if (__tl>0) write_marker(__tb, __tl); }
 
     // Zero out the object field so that lock is free
     *(address*)(lock + StackLock::size()) = NULL;
@@ -891,7 +911,7 @@ enum {
                                         JavaNear::raw_value_offset());
 
     // Check for waiters
-    if (((jint)tmp0 & 2) == 0) {
+    if (((jint)(address_word)tmp0 & 2) == 0) {
       return false;
     }
 
@@ -901,28 +921,34 @@ enum {
   }
 
   static bool lock_synchronized_method_internal(address object) {
-    // Allocate space for the monitor
     g_jsp -=  StackLock::size() + BytesPerWord;
     SET_FRAME(stack_bottom_pointer, g_jsp);
-    address lock = g_jsp; // pointer to the stacklock
+    address lock = g_jsp;
+    {
+      char __tbuf[128];
+      int __tlen = snprintf(__tbuf, sizeof(__tbuf), "LOCKSYNC jfp=%p jsp=%p lock=%p obj=%p | ", (void*)g_jfp, (void*)g_jsp, (void*)lock, (void*)object);
+      if (__tlen > 0) write_marker(__tbuf, __tlen);
+    }
     return lock_object(object, lock);
   }
-
   static bool unlock_synchronized_method_internal() {
-    // get address of last lock
     address object = GET_FRAME_OFFSET(first_stack_lock, StackLock::size());
     address lock = g_jfp + JavaFrame::first_stack_lock_offset();
-
-    // IMPL_NOTE: shouldn't it be lock?
-    if (!object) {
-      // lock better be locked
-      return interpreter_call_vm((address)&illegal_monitor_state_exception,
-                                 T_VOID);
+    {
+      char __tbuf[128];
+      int __tlen = snprintf(__tbuf, sizeof(__tbuf), "UNLOCKSYNC jfp=%p lock=%p obj=%p | ", (void*)g_jfp, (void*)lock, (void*)object);
+      if (__tlen > 0) write_marker(__tbuf, __tlen);
     }
-
-    return unlock_object(object, lock);
+    if (!object) {
+      return interpreter_call_vm((address)&illegal_monitor_state_exception, T_VOID);
+    }
+    bool __unlock_r = unlock_object(object, lock);
+    if (!__unlock_r) {
+      SET_FRAME(stack_bottom_pointer, g_jfp + JavaFrame::pre_first_stack_lock_offset());
+      { char __tb[96]; int __tl = snprintf(__tb, sizeof(__tb), "UNLOCKSYNC_RESTORE sbp=%p | ", (void*)(g_jfp + JavaFrame::pre_first_stack_lock_offset())); if (__tl>0) write_marker(__tb, __tl); }
+    }
+    return __unlock_r;
   }
-
   static bool unlock_activation() {
     // unlock_activation
     address lock = GET_FRAME(stack_bottom_pointer);
@@ -936,7 +962,9 @@ enum {
     jushort flagz = get_access_flags(GET_FRAME(method));
 
     if (flagz & JVM_ACC_SYNCHRONIZED) {
-      if (unlock_synchronized_method_internal()) {
+      bool __r = unlock_synchronized_method_internal();
+      { char __tb[96]; int __tl = snprintf(__tb, sizeof(__tb), "SYNCRET r=%d | ", (int)__r); if (__tl>0) write_marker(__tb, __tl); }
+      if (__r) {
         return true;
       }
 
@@ -947,19 +975,28 @@ enum {
     // Check that all stack locks have been unlocked
     // lock is pointing at first word of stack lock
 
-    address tmp1 = g_jfp + JavaFrame::stack_bottom_pointer_offset();
-
+    address tmp1 = g_jfp + JavaFrame::pre_first_stack_lock_offset();
+    { char __tb[96]; int __tl = snprintf(__tb, sizeof(__tb), "TMP1VAL tmp1=%p | ", (void*)tmp1); if (__tl>0) write_marker(__tb, __tl); }
     // We know that there is at least one stack lock, or we wouldn't be here in
     // the first place!
-    do {
+    { int __lc_iters = 0;
+    while (lock != tmp1) {
       GUARANTEE(lock <= tmp1, "sanity");
+      if (__lc_iters < 40) {
+        char __tb[128]; int __tl = snprintf(__tb, sizeof(__tb), "LOOPCHK lock=%p val=%p | ", (void*)lock, (void*)(*(address*)(lock + StackLock::size()))); if (__tl>0) write_marker(__tb, __tl);
+      }
+      __lc_iters++;
+      if (__lc_iters > 40) {
+        char __tb4[64]; int __tl4 = snprintf(__tb4, sizeof(__tb4), "LOOPCHK_ABORT | "); if (__tl4>0) write_marker(__tb4, __tl4);
+        break;
+      }
       if (*(address*)(lock + StackLock::size()) != NULL) {
         return interpreter_call_vm((address)&illegal_monitor_state_exception,
                                    T_VOID);
       }
       lock += StackLock::size() + BytesPerWord;
-    } while (lock != tmp1);
-
+    }
+    }
     return false;
   }
 
@@ -989,11 +1026,28 @@ enum {
     GUARANTEE(JavaNear::raw_value_offset() == 2 * BytesPerWord, "sanity");
 
     address tmp0 = GET_FRAME(stack_bottom_pointer);
-    address tmp1 = g_jfp + JavaFrame::stack_bottom_pointer_offset();
+    address tmp1 = g_jfp + JavaFrame::pre_first_stack_lock_offset();
     address lock = NULL;
+    {
+      char __tb[200];
+      int __tl = snprintf(__tb, sizeof(__tb), "MENT_ENTRY jfp=%p tmp0=%p tmp1=%p empty=%p obj=%p | ", (void*)g_jfp, (void*)tmp0, (void*)tmp1, (void*)(g_jfp + JavaFrame::empty_stack_offset()), (void*)object);
+      if (__tl>0) write_marker(__tb, __tl);
+    }
 
+    if (tmp0 != g_jfp + JavaFrame::empty_stack_offset()) {
     // Find free slot in monitor block
+    int __ment_iters = 0;
     while (tmp0 != tmp1) {
+      if (__ment_iters < 40) {
+        char __tb2[128];
+        int __tl2 = snprintf(__tb2, sizeof(__tb2), "MENT_LOOP tmp0=%p val=%p | ", (void*)tmp0, (void*)(*(address*)(tmp0 + StackLock::size())));
+        if (__tl2>0) write_marker(__tb2, __tl2);
+      }
+      __ment_iters++;
+      if (__ment_iters > 40) {
+        { char __tb3[64]; int __tl3 = snprintf(__tb3, sizeof(__tb3), "MENT_ABORT | "); if (__tl3>0) write_marker(__tb3, __tl3); }
+        break;
+      }
       // Start the loop by checking if the current stack lock is empty
       address tmp2 = *(address*)(tmp0 + StackLock::size());
 
@@ -1008,6 +1062,7 @@ enum {
       }
 
       tmp0 += BytesPerWord + StackLock::size();
+    }
     }
 
     if (!lock) {
@@ -1028,11 +1083,27 @@ enum {
     // address of lock just beyond the first
     address tmp1 = g_jfp + JavaFrame::pre_first_stack_lock_offset();
     //JavaFrame::stack_bottom_pointer_offset();
+    {
+      char __tb[160];
+      int __tl = snprintf(__tb, sizeof(__tb), "MEI_ENTRY jfp=%p lock=%p tmp1=%p obj=%p | ", (void*)g_jfp, (void*)lock, (void*)tmp1, (void*)object);
+      if (__tl>0) write_marker(__tb, __tl);
+    }
 
     // loop to find correct monitor
     bool found = false;
+    int __mei_iters = 0;
     // at the end of the monitor block?
     while (lock != tmp1) {
+      if (__mei_iters < 40) {
+        char __tb2[128];
+        int __tl2 = snprintf(__tb2, sizeof(__tb2), "MEI_LOOP lock=%p val=%p | ", (void*)lock, (void*)(*(address*)(lock + StackLock::size())));
+        if (__tl2>0) write_marker(__tb2, __tl2);
+      }
+      __mei_iters++;
+      if (__mei_iters > 40) {
+        { char __tb3[64]; int __tl3 = snprintf(__tb3, sizeof(__tb3), "MEI_ABORT | "); if (__tl3>0) write_marker(__tb3, __tl3); }
+        break;
+      }
       // Is monitor pointed at by lock the right one?
 
       // get object field
@@ -1063,6 +1134,11 @@ enum {
                                   jint &r1, jint &r2)
   {
     jint arg1, arg2;
+    {
+      char __tb[80];
+      int __tl = snprintf(__tb, sizeof(__tb), "NATIVE_CALL entry=%p\n", (void*)entry_point);
+      if (__tl > 0) write_marker(__tb, __tl);
+    }
     switch (return_value_type) {
     // IMPL_NOTE: consider about other int types, like short, byte
     case T_INT:
@@ -1172,16 +1248,16 @@ enum {
         oop_func_t f = (oop_func_t)entry_point;
         switch (num_args) {
         case 0:
-          r1 = (jint)f(NATIVE_ARG);
+          r1 = (jint)(address_word)f(NATIVE_ARG);
           break;
         case 1:
           arg1 = va_arg(ap, jint);
-          r1 = (jint)f(NATIVE_ARG, arg1);
+          r1 = (jint)(address_word)f(NATIVE_ARG, arg1);
           break;
         case 2:
           arg1 = va_arg(ap, jint);
           arg2 = va_arg(ap, jint);
-          r1 = (jint)f(NATIVE_ARG, arg1, arg2);
+          r1 = (jint)(address_word)f(NATIVE_ARG, arg1, arg2);
           break;
         default:
           SHOULD_NOT_REACH_HERE();
@@ -1213,25 +1289,30 @@ enum {
     default:
       SHOULD_NOT_REACH_HERE();
     }
+    {
+      char __tb[80];
+      int __tl = snprintf(__tb, sizeof(__tb), "NATIVE_RETURN entry=%p\n", (void*)entry_point);
+      if (__tl > 0) write_marker(__tb, __tl);
+    }
   }
 
   static bool resume_thread() {
     // restore values from current thread structure
-    g_jsp = (address)GET_THREAD_INT(stack_pointer);
+    g_jsp = (address)(address_word)GET_THREAD_INT(stack_pointer);
     g_jfp = OBJ_POP();
     // remove dummy
     POP();
     address return_point = OBJ_POP();
 
     // check for pending activations
-    address pentry = (address)GET_THREAD_INT(pending_entries);
+    address pentry = (address)(address_word)GET_THREAD_INT(pending_entries);
     if (pentry) {
       if (GET_THREAD_INT(status) & THREAD_TERMINATING) {
         SET_THREAD_INT(pending_entries, 0);
         BREAK_INTERPRETER_LOOP(JMP_THREAD_EXIT);
       } else {
         jint max_len = GET_ENTRY(pentry, length);
-        while ((pentry = (address)GET_ENTRY(pentry, next)) != NULL) {
+        while ((pentry = (address)(address_word)GET_ENTRY(pentry, next)) != NULL) {
           jint len = GET_ENTRY(pentry, length);
           if (len > max_len) {
             max_len = len;
@@ -1239,11 +1320,11 @@ enum {
         }
         max_len = max_len * 8 + StackLock::size() + 4;
         // stack grows to smaller addresses
-        address new_stack_ptr = (address)GET_THREAD_INT(stack_pointer) - max_len;
+        address new_stack_ptr = (address)(address_word)GET_THREAD_INT(stack_pointer) - max_len;
         // increase stack size
         if (new_stack_ptr < _current_stack_limit) {
           if (interpreter_call_vm_1((address)&stack_overflow, T_VOID,
-                                    (jint)new_stack_ptr)) {
+                                    (jint)(address_word)new_stack_ptr)) {
             return true;
           }
         }
@@ -1268,7 +1349,7 @@ enum {
     if (CURRENT_HAS_PENDING_EXCEPTION) {
       OopDesc* exception =_current_pending_exception;
       _current_pending_exception = NULL;
-      shared_call_vm_internal(NULL, NULL, T_ILLEGAL, 1, (jint)exception);
+      shared_call_vm_internal(NULL, NULL, T_ILLEGAL, 1, (jint)(address_word)exception);
       return true;
     }
     return false;
@@ -1281,8 +1362,8 @@ enum {
                                       ...)
   {
     // Save last java stack pointer and last java frame pointer in thread
-    SET_THREAD_INT(last_java_fp, (jint)g_jfp);
-    SET_THREAD_INT(last_java_sp, (jint)g_jsp);
+    SET_THREAD_INT(last_java_fp, (jint)(address_word)g_jfp);
+    SET_THREAD_INT(last_java_sp, (jint)(address_word)g_jsp);
     // sync up other globals
     SET_FRAME(bcp_store, g_jpc);
     SET_FRAME(locals_pointer, g_jlocals);
@@ -1302,7 +1383,7 @@ enum {
     PUSH(0xDEADBEEF);
     // fp
     OBJ_PUSH(g_jfp);
-    SET_THREAD_INT(stack_pointer, (jint)g_jsp);
+    SET_THREAD_INT(stack_pointer, (jint)(address_word)g_jsp);
 
     bool is_oop = (stack_type_for(return_value_type) == T_OBJECT);
 
@@ -1312,14 +1393,14 @@ enum {
 
     if (return_value_type == T_ILLEGAL) {
       GUARANTEE(num_args == 1, "Only 1 argument allowed here");
-      OopDesc* raw_exc =  (OopDesc*)va_arg(ap, jint);
+      OopDesc* raw_exc =  (OopDesc*)(address_word)va_arg(ap, jint);
 
       // this call also fills in last_java_fp and last_java_sp in
       // current thread to the frame of handler
-      r1 = (jint)find_exception_frame(NATIVE_ARG, raw_exc);
+      r1 = (jint)(address_word)find_exception_frame(NATIVE_ARG, raw_exc);
 
-      g_jsp = (address)GET_THREAD_INT(last_java_sp);
-      g_jfp = (address)GET_THREAD_INT(last_java_fp);
+      g_jsp = (address)(address_word)GET_THREAD_INT(last_java_sp);
+      g_jfp = (address)(address_word)GET_THREAD_INT(last_java_fp);
 
       // A return value of zero means the initial entry frame
       if (r1 == 0) {
@@ -1336,7 +1417,7 @@ enum {
         PUSH(0);
         PUSH(0xDEADBEEF);
         OBJ_PUSH(g_jfp);
-        SET_THREAD_INT(stack_pointer, (jint)g_jsp);
+        SET_THREAD_INT(stack_pointer, (jint)(address_word)g_jsp);
       }
     } else {
       // Call the native entry
@@ -1365,11 +1446,11 @@ enum {
     g_jfp = g_jsp - EntryFrame::empty_stack_offset();
 
     // stored data in frame
-    SET_ENTRY_FRAME(pending_exception,   (jint)_current_pending_exception);
+    SET_ENTRY_FRAME(pending_exception,   (jint)(address_word)_current_pending_exception);
     SET_ENTRY_FRAME(stored_last_sp,      GET_THREAD_INT(last_java_sp));
     SET_ENTRY_FRAME(stored_last_fp,      GET_THREAD_INT(last_java_fp));
     SET_ENTRY_FRAME(fake_return_address, EntryFrame::FakeReturnAddress);
-    SET_ENTRY_FRAME(real_return_address, (jint)return_point);
+    SET_ENTRY_FRAME(real_return_address, (jint)(address_word)return_point);
     SET_ENTRY_FRAME(stored_obj_value,    GET_THREAD_INT(obj_value));
     SET_ENTRY_FRAME(stored_int_value1,   GET_THREAD_INT(int1_value));
     SET_ENTRY_FRAME(stored_int_value2,   GET_THREAD_INT(int2_value));
@@ -1379,7 +1460,7 @@ enum {
     SET_THREAD_INT(last_java_fp, 0);
 
     // Get the pending exception and (first) pending activation from the thread
-    address pending_entry = (address)GET_THREAD_INT(pending_entries);
+    address pending_entry = (address)(address_word)GET_THREAD_INT(pending_entries);
 
     // clear the pending activation and pending exception thread field
     SET_THREAD_INT(pending_entries, 0);
@@ -1400,7 +1481,7 @@ enum {
     }
 
     // find Java method
-    address method = (address)GET_ENTRY(pending_entry, method);
+    address method = (address)(address_word)GET_ENTRY(pending_entry, method);
     // invoke it
     invoke_java_method(method, 0);
   }
@@ -1436,10 +1517,10 @@ enum {
 
     // Create a fake bcp with a new flag set.
     g_jpc =  (address)
-      (((juint)method + Method::base_offset()) + JavaFrame::overflow_frame_flag);
+      (((address_word)method + Method::base_offset()) + JavaFrame::overflow_frame_flag);
 
     if (interpreter_call_vm_1((address)stack_overflow, T_VOID,
-                              (jint)new_stack_ptr)) {
+                              (jint)(address_word)new_stack_ptr)) {
       return true;
     }
 
@@ -1452,14 +1533,14 @@ enum {
   // This function is to be used with ENABLE_PAGE_PROTECTION=true
   void interpreter_timer_tick() {
     // Save current state like shared_call_vm does
-    SET_THREAD_INT(last_java_fp, (jint)g_jfp);
-    SET_THREAD_INT(last_java_sp, (jint)g_jsp);
+    SET_THREAD_INT(last_java_fp, (jint)(address_word)g_jfp);
+    SET_THREAD_INT(last_java_sp, (jint)(address_word)g_jsp);
     SET_FRAME(bcp_store, g_jpc);
     SET_FRAME(locals_pointer, g_jlocals);
     OBJ_PUSH(NULL);
     PUSH(0xDEADBEEF);
     OBJ_PUSH(g_jfp);
-    SET_THREAD_INT(stack_pointer, (jint)g_jsp);
+    SET_THREAD_INT(stack_pointer, (jint)(address_word)g_jsp);
     // Call the native routine
     timer_tick();
     switch_thread(NATIVE_ARG);
@@ -1477,6 +1558,7 @@ enum {
 
   static void quick_native_method_entry(BasicType return_type) {
     address method = callee_method();
+
 
     GUARANTEE((get_access_flags(method) & JVM_ACC_SYNCHRONIZED) == 0,
               "QuickNative methods must not be synchronized");
@@ -1497,14 +1579,15 @@ enum {
     // Get the native method pointer from the bytecode
     address native_ptr = get_quick_native(method);
 
+    va_list dummy_ap = {};
     _jvm_in_quick_native_method = 1;
     jint r1, r2;
-    invoke_native_entry(native_ptr, return_type, 0, NULL, r1, r2);
+    invoke_native_entry(native_ptr, return_type, 0, dummy_ap, r1, r2);
     _jvm_in_quick_native_method = 0;
 
     if (_jvm_quick_native_exception != NULL) {
       interpreter_call_vm_2((address)&quick_native_throw, T_INT,
-        (jint)_jvm_quick_native_exception, 0);
+        (jint)(address_word)_jvm_quick_native_exception, 0);
       _jvm_quick_native_exception = NULL;
       return;
     }
@@ -1587,7 +1670,7 @@ enum {
     if (interpreter_call_vm_1((address)task_barrier, T_OBJECT, (jint)clazz)) {
       return true;
     }
-    task_mirror = (address)GET_THREAD_INT(obj_value);
+    task_mirror = (address)(address_word)GET_THREAD_INT(obj_value);
     GUARANTEE(task_mirror != 0, "Task mirror is zero");
     real_mirror = get_real_mirror(task_mirror);
     return false;
@@ -1602,7 +1685,7 @@ enum {
       return true;
     }
     if (status & JavaClassObj::IN_PROGRESS) {
-      address this_thread = (address)GET_THREAD_INT(thread_obj);
+      address this_thread = (address)(address_word)GET_THREAD_INT(thread_obj);
       address init_thread = *(address*)(java_mirror +
                                         JavaClassObj::thread_offset());
       return this_thread == init_thread;
@@ -1679,7 +1762,7 @@ enum {
 #endif
       } else {
         // Synchronize on local 0
-        obj = (address)GET_LOCAL(0);
+        obj = (address)(address_word)GET_LOCAL(0);
       }
       if (lock_synchronized_method_internal(obj)) {
         return;
@@ -2112,13 +2195,13 @@ enum {
       if (interpreter_call_vm_1((address)task_barrier, T_OBJECT, (jint)klass)) {
         return NULL;
       }
-      obj = (address)GET_THREAD_INT(obj_value);
+      obj = (address)(address_word)GET_THREAD_INT(obj_value);
       cpool = GET_FRAME(cpool);
     }
 #else
     address obj = get_class_by_id(class_id);
     if (!is_initialized_class(obj)) {
-      if (interpreter_call_vm_1((address)initialize_class, T_VOID, (jint)obj)) {
+      if (interpreter_call_vm_1((address)initialize_class, T_VOID, (jint)(address_word)obj)) {
         return NULL;
       }
       GUARANTEE(cpool == GET_FRAME(cpool), "No GC should have happened");
@@ -2176,7 +2259,7 @@ enum {
           PUSH(*((jint*)header + 2 * i));
         }
         // find Java method
-        address method = (address)GET_ENTRY(pending_entry, method);
+        address method = (address)(address_word)GET_ENTRY(pending_entry, method);
         // invoke it
         invoke_java_method(method, 0);
         return;
@@ -2186,10 +2269,10 @@ enum {
       _current_pending_exception =
         (OopDesc*)GET_ENTRY_FRAME(pending_exception);
 
-      SET_THREAD_INT(obj_value, (jint)GET_ENTRY_FRAME(stored_obj_value));
+      SET_THREAD_INT(obj_value, (jint)(address_word)GET_ENTRY_FRAME(stored_obj_value));
       // IMPL_NOTE: write_barrier((address)_current_thread + Thread::obj_value_offset());
-      SET_THREAD_INT(int1_value, (jint)GET_ENTRY_FRAME(stored_int_value1));
-      SET_THREAD_INT(int2_value, (jint)GET_ENTRY_FRAME(stored_int_value2));
+      SET_THREAD_INT(int1_value, (jint)(address_word)GET_ENTRY_FRAME(stored_int_value1));
+      SET_THREAD_INT(int2_value, (jint)(address_word)GET_ENTRY_FRAME(stored_int_value2));
 
       func_t stored_return_point = (func_t)GET_ENTRY_FRAME(real_return_address);
 
@@ -2199,8 +2282,8 @@ enum {
       g_jsp = g_jfp +
         EntryFrame::empty_stack_offset() + EntryFrame::frame_desc_size();
       g_jfp = old_jfp;
-      SET_THREAD_INT(last_java_sp, (jint)old_jsp);
-      SET_THREAD_INT(last_java_fp, (jint)old_jfp);
+      SET_THREAD_INT(last_java_sp, (jint)(address_word)old_jsp);
+      SET_THREAD_INT(last_java_fp, (jint)(address_word)old_jfp);
 
       if (g_jfp == NULL) {
         BREAK_INTERPRETER_LOOP(JMP_THREAD_EXIT);
@@ -2212,7 +2295,7 @@ enum {
       if (CURRENT_HAS_PENDING_EXCEPTION) {
         OopDesc* exception =_current_pending_exception;
         _current_pending_exception = NULL;
-        shared_call_vm_internal(NULL, NULL, T_ILLEGAL, 1, (jint)exception);
+        shared_call_vm_internal(NULL, NULL, T_ILLEGAL, 1, (jint)(address_word)exception);
         return;
       }
 
@@ -2222,7 +2305,7 @@ enum {
       return;
     }
     // restore previous JPC and locals
-    g_jpc = GET_FRAME(bcp_store) + (int)(GET_FRAME(return_advance));
+    g_jpc = GET_FRAME(bcp_store) + (int)(address_word)(GET_FRAME(return_advance));
     g_jlocals = GET_FRAME(locals_pointer);
 
     switch(type) {
@@ -2279,7 +2362,7 @@ enum {
 
     if (has_fixed_target_method) {
       // Get method from resolved constant pool entry
-      method = (address)get_from_cpool(cpool, index);
+      method = (address)(address_word)get_from_cpool(cpool, index);
       if (must_do_null_check) {
         // Get the number of parameters from the method
         jushort num_params = get_num_params(method);
@@ -2297,12 +2380,12 @@ enum {
             return;
           }
           cpool = GET_FRAME(cpool);
-          method = (address)get_from_cpool(cpool, index);
+          method = (address)(address_word)get_from_cpool(cpool, index);
         }
 #else
         address klass = get_class_by_id(class_id);
         if (!is_initialized_class(klass)) {
-          if (interpreter_call_vm_1((address)initialize_class, T_VOID, (jint)klass)) {
+          if (interpreter_call_vm_1((address)initialize_class, T_VOID, (jint)(address_word)klass)) {
             return;
           }
           GUARANTEE(cpool == GET_FRAME(cpool), "No GC should have happened");
@@ -3451,7 +3534,7 @@ enum {
     jint index = POP();
     // method entry point is 4-byte aligned, jpc points to
     // tableswitch bytecode
-    address aligned_jpc = (address)((jint)(g_jpc + 1 + 3) & ~3);
+    address aligned_jpc = (address)(((address_word)(g_jpc + 1 + 3)) & ~(address_word)3);
     // get default target
     jint    target = int_from_addr(aligned_jpc);
     jint    low    = int_from_addr(aligned_jpc + 4);
@@ -3467,7 +3550,7 @@ enum {
     jint key = POP();
     // method entry point is 4-byte aligned, jpc points to
     // lookupswitch bytecode
-    address aligned_jpc = (address)((jint)(g_jpc + 1 + 3) & ~3);
+    address aligned_jpc = (address)(((address_word)(g_jpc + 1 + 3)) & ~(address_word)3);
     // get default target
     jint    target = int_from_addr(aligned_jpc);
     jint    npairs = int_from_addr(aligned_jpc + 4);
@@ -4485,7 +4568,14 @@ static void Interpret() {
       interpreter_dispatch_table[*g_jpc]();
     }
   } else {
+    unsigned long __hb_counter = 0;
     for (;;) {
+      if ((++__hb_counter & 0xFFFFFul) == 0) {
+        char __tb[96];
+        int __tl = snprintf(__tb, sizeof(__tb), "HEARTBEAT n=%lu jpc=%p op=%d\n",
+                             __hb_counter, (void*)g_jpc, (int)*g_jpc);
+        if (__tl > 0) write_marker(__tb, __tl);
+      }
       interpreter_dispatch_table[*g_jpc]();
     }
   }
@@ -4566,7 +4656,7 @@ typedef struct JavaFrameDebug {
 } JavaFrameDebug;
 
 JavaFrameDebug * jfp_debug() {
-  return (JavaFrameDebug*)( ((int)g_jfp) +
+  return (JavaFrameDebug*)( ((address_word)g_jfp) +
                             JavaFrame::stack_bottom_pointer_offset() );
 }
 
@@ -4578,6 +4668,7 @@ bool __is_arm_compiler_active() {
 
 #if ENABLE_CPU_VARIANT
 extern "C" {
+  extern void write_marker(const char* text, int len);
   void initialize_cpu_variant() {}
   void enable_cpu_variant() {}
   void disable_cpu_variant() {}
@@ -4606,6 +4697,7 @@ extern "C" {
 #endif
 
 extern "C" {
+  extern void write_marker(const char* text, int len);
   void wmmx_set_timer_tick() { }
   void wmmx_clear_timer_tick() { }
 
@@ -4634,8 +4726,8 @@ bool update_java_pointers() {
   if (bci < 0 || bci >= 65536) {
     return false;
   }
-  SET_THREAD_INT(last_java_fp, (jint)g_jfp);
-  SET_THREAD_INT(last_java_sp, (jint)g_jsp);
+  SET_THREAD_INT(last_java_fp, (jint)(address_word)g_jfp);
+  SET_THREAD_INT(last_java_sp, (jint)(address_word)g_jsp);
   SET_FRAME(bcp_store, g_jpc);
   SET_FRAME(locals_pointer, g_jlocals);
   return true;

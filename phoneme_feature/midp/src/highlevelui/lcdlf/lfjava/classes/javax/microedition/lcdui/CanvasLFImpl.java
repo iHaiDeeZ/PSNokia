@@ -367,7 +367,14 @@ class CanvasLFImpl extends DisplayableLFImpl implements CanvasLF {
      * @param keyCode the key code to pass to the application
      * @return true if the key should be allowed
      */
+    private static int diagAllowKeyLogCount = 0;
     private boolean allowKey(int keyCode) {
+        if (diagAllowKeyLogCount < 60) {
+            diagAllowKeyLogCount++;
+            System.out.println("ALLOWKEY keyCode=" + keyCode +
+                " suppress=" + canvas.suppressKeyEvents +
+                " gameAction=" + KeyConverter.getGameAction(keyCode));
+        }
         if (!canvas.suppressKeyEvents) {
             return true;
         }

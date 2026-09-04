@@ -232,8 +232,7 @@ static void ProcessInputs(char *argname)
  *                argv: arg value(s)
  *   returns:     nothing
  *=======================================================================*/
-int main(argc, argv)
-    register char **argv;
+int main(int argc, char **argv)
 {
     char *progname;
     char *argv0 = argv[0];

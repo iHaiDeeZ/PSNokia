@@ -104,8 +104,8 @@ void ClassFileParser::gc_epilogue() {
   for (ClassFileParser* cfp = _head; cfp != NULL; cfp = cfp->previous()) {
     // change from offset back to direct pointer to _buffer
     jubyte *base = (jubyte*)(cfp->_buffer->base_address());
-    cfp->_bufptr = base + (int)(cfp->_bufptr);
-    cfp->_bufend = base + (int)(cfp->_bufend);
+    cfp->_bufptr = base + (int)(address_word)(cfp->_bufptr);
+    cfp->_bufend = base + (int)(address_word)(cfp->_bufend);
   }
 }
 
@@ -2049,7 +2049,7 @@ void ClassFileParser::p() {
 void ClassFileParser::print_on(Stream *st) {
 #if USE_DEBUG_PRINTING
   (void)st;
-  tty->print_cr("ClassFileParser (StackObj) = 0x%x", (int)this);
+  tty->print_cr("ClassFileParser (StackObj) = 0x%x", (int)(address_word)this);
   tty->print_cr("  _pos      = %d", get_buffer_position());
   tty->print_cr("  _buffer   = 0x%x", _buffer->obj());
   tty->print   ("  _name     = ");

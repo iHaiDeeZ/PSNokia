@@ -46,7 +46,7 @@ void BufferedFile::init()
 }
 
 void BufferedFile::set_file_pointer(OsFile_Handle val) {
-  int_field_put(file_pointer_offset(), (int)val);
+  int_field_put(file_pointer_offset(), (int)(address_word)val);
 }
 
 #if NOT_CURRENTLY_USED

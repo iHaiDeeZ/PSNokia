@@ -264,7 +264,7 @@ jpp: $(JPP_CLASS_FILES)
 #
 ifeq ($(USE_CYGWIN),true)
 define fixcygpath
-echo $(1) | xargs -n1 cygpath -w
+for w in $(1); do case "$$w" in -*) echo "$$w" ;; *) cygpath -m "$$w" ;; esac; done
 endef
 else
 define fixcygpath

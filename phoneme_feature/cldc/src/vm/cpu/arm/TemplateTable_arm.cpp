@@ -1697,7 +1697,7 @@ void bc_fast_invokespecial::generate() {
   ldr(tmp0, imm_index(callee, Method::variable_part_offset()));
   ldr(tmp0, imm_index(tmp0));
 
-  invoke_method(callee, tmp0, tmp2, 3, "invoke3_deoptimization_entry");
+  invoke_method(callee, tmp0, tmp2, 3, (char*)"invoke3_deoptimization_entry");
 }
 
 void bc_fast_invoke::generate(bool has_fixed_target_method) {
@@ -1906,7 +1906,7 @@ bind(lookup);
   // callee must contain the method
   ldr(tmp0, imm_index(callee, Method::variable_part_offset()));
   ldr(tmp0, imm_index(tmp0));
-  invoke_method(callee, tmp0, tmp2, 5, "invoke5_deoptimization_entry");
+  invoke_method(callee, tmp0, tmp2, 5, (char*)"invoke5_deoptimization_entry");
 }
 
 void bc_fast_invokenative::generate() {
@@ -1924,6 +1924,18 @@ void bc_fast_invokenative::generate() {
 #endif /* #if ENABLE_PROFILER*/
 
 bind(redo);
+
+  {
+    comment("Unconditional slow-native-call entry marker (diagnostic)");
+    ldr(tmp1, imm_index(bcp, Method::native_code_offset_from_bcp()));
+    ldr_label(tmp0, "_my_last_native_call");
+    str(tmp1, imm_index(tmp0));
+
+    save_interpreter_state();
+    ldr_label(r0, "my_trace_native_entry");
+    bl("call_on_primordial_stack");
+    restore_interpreter_state();
+  }
 
 #if ENABLE_TTY_TRACE
   if (GenerateDebugAssembly) {
@@ -1943,7 +1955,7 @@ bind(redo);
 
     save_interpreter_state();
     ldr_label(r0, "trace_native_call");
-    bl("call_on_primordial_stack");   
+    bl("call_on_primordial_stack");
     restore_interpreter_state();
   bind(skip);
   }
@@ -2284,7 +2296,7 @@ void bc_newarray::generate() {
   b(slow_case, hi);
 
   ldr_label_offset(tmp3, "persistent_handles",
-            (Universe::bool_array_class_index - T_BOOLEAN) * BytesPerWord);
+            ((int)Universe::bool_array_class_index - (int)T_BOOLEAN) * BytesPerWord);
 
   comment("allocation succeeded, set _inline_allocation_top");
   set_inline_allocation_top(tmp2);
@@ -2475,7 +2487,7 @@ void bc_i2f::generate() {
 }
 
 void bc_dcmp::generate(int arg) {
-  char* name;
+  const char* name;
   switch(arg) {
     case -1:  name = "jvm_dcmpl"; break;
     case 1:   name = "jvm_dcmpg"; break;
@@ -2485,7 +2497,7 @@ void bc_dcmp::generate(int arg) {
 }
 
 void bc_fcmp::generate(int arg) {
-  char* name;
+  const char* name;
   switch(arg) {
     case -1:  name = "jvm_fcmpl"; break;
     case 1:   name = "jvm_fcmpg"; break;

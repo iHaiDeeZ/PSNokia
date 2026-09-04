@@ -87,7 +87,7 @@ I3_TEST_REPOSITORY_FILE=Repository.java
 I3_TEST_REPOSITORY=$(I3_TEST_REPOSITORY_DIR)/$(I3_TEST_REPOSITORY_FILE)
 
 $(MIDP_CLASSES_ZIP) :: $(JTWI_I3TEST_JAVA_FILES)
-	@echo $? >> $(REBUILD_JAVA_LIST)
+	@$(call fixcygpath,$?) >> $(REBUILD_JAVA_LIST)
 	@echo " ... generating I3 test repository " $(LOG)
 	@mkdir -p $(I3_TEST_REPOSITORY_DIR)
 	@echo $(JTWI_I3TEST_JAVA_FILES) | \

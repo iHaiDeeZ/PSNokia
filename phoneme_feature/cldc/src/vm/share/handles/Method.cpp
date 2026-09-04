@@ -62,7 +62,7 @@ inline bool Method::resume_compilation(JVM_SINGLE_ARG_TRAPS) {
   // a few OopCons objects can be created, and that is considered to be OK
   TaskAllocationContext tmp(Compiler::suspended_compiler_state()->task_id());
 #endif
-  bool status = (bool)Compiler::resume_compilation(this JVM_MUST_SUCCEED);
+  bool status = (bool)(address_word)Compiler::resume_compilation(this JVM_MUST_SUCCEED);
   return status;
 }
 
@@ -111,13 +111,13 @@ bool Method::compile(int active_bci, bool resume JVM_TRAPS) {
     }
   }
   if (Verbose) {
-    tty->print("compiling method: (0x%x), ", (int)obj());
+    tty->print("compiling method: (0x%x), ", (int)(address_word)obj());
     print_name_on(tty);
     tty->print_cr("");
   }
 #endif // PRODUCT
 
-  bool status = (bool)Compiler::compile(this, active_bci JVM_MUST_SUCCEED);
+  bool status = (bool)(address_word)Compiler::compile(this, active_bci JVM_MUST_SUCCEED);
   return status;
 }
 #endif
@@ -198,7 +198,7 @@ ReturnOop Method::stackmaps() const {
     GUARANTEE(sm().is_short_map(0), "sanity");
     return sm.obj();
   }
-  return (ReturnOop)n;
+  return (ReturnOop)(address_word)n;
 }
 
 ReturnOop Method::name() const {
@@ -1716,7 +1716,7 @@ void Method::iterate_bytecode(int bci, BytecodeClosure* blk,
     case Bytecodes::_ifle : // 158
       {
         BytecodeClosure::cond_op op = (BytecodeClosure::cond_op)
-          (BytecodeClosure::eq + code - Bytecodes::_ifeq);
+          ((int)BytecodeClosure::eq + (int)code - (int)Bytecodes::_ifeq);
         blk->branch_if(op,  bci + get_java_short(bci+1) JVM_NO_CHECK);
       }
       break;
@@ -1737,7 +1737,7 @@ void Method::iterate_bytecode(int bci, BytecodeClosure* blk,
     case Bytecodes::_if_icmple:  // 164
       {
         BytecodeClosure::cond_op op = (BytecodeClosure::cond_op)
-          (BytecodeClosure::eq + code - Bytecodes::_if_icmpeq);
+          ((int)BytecodeClosure::eq + (int)code - (int)Bytecodes::_if_icmpeq);
         blk->branch_if_icmp(op, bci + get_java_short(bci+1) JVM_NO_CHECK);
       }
       break;
@@ -2184,7 +2184,7 @@ void Method::update_rom_default_entries() {
   MethodVariablePart *ptr =
     (MethodVariablePart *)&_rom_method_variable_parts[0];
   MethodVariablePart *end =
-    (MethodVariablePart *) (((int)ptr) + _rom_method_variable_parts_size);
+    (MethodVariablePart *)(address_word) (((int)(address_word)ptr) + _rom_method_variable_parts_size);
 
   address compile_entry = (address)shared_invoke_compiler;
 
