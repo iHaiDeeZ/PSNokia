@@ -80,6 +80,14 @@ public interface GraphicsAccess {
     public int getGraphicsWidth(Graphics g);
 
     /**
+     * Get the Image a Graphics draws into.
+     *
+     * @param g Graphics object
+     * @return the target image, or null for a screen Graphics
+     */
+    public Image getGraphicsImage(Graphics g);
+
+    /**
      * Get maximal height of the Graphics context
      * @param g The Graphics context
      * @return The height of the Graphics context

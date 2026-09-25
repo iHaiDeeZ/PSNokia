@@ -6,14 +6,15 @@
  * flip/rotate manipulation is implemented for real too (getRGB() + manual
  * per-pixel rotate/flip + createRGBImage()), cached per (image identity,
  * manipulation) pair - see getTransformedImage()'s doc for why the cache
- * matters. The getPixels() readback family remains unimplemented (needs
- * native pixel access this port doesn't currently expose).
+ * matters. getPixels() reads back from the Graphics' target image.
  */
 
 package com.nokia.mid.ui;
 
 import javax.microedition.lcdui.Graphics;
 import javax.microedition.lcdui.Image;
+
+import com.sun.midp.lcdui.GameMap;
 
 class DirectGraphicsImpl implements DirectGraphics {
 
@@ -102,7 +103,14 @@ class DirectGraphicsImpl implements DirectGraphics {
         int h = img.getHeight();
         int[] src = new int[w * h];
         img.getRGB(src, 0, w, 0, 0, w, h);
+        int[] out = transform(src, w, h, manipulation);
+        int rotation = manipulation & ~(DirectGraphics.FLIP_HORIZONTAL | DirectGraphics.FLIP_VERTICAL);
+        boolean swap = rotation == DirectGraphics.ROTATE_90 || rotation == DirectGraphics.ROTATE_270;
+        return Image.createRGBImage(out, swap ? h : w, swap ? w : h, true);
+    }
 
+    /** Applies a manipulation to w x h ARGB pixels; 90 and 270 swap the sides. */
+    private static int[] transform(int[] src, int w, int h, int manipulation) {
         boolean flipH = (manipulation & DirectGraphics.FLIP_HORIZONTAL) != 0;
         boolean flipV = (manipulation & DirectGraphics.FLIP_VERTICAL) != 0;
         int rotation = manipulation & ~(DirectGraphics.FLIP_HORIZONTAL | DirectGraphics.FLIP_VERTICAL);
@@ -154,7 +162,7 @@ class DirectGraphicsImpl implements DirectGraphics {
             cur = tmp;
         }
 
-        return Image.createRGBImage(cur, cw, ch, true);
+        return cur;
     }
 
     public void drawTriangle(int x1, int y1, int x2, int y2, int x3, int y3, int argbColor) {
@@ -206,38 +214,96 @@ class DirectGraphicsImpl implements DirectGraphics {
     public void drawPixels(int[] pixels, boolean transparency, int offset, int scanlength,
             int x, int y, int width, int height, int manipulation, int format) {
         diagLog("drawPixels[int]", width * height);
-        g.drawRGB(pixels, offset, scanlength, x, y, width, height, transparency);
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        int[] argb = new int[width * height];
+        boolean alpha = transparency && format == DirectGraphics.TYPE_INT_8888_ARGB;
+        for (int row = 0; row < height; row++) {
+            int src = offset + row * scanlength;
+            int dst = row * width;
+            for (int col = 0; col < width; col++) {
+                int p = pixels[src + col];
+                argb[dst + col] = alpha ? p : (p | 0xFF000000);
+            }
+        }
+        drawARGB(argb, width, height, x, y, manipulation, alpha);
     }
 
     public void drawPixels(short[] pixels, boolean transparency, int offset, int scanlength,
             int x, int y, int width, int height, int manipulation, int format) {
         diagLog("drawPixels[short]", width * height);
+        if (width <= 0 || height <= 0) {
+            return;
+        }
         int[] argb = new int[width * height];
         for (int row = 0; row < height; row++) {
-            int srcRow = offset + row * scanlength;
-            int dstRow = row * width;
+            int src = offset + row * scanlength;
+            int dst = row * width;
             for (int col = 0; col < width; col++) {
-                argb[dstRow + col] = shortToARGB(pixels[srcRow + col], format);
+                int p = shortToARGB(pixels[src + col], format);
+                argb[dst + col] = transparency ? p : (p | 0xFF000000);
             }
         }
-        g.drawRGB(argb, 0, width, x, y, width, height, transparency);
+        drawARGB(argb, width, height, x, y, manipulation, transparency);
     }
 
     public void drawPixels(byte[] pixels, byte[] transparencyMask, int offset, int scanlength,
             int x, int y, int width, int height, int manipulation, int format) {
         diagLog("drawPixels[byte]", width * height);
+        if (width <= 0 || height <= 0) {
+            return;
+        }
         int[] argb = new int[width * height];
         for (int row = 0; row < height; row++) {
-            int srcRow = offset + row * scanlength;
-            int dstRow = row * width;
             for (int col = 0; col < width; col++) {
-                int idx = srcRow + col;
-                int a = (transparencyMask != null && idx < transparencyMask.length
-                        && transparencyMask[idx] == 0) ? 0x00 : 0xFF;
-                argb[dstRow + col] = byteToARGB(pixels[idx], format, a);
+                int a = 0xFF;
+                int rgb;
+                if (format == DirectGraphics.TYPE_BYTE_1_GRAY
+                        || format == DirectGraphics.TYPE_BYTE_1_GRAY_VERTICAL) {
+                    // One bit per pixel, most significant first; a set bit is
+                    // black. The mask has the same layout; a set bit is opaque.
+                    int byteIndex, bit;
+                    if (format == DirectGraphics.TYPE_BYTE_1_GRAY) {
+                        int b = offset * 8 + row * scanlength + col;
+                        byteIndex = b >> 3;
+                        bit = 7 - (b & 7);
+                    } else {
+                        // Vertical: each byte holds 8 pixels of a column
+                        int b = offset * 8 + row;
+                        byteIndex = (b >> 3) * scanlength + col;
+                        bit = b & 7;
+                    }
+                    rgb = ((pixels[byteIndex] >> bit) & 1) != 0 ? 0x000000 : 0xFFFFFF;
+                    if (transparencyMask != null) {
+                        a = ((transparencyMask[byteIndex] >> bit) & 1) != 0 ? 0xFF : 0x00;
+                    }
+                } else {
+                    int idx = offset + row * scanlength + col;
+                    rgb = byteToRGB(pixels[idx], format);
+                    if (transparencyMask != null) {
+                        a = transparencyMask[idx] != 0 ? 0xFF : 0x00;
+                    }
+                }
+                argb[row * width + col] = (a << 24) | rgb;
             }
         }
-        g.drawRGB(argb, 0, width, x, y, width, height, transparencyMask != null);
+        drawARGB(argb, width, height, x, y, manipulation, transparencyMask != null);
+    }
+
+    /** Draws w x h ARGB pixels at (x, y) after a flip/rotate manipulation. */
+    private void drawARGB(int[] argb, int w, int h, int x, int y, int manipulation,
+            boolean alpha) {
+        int dw = w, dh = h;
+        if (manipulation != 0) {
+            argb = transform(argb, w, h, manipulation);
+            int rotation = manipulation & ~(DirectGraphics.FLIP_HORIZONTAL | DirectGraphics.FLIP_VERTICAL);
+            if (rotation == DirectGraphics.ROTATE_90 || rotation == DirectGraphics.ROTATE_270) {
+                dw = h;
+                dh = w;
+            }
+        }
+        g.drawRGB(argb, 0, dw, x, y, dw, dh, alpha);
     }
 
     private static int shortToARGB(short px, int format) {
@@ -245,8 +311,11 @@ class DirectGraphicsImpl implements DirectGraphics {
         switch (format) {
             case DirectGraphics.TYPE_USHORT_4444_ARGB: {
                 int a = (v >> 12) & 0xF, r = (v >> 8) & 0xF, gr = (v >> 4) & 0xF, b = v & 0xF;
-                a |= a << 4; r |= r << 4; gr |= gr << 4; b |= b << 4;
-                return (a << 24) | (r << 16) | (gr << 8) | b;
+                return ((a * 17) << 24) | ((r * 17) << 16) | ((gr * 17) << 8) | (b * 17);
+            }
+            case DirectGraphics.TYPE_USHORT_444_RGB: {
+                int r = (v >> 8) & 0xF, gr = (v >> 4) & 0xF, b = v & 0xF;
+                return 0xFF000000 | ((r * 17) << 16) | ((gr * 17) << 8) | (b * 17);
             }
             case DirectGraphics.TYPE_USHORT_1555_ARGB: {
                 int a = ((v >> 15) & 0x1) != 0 ? 0xFF : 0x00;
@@ -268,36 +337,126 @@ class DirectGraphicsImpl implements DirectGraphics {
         }
     }
 
-    private static int byteToARGB(byte px, int format, int alpha) {
+    private static short argbToShort(int p, int format) {
+        int a = (p >>> 24) & 0xFF, r = (p >> 16) & 0xFF, gr = (p >> 8) & 0xFF, b = p & 0xFF;
+        switch (format) {
+            case DirectGraphics.TYPE_USHORT_4444_ARGB:
+                return (short) (((a >> 4) << 12) | ((r >> 4) << 8) | ((gr >> 4) << 4) | (b >> 4));
+            case DirectGraphics.TYPE_USHORT_444_RGB:
+                return (short) (((r >> 4) << 8) | ((gr >> 4) << 4) | (b >> 4));
+            case DirectGraphics.TYPE_USHORT_1555_ARGB:
+                return (short) ((a >= 0x80 ? 0x8000 : 0) | ((r >> 3) << 10) | ((gr >> 3) << 5) | (b >> 3));
+            case DirectGraphics.TYPE_USHORT_555_RGB:
+                return (short) (((r >> 3) << 10) | ((gr >> 3) << 5) | (b >> 3));
+            case DirectGraphics.TYPE_USHORT_565_RGB:
+            default:
+                return (short) (((r >> 3) << 11) | ((gr >> 2) << 5) | (b >> 3));
+        }
+    }
+
+    private static int byteToRGB(byte px, int format) {
         int v = px & 0xFF;
         switch (format) {
             case DirectGraphics.TYPE_BYTE_332_RGB: {
                 int r = (v >> 5) & 0x7, gr = (v >> 2) & 0x7, b = v & 0x3;
-                r = (r << 5) | (r << 2) | (r >> 1);
-                gr = (gr << 5) | (gr << 2) | (gr >> 1);
-                b = (b << 6) | (b << 4) | (b << 2) | b;
-                return (alpha << 24) | (r << 16) | (gr << 8) | b;
+                return ((r * 255 / 7) << 16) | ((gr * 255 / 7) << 8) | (b * 85);
             }
+            case DirectGraphics.TYPE_BYTE_4_GRAY:
+                v = (v & 0xF) * 17;
+                return (v << 16) | (v << 8) | v;
+            case DirectGraphics.TYPE_BYTE_2_GRAY:
+                v = (v & 0x3) * 85;
+                return (v << 16) | (v << 8) | v;
             case DirectGraphics.TYPE_BYTE_8_GRAY:
-            default: {
-                return (alpha << 24) | (v << 16) | (v << 8) | v;
-            }
+            default:
+                return (v << 16) | (v << 8) | v;
         }
+    }
+
+    /**
+     * Reads w x h ARGB pixels at (x, y) of this Graphics' target image into
+     * argb. Returns false when the target cannot be read (the screen).
+     */
+    private boolean readARGB(int[] argb, int x, int y, int w, int h) {
+        Image target = GameMap.getGraphicsAccess() == null ? null
+                : GameMap.getGraphicsAccess().getGraphicsImage(g);
+        if (target == null || w <= 0 || h <= 0) {
+            return false;
+        }
+        x += g.getTranslateX();
+        y += g.getTranslateY();
+        // Clip the request to the image; pixels outside it stay transparent
+        int x0 = Math.max(x, 0), y0 = Math.max(y, 0);
+        int x1 = Math.min(x + w, target.getWidth()), y1 = Math.min(y + h, target.getHeight());
+        if (x1 <= x0 || y1 <= y0) {
+            return true;
+        }
+        int[] tmp = new int[(x1 - x0) * (y1 - y0)];
+        target.getRGB(tmp, 0, x1 - x0, x0, y0, x1 - x0, y1 - y0);
+        for (int row = y0; row < y1; row++) {
+            System.arraycopy(tmp, (row - y0) * (x1 - x0), argb, (row - y) * w + (x0 - x), x1 - x0);
+        }
+        return true;
     }
 
     public void getPixels(byte[] pixels, byte[] transparencyMask, int offset, int scanlength,
             int x, int y, int width, int height, int format) {
-        // pixel readback not implemented on this port.
+        int[] argb = new int[Math.max(width * height, 0)];
+        if (!readARGB(argb, x, y, width, height)) {
+            return;
+        }
+        for (int row = 0; row < height; row++) {
+            for (int col = 0; col < width; col++) {
+                int p = argb[row * width + col];
+                int lum = (((p >> 16) & 0xFF) * 3 + ((p >> 8) & 0xFF) * 6 + (p & 0xFF)) / 10;
+                boolean opaque = (p >>> 24) >= 0x80;
+                if (format == DirectGraphics.TYPE_BYTE_1_GRAY) {
+                    int b = offset * 8 + row * scanlength + col;
+                    int mask = 1 << (7 - (b & 7));
+                    pixels[b >> 3] = (byte) (lum < 128 ? pixels[b >> 3] | mask : pixels[b >> 3] & ~mask);
+                    if (transparencyMask != null) {
+                        transparencyMask[b >> 3] = (byte) (opaque ? transparencyMask[b >> 3] | mask
+                                : transparencyMask[b >> 3] & ~mask);
+                    }
+                } else {
+                    int idx = offset + row * scanlength + col;
+                    int r = (p >> 16) & 0xFF, gr = (p >> 8) & 0xFF, b = p & 0xFF;
+                    pixels[idx] = (byte) (format == DirectGraphics.TYPE_BYTE_332_RGB
+                            ? ((r >> 5) << 5) | ((gr >> 5) << 2) | (b >> 6) : lum);
+                    if (transparencyMask != null) {
+                        transparencyMask[idx] = (byte) (opaque ? 0xFF : 0);
+                    }
+                }
+            }
+        }
     }
 
     public void getPixels(short[] pixels, int offset, int scanlength,
             int x, int y, int width, int height, int format) {
-        // pixel readback not implemented on this port.
+        int[] argb = new int[Math.max(width * height, 0)];
+        if (!readARGB(argb, x, y, width, height)) {
+            return;
+        }
+        for (int row = 0; row < height; row++) {
+            for (int col = 0; col < width; col++) {
+                pixels[offset + row * scanlength + col] = argbToShort(argb[row * width + col], format);
+            }
+        }
     }
 
     public void getPixels(int[] pixels, int offset, int scanlength,
             int x, int y, int width, int height, int format) {
-        // pixel readback not implemented on this port.
+        int[] argb = new int[Math.max(width * height, 0)];
+        if (!readARGB(argb, x, y, width, height)) {
+            return;
+        }
+        for (int row = 0; row < height; row++) {
+            for (int col = 0; col < width; col++) {
+                int p = argb[row * width + col];
+                pixels[offset + row * scanlength + col] =
+                        format == DirectGraphics.TYPE_INT_8888_ARGB ? p : (p & 0xFFFFFF);
+            }
+        }
     }
 
     public int getNativePixelFormat() {

@@ -18,24 +18,20 @@ public interface DirectGraphics {
     public static final int ROTATE_180 = 180;
     public static final int ROTATE_270 = 270;
 
+    // The Nokia UI API's values: games compile them in, so they must match
     public static final int TYPE_BYTE_1_GRAY = 1;
-    public static final int TYPE_BYTE_1_GRAY_VERTICAL = 2;
-    public static final int TYPE_BYTE_2_GRAY = 3;
+    public static final int TYPE_BYTE_1_GRAY_VERTICAL = -1;
+    public static final int TYPE_BYTE_2_GRAY = 2;
     public static final int TYPE_BYTE_4_GRAY = 4;
-    public static final int TYPE_BYTE_8_GRAY = 5;
-    public static final int TYPE_BYTE_332_RGB = 6;
-    public static final int TYPE_USHORT_4444_ARGB = 7;
-    public static final int TYPE_USHORT_555_RGB = 8;
-    public static final int TYPE_USHORT_565_RGB = 9;
-    public static final int TYPE_USHORT_1555_ARGB = 10;
-    public static final int TYPE_INT_888_RGB = 11;
-    public static final int TYPE_INT_8888_ARGB = 12;
-    public static final int TYPE_BYTE_1_GRAY_PACKED_MSB = 128;
-    public static final int TYPE_BYTE_1_GRAY_PACKED_LSB = 129;
-    public static final int TYPE_BYTE_2_GRAY_PACKED_MSB = 130;
-    public static final int TYPE_BYTE_2_GRAY_PACKED_LSB = 131;
-    public static final int TYPE_BYTE_4_GRAY_PACKED_MSB = 132;
-    public static final int TYPE_BYTE_4_GRAY_PACKED_LSB = 133;
+    public static final int TYPE_BYTE_8_GRAY = 8;
+    public static final int TYPE_BYTE_332_RGB = 332;
+    public static final int TYPE_USHORT_4444_ARGB = 4444;
+    public static final int TYPE_USHORT_444_RGB = 444;
+    public static final int TYPE_USHORT_555_RGB = 555;
+    public static final int TYPE_USHORT_1555_ARGB = 1555;
+    public static final int TYPE_USHORT_565_RGB = 565;
+    public static final int TYPE_INT_888_RGB = 888;
+    public static final int TYPE_INT_8888_ARGB = 8888;
 
     public int getAlphaComponent();
 

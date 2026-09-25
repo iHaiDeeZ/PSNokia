@@ -90,6 +90,16 @@ class GraphicsAccessImpl implements com.sun.midp.lcdui.GraphicsAccess {
      * @param g The Graphics context
      * @return The width of the Graphics context
      */
+    /**
+     * Get the Image a Graphics draws into.
+     *
+     * @param g Graphics object
+     * @return the target image, or null for a screen Graphics
+     */
+    public Image getGraphicsImage(Graphics g) {
+        return g.getTargetImage();
+    }
+
     public int getGraphicsWidth(Graphics g) {
         Object creator = g.getCreator();
         if (creator != null) {

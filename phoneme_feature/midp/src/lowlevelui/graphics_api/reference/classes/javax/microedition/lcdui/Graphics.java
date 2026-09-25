@@ -1731,6 +1731,11 @@ public class Graphics {
      */
     private Image img;
 
+    /** The Image this Graphics draws into, or null (GraphicsAccess) */
+    Image getTargetImage() {
+        return img;
+    }
+
     /**
      * Retrieve the Graphics context for the given Image
      *
