@@ -127,6 +127,10 @@ defaults, then run:
 ps4/build_all.sh
 ```
 
+This makes the optimized build used for playing. For finding problems,
+`PSNOKIA_BUILD=debug` makes a much slower build that checks more and logs
+every Java exception; set it for `make_game.sh` too.
+
 PSNokia is a port of **phoneME**, Sun's open-source Java runtime for
 phones.
 

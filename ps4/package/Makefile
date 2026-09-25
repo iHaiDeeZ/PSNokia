@@ -9,8 +9,9 @@
 #   /app0/screen.txt  - optional phone screen size, "WxH"
 
 VERSION     := 1.00
-MIDP_OUT    := $(PSNOKIA_OUT)/midp
-MIDP_ELF    := $(MIDP_OUT)/bin/c/runMidlet_g
+# The release or debug build, as chosen in env.sh (PSNOKIA_BUILD)
+MIDP_OUT    := $(PSNOKIA_MIDP_OUT)
+MIDP_ELF    := $(MIDP_OUT)/bin/c/$(PSNOKIA_MIDP_ELF)
 TOOLS       := $(OO_PS4_TOOLCHAIN)/bin/windows
 # System modules and the about file, as shipped with the OpenOrbis samples
 OO_SAMPLE   := $(OO_PS4_TOOLCHAIN)/samples/audio-wav

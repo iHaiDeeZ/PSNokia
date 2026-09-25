@@ -57,17 +57,68 @@ static pfontbitmap selectFontBitmap(jchar c, pfontbitmap* pfonts) {
     return pfonts[1];
 }
 
+/* Whether one of the font's tables has a glyph for c */
+static int hasGlyph(jchar c, pfontbitmap* pfonts) {
+    int i;
+    for (i = 1; i <= (int) pfonts[0]; i++) {
+        if (((c >> 8) & 0xff) == pfonts[i][FONT_CODE_RANGE_HIGH]
+          && (c & 0xff) >= pfonts[i][FONT_CODE_FIRST_LOW]
+          && (c & 0xff) <= pfonts[i][FONT_CODE_LAST_LOW]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/*
+ * The character to draw for c: c itself if the font has it, else the
+ * nearest one it has (curly quotes as straight ones, dashes as '-',
+ * capital accented letters without the accent), else '?'. Without this a
+ * missing character is drawn from the wrong place in the first table.
+ */
+static jchar fontChar(jchar c, pfontbitmap* pfonts) {
+    /* Latin-1 0xc0-0xff without accents */
+    static const char latin1[] =
+        "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPs"
+        "aaaaaaaceeeeiiiidnooooo/ouuuuypy";
+    jchar m;
+    if (hasGlyph(c, pfonts)) {
+        return c;
+    }
+    if (c >= 0xc0 && c <= 0xff) {
+        m = (jchar)latin1[c - 0xc0];
+    } else if (c == 0xa0 || c == 0x2002 || c == 0x2003 || c == 0x2009) {
+        m = ' ';
+    } else if ((c >= 0x2018 && c <= 0x201b) || c == 0x2032) {
+        m = '\'';
+    } else if ((c >= 0x201c && c <= 0x201f) || c == 0x2033) {
+        m = '"';
+    } else if (c >= 0x2010 && c <= 0x2015) {
+        m = '-';
+    } else if (c == 0x2022) {
+        m = 0xb7;       /* middle dot */
+    } else if (c == 0x2039) {
+        m = '<';
+    } else if (c == 0x203a) {
+        m = '>';
+    } else {
+        m = '?';
+    }
+    return hasGlyph(m, pfonts) ? m : '?';
+}
+
 /**
  * @file
  *
- * putpixel primitive character drawing. 
+ * putpixel primitive character drawing.
  */
 unsigned char BitMask[8] = {0x80,0x40,0x20,0x10,0x8,0x4,0x2,0x1};
-static void drawChar(gxj_screen_buffer *sbuf, jchar c0,
+static void drawChar(gxj_screen_buffer *sbuf, jchar ch,
 		     gxj_pixel_type pixelColor, int x, int y,
 		     int xSource, int ySource, int xLimit, int yLimit,
 		     pfontbitmap* pfonts,
 		     int fontWidth, int fontHeight) {
+    jchar const c0 = fontChar(ch, pfonts);
     int xDest;
     int yDest;
     int xDestLimit;

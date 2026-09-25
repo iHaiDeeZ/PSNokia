@@ -1,6 +1,7 @@
 // write_marker() for the PS4: the render log the phoneME port writes its
 // diagnostics to (see midp/src/core/kni_util/include/renderlog.h). Goes
-// through psn_log, so it lands in /data/psnokia/renderlog.txt and on UDP.
+// through psn_log, so it lands in /data/psnokia/renderlog-<title id>.txt
+// and on UDP.
 //
 // Callers pass fragments that end in '\n' when a line is complete; psn_log
 // wants whole lines, so they are buffered here.
@@ -12,10 +13,24 @@
 static char marker_line[512];
 static int  marker_length;
 
+// Each game keeps its own log, renderlog-<title id>.txt, so running another
+// game does not replace it. The title ID is in the package's titleid.txt.
+static void open_game_log(void) {
+  char id[16] = "", name[48] = "renderlog.txt";
+  FILE* f = fopen("/app0/titleid.txt", "r");
+  if (f) {
+    if (fscanf(f, "%15[A-Za-z0-9]", id) == 1) {
+      snprintf(name, sizeof(name), "renderlog-%s.txt", id);
+    }
+    fclose(f);
+  }
+  psn_log_open(name);
+}
+
 void write_marker(const char* text, int len) {
   static int opened;
   if (!opened) {
-    psn_log_open("renderlog.txt");
+    open_game_log();
     opened = 1;
   }
   for (int i = 0; i < len; i++) {

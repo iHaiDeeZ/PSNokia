@@ -421,11 +421,16 @@ main(int argc, char** commandlineArgs) {
     vitaArgv[0] = "runMidlet";
     vitaArgv[1] = "-int";
 #ifdef PS4
-    /* Debug build: log every exception the VM raises, with the Java stack */
-    vitaArgv[2] = "+TraceExceptions";
-    vitaArgv[3] = (char*)jarPath;
-    vitaArgv[4] = classname;
-    argCount = classname != NULL ? 5 : 4;
+    argCount = 2;
+#ifdef _DEBUG
+    /* Debug build: log every exception the VM raises, with the Java stack
+     * (the release VM has no trace flags) */
+    vitaArgv[argCount++] = "+TraceExceptions";
+#endif
+    vitaArgv[argCount++] = (char*)jarPath;
+    if (classname != NULL) {
+        vitaArgv[argCount++] = classname;
+    }
 #else
     vitaArgv[2] = (char*)jarPath;
     if (classname != NULL) {

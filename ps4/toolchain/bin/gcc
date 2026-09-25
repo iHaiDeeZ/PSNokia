@@ -24,6 +24,8 @@ if [ $compile = 1 ]; then
     case "$a" in
       -Wno-error=stringop-overflow|-Wno-error=maybe-uninitialized|-Wno-error=register) ;;
       -fno-optional-diags) ;;
+      # MIDP's release flags: gcc-only, and -s belongs to the link
+      -fexpensive-optimizations|-fconserve-space|-s) ;;
       *) args+=("$a") ;;
     esac
   done

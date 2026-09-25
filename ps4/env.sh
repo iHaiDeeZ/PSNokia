@@ -5,6 +5,14 @@ export PSNOKIA_PS4
 export PSNOKIA_ROOT="$(dirname "$PSNOKIA_PS4")"
 # Build output (outside version control)
 export PSNOKIA_OUT="${PSNOKIA_OUT:-$PSNOKIA_PS4/out}"
+# release: optimized, for playing (the default). debug: much slower, but
+# checks more and logs every Java exception with its stack.
+export PSNOKIA_BUILD="${PSNOKIA_BUILD:-release}"
+if [ "$PSNOKIA_BUILD" = debug ]; then
+  export PSNOKIA_MIDP_OUT="$PSNOKIA_OUT/midp" PSNOKIA_MIDP_ELF=runMidlet_g
+else
+  export PSNOKIA_MIDP_OUT="$PSNOKIA_OUT/midp_release" PSNOKIA_MIDP_ELF=runMidlet
+fi
 
 # OpenOrbis PS4 toolchain and the LLVM it is used with
 export OO_PS4_TOOLCHAIN="${OO_PS4_TOOLCHAIN:-$HOME/ps4/OpenOrbis/PS4Toolchain}"

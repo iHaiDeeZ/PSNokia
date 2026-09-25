@@ -377,7 +377,11 @@ static void ps4_display_changed(void)
 { ps4_display_save();
   ps4_draw();
   SDL_UpdateWindowSurface(Native_SDL_Window);
-  SDL_SaveBMP(Native_SDL_Screen, "/data/psnokia/display.bmp");
+  { const char *home = getenv("MIDP_HOME");
+    char name[128];
+    snprintf(name, sizeof(name), "%s/display.bmp", home != NULL ? home : "/data/psnokia");
+    SDL_SaveBMP(Native_SDL_Screen, name);
+  }
 }
 
 void ps4_display_next_view(void)
@@ -399,12 +403,15 @@ static void ps4_present(SDL_Surface *source)
        if (PS4_Converted == NULL) return;
      }
   SDL_BlitSurface(source, NULL, PS4_Converted, NULL);
-  /* Snapshots of the MIDP screen for diagnosis (fetch over FTP) */
+  /* Snapshots of the MIDP screen for diagnosis (fetch over FTP), in the
+   * game's own folder */
   { static int frames;
     frames++;
     if (frames == 60 || frames == 250 || frames == 600 || frames == 1500)
-       { char name[64];
-         snprintf(name, sizeof(name), "/data/psnokia/frame%d.bmp", frames);
+       { const char *home = getenv("MIDP_HOME");
+         char name[128];
+         snprintf(name, sizeof(name), "%s/frame%d.bmp",
+                  home != NULL ? home : "/data/psnokia", frames);
          SDL_SaveBMP(PS4_Converted, name);
        }
   }
