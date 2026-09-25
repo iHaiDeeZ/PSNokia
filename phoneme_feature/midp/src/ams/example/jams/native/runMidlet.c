@@ -94,8 +94,9 @@
 #define MIDP_HEAP_REQUIREMENT (7 * 1024 * 1024)
 #elif defined(PS4)
 /* The PS4 has plenty of memory; the Java heap comes from the low heap
- * arena (256MB, see ps4/common/lowheap_malloc.c). */
-#define MIDP_HEAP_REQUIREMENT (16 * 1024 * 1024)
+ * arena (256MB, see ps4/common/lowheap_malloc.c). Late touchscreen games
+ * decode 15MB and more of images. */
+#define MIDP_HEAP_REQUIREMENT (64 * 1024 * 1024)
 #else
 #define MIDP_HEAP_REQUIREMENT (1280 * 1024)
 #endif

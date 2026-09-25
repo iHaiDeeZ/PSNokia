@@ -228,6 +228,8 @@ static int ps4_to_vita_button(int btn)
 /* Display settings shortcuts (lfjport_st_export.c) */
 void ps4_display_next_view(void);
 void ps4_display_toggle_smooth(void);
+
+static int ps4_touch_click(int isPress, MidpReentryData* pNewSignal, MidpEvent* pNewMidpEvent);
 #endif
 
 void JoystickCheck(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNewMidpEvent)
@@ -254,6 +256,9 @@ void JoystickCheck(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNe
       if (btn == 7) ps4_display_next_view();
       else ps4_display_toggle_smooth();
     }
+  } else if (btn == 6) {
+    /* Touchpad click: touch the phone screen under the cursor */
+    if (ps4_touch_click(isPress, pNewSignal, pNewMidpEvent)) return;
   } else {
     /* DS4 layout: Cross confirms and Circle is the right soft key (usually
      * Back/Exit), matching the console's own convention; Square is the
@@ -264,7 +269,6 @@ void JoystickCheck(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNe
       case 3: Key = shiftHeld ? KEYMAP_KEY_ASTERISK : KEYMAP_KEY_SOFT1; break; /* Square   */
       case 0: Key = shiftHeld ? KEYMAP_KEY_CLEAR : KEYMAP_KEY_0; break;        /* Triangle */
       case 7: Key = KEYMAP_KEY_SOFT1; break;     /* Options: left soft key (menu/pause) */
-      case 6: Key = KEYMAP_KEY_ASTERISK; break;  /* Touchpad */
       case 8: Key = KEYMAP_KEY_1; break;         /* L2 */
       case 9: Key = KEYMAP_KEY_3; break;         /* R2 */
       case 10: Key = KEYMAP_KEY_7; break;        /* L3 */
@@ -421,15 +425,19 @@ static int ps4_pad_handle = -1;
 static int ps4_vibra_result;  /* last scePadSetVibration result, for the log */
 static volatile unsigned int ps4_vibra_generation;
 
-static void ps4_set_motors(int level)
-{ OrbisPadVibeParam param;
-  if (ps4_pad_handle < 0)
+/* The pad SDL opened for the logged-in user; negative if there is none */
+static int ps4_pad(void)
+{ if (ps4_pad_handle < 0)
      { int32_t user = -1;
-       /* The pad SDL opened for the logged-in user */
        if (sceUserServiceGetInitialUser(&user) == 0)
           ps4_pad_handle = scePadGetHandle(user, 0, 0);
-       if (ps4_pad_handle < 0) { ps4_vibra_result = ps4_pad_handle; return; }
      }
+  return ps4_pad_handle;
+}
+
+static void ps4_set_motors(int level)
+{ OrbisPadVibeParam param;
+  if (ps4_pad() < 0) { ps4_vibra_result = ps4_pad_handle; return; }
   param.lgMotor = (uint8_t)level;
   param.smMotor = (uint8_t)level;
   ps4_vibra_result = scePadSetVibration(ps4_pad_handle, &param);
@@ -473,12 +481,110 @@ void ps4_vibrate(int level, int ms)
   else
      free(t);
 }
+
+/*
+ * The DS4 touchpad as the phone's touchscreen. The whole touchpad maps
+ * onto the phone screen: a finger on it moves a cursor, clicking it
+ * touches the screen under the cursor, and sliding while it is held
+ * down drags.
+ */
+void ps4_screen_size(int *w, int *h);                 /* lfjport_st_export.c */
+void ps4_show_cursor(int x, int y, int state);
+
+static int ps4_touch_res_x, ps4_touch_res_y;
+static int ps4_touch_x = -1, ps4_touch_y = -1;  /* phone pixels */
+static int ps4_touch_down;
+static Uint32 ps4_touch_polled;
+
+/* Reads the finger position; returns 1 if it moved */
+static int ps4_touch_read(void)
+{ OrbisPadData data;
+  int w, h, x, y;
+  if (ps4_pad() < 0 || scePadReadState(ps4_pad_handle, &data) != 0) return 0;
+  if (data.touch.fingers == 0)
+     { ps4_show_cursor(ps4_touch_x, ps4_touch_y, ps4_touch_down ? 2 : 0);
+       return 0;
+     }
+  if (ps4_touch_res_x <= 0)
+     { OrbisPadInformation info;
+       ps4_touch_res_x = 1920;
+       ps4_touch_res_y = 943;
+       if (scePadGetControllerInformation(ps4_pad_handle, &info) == 0 &&
+           info.touchResolutionX > 0 && info.touchResolutionY > 0)
+          { ps4_touch_res_x = info.touchResolutionX;
+            ps4_touch_res_y = info.touchResolutionY;
+          }
+     }
+  ps4_screen_size(&w, &h);
+  x = data.touch.touch[0].x * w / ps4_touch_res_x;
+  y = data.touch.touch[0].y * h / ps4_touch_res_y;
+  if (x < 0) x = 0; if (x >= w) x = w - 1;
+  if (y < 0) y = 0; if (y >= h) y = h - 1;
+  ps4_show_cursor(x, y, ps4_touch_down ? 2 : 1);
+  if (x == ps4_touch_x && y == ps4_touch_y) return 0;
+  ps4_touch_x = x;
+  ps4_touch_y = y;
+  return 1;
+}
+
+static void ps4_pen_event(int action, MidpReentryData* pNewSignal, MidpEvent* pNewMidpEvent)
+{ pNewSignal->waitingFor = UI_SIGNAL;
+  pNewMidpEvent->type = MIDP_PEN_EVENT;
+  pNewMidpEvent->X_POS = ps4_touch_x;
+  pNewMidpEvent->Y_POS = ps4_touch_y;
+  pNewMidpEvent->ACTION = action;
+  if (action != KEYMAP_STATE_DRAGGED)
+     log_input_event("touch", action, ps4_touch_x, ps4_touch_y);
+}
+
+/* Touchpad click; returns 1 if it made a pen event */
+static int ps4_touch_click(int isPress, MidpReentryData* pNewSignal, MidpEvent* pNewMidpEvent)
+{ ps4_touch_read();
+  if (isPress && !ps4_touch_down && ps4_touch_x >= 0)
+     { ps4_touch_down = 1;
+       ps4_show_cursor(ps4_touch_x, ps4_touch_y, 2);
+       ps4_pen_event(KEYMAP_STATE_PRESSED, pNewSignal, pNewMidpEvent);
+       return 1;
+     }
+  if (!isPress && ps4_touch_down)
+     { ps4_touch_down = 0;
+       ps4_show_cursor(ps4_touch_x, ps4_touch_y, 1);
+       ps4_pen_event(KEYMAP_STATE_RELEASED, pNewSignal, pNewMidpEvent);
+       return 1;
+     }
+  return 0;
+}
+
+/* Called while waiting for events: moves the cursor, and drags while the
+ * touchpad is held down. Returns 1 if it made a pen event. */
+static int ps4_touch_poll(MidpReentryData* pNewSignal, MidpEvent* pNewMidpEvent)
+{ Uint32 now = SDL_GetTicks();
+  if (now - ps4_touch_polled < 16) return 0;
+  ps4_touch_polled = now;
+  if (!ps4_touch_read() || !ps4_touch_down) return 0;
+  ps4_pen_event(KEYMAP_STATE_DRAGGED, pNewSignal, pNewMidpEvent);
+  return 1;
+}
 #endif
 
 void checkForSystemSignal(MidpReentryData* pNewSignal, MidpEvent* pNewMidpEvent, jlong timeout) 
 { SDL_Event event;
   jlong currentTime = JVM_JavaMilliSeconds(), stopTime;
   mq_write_marker("QMARKER1: checkForSystemSignal ENTER\n");
+#ifdef PS4
+  /* The touchpad is not an SDL event source: poll it alongside SDL */
+  for (;;)
+     { if (ps4_touch_poll(pNewSignal, pNewMidpEvent)) return;
+       if (SDL_PollEvent(&event))
+          { CheckEvent(&event, pNewSignal, pNewMidpEvent);
+            return;
+          }
+       if (timeout == 0 ||
+           (timeout > 0 && JVM_JavaMilliSeconds() - currentTime >= timeout))
+          return;
+       SDL_Delay(1);
+     }
+#endif
   if (timeout == -1)
      { mq_write_marker("QMARKER2: calling SDL_WaitEvent (BLOCKING)\n");
        if (SDL_WaitEvent(&event))

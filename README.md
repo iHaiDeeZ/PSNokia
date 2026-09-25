@@ -21,6 +21,7 @@ icon and its own saves.
 - **Music and sound effects**, including the old Nokia ringtone-style
   sounds.
 - **Controller rumble** when the game makes the phone vibrate.
+- **Touchscreen games**, played with the DS4 touchpad.
 - **3D games** made with the phones' 3D graphics support.
 - **Saves** kept separately for each game.
 - **Your choice of picture:** keep the phone's shape, stretch to fill the
@@ -71,11 +72,18 @@ installer.
 | Left stick | Arrow keys |
 | Triangle | 0 |
 | L2 / R2 / L3 / R3 | 1 / 3 / 7 / 9 |
-| Touchpad | * |
+| Touchpad | Touchscreen (see below) |
 | Hold L1 or R1 | Cross = 5, Square = *, Circle = #, Triangle = Clear |
 
 As on a Nokia phone, the soft key labels appear in the bottom corners of
 the screen. Circle usually goes back; on a game's main menu it quits.
+
+### Touchscreen games
+
+The touchpad works as the phone's touchscreen. Put a finger on it and a
+cursor appears over the game; click the touchpad to tap there, and keep it
+clicked while sliding your finger to drag (for example, to pull back a
+slingshot).
 
 ### Picture settings
 

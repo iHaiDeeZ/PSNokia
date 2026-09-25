@@ -299,6 +299,49 @@ static void ps4_view_rect(int w, int h, SDL_Rect *dst)
   dst->y = (sh - dst->h) / 2;
 }
 
+/* The touchpad cursor (midp_msgQueue_md.c), in phone pixels. It shows
+ * while a finger is on the touchpad and for a moment after. */
+static int ps4_cursor_x = -1, ps4_cursor_y, ps4_cursor_down;
+static Uint32 ps4_cursor_until, ps4_last_present;
+static void ps4_draw(void);
+
+void ps4_screen_size(int *w, int *h)
+{ *w = gxj_system_screen_buffer.width;
+  *h = gxj_system_screen_buffer.height;
+}
+
+/* state: 0 finger lifted, 1 finger on the touchpad, 2 touching */
+void ps4_show_cursor(int x, int y, int state)
+{ Uint32 now = SDL_GetTicks();
+  int moved = x != ps4_cursor_x || y != ps4_cursor_y || (state == 2) != ps4_cursor_down;
+  if (x < 0) return;
+  ps4_cursor_x = x;
+  ps4_cursor_y = y;
+  ps4_cursor_down = state == 2;
+  if (state != 0) ps4_cursor_until = now + 1500;
+  /* A game that is not repainting would not show the cursor move */
+  if (moved && now - ps4_last_present > 50)
+     { ps4_draw();
+       SDL_UpdateWindowSurface(Native_SDL_Window);
+     }
+}
+
+/* A crosshair at the cursor: white, outlined in black; orange while touching */
+static void ps4_draw_cursor(const SDL_Rect *view, int w, int h)
+{ SDL_Surface *s = Native_SDL_Screen;
+  SDL_Rect r;
+  Uint32 black = SDL_MapRGB(s->format, 0, 0, 0);
+  Uint32 fill = ps4_cursor_down ? SDL_MapRGB(s->format, 255, 140, 0)
+                                : SDL_MapRGB(s->format, 255, 255, 255);
+  int cx = view->x + (2 * ps4_cursor_x + 1) * view->w / (2 * w);
+  int cy = view->y + (2 * ps4_cursor_y + 1) * view->h / (2 * h);
+  if (ps4_cursor_x < 0 || SDL_GetTicks() > ps4_cursor_until) return;
+  r.x = cx - 16; r.y = cy - 3; r.w = 33; r.h = 7; SDL_FillRect(s, &r, black);
+  r.x = cx - 3; r.y = cy - 16; r.w = 7; r.h = 33; SDL_FillRect(s, &r, black);
+  r.x = cx - 15; r.y = cy - 2; r.w = 31; r.h = 5; SDL_FillRect(s, &r, fill);
+  r.x = cx - 2; r.y = cy - 15; r.w = 5; r.h = 31; SDL_FillRect(s, &r, fill);
+}
+
 /* Scales the last converted frame (PS4_Converted) into the window */
 static void ps4_draw(void)
 { SDL_Surface *image = PS4_Converted;
@@ -324,6 +367,8 @@ static void ps4_draw(void)
    * buffered */
   SDL_FillRect(Native_SDL_Screen, NULL, SDL_MapRGB(Native_SDL_Screen->format, 0, 0, 0));
   SDL_BlitScaled(image, NULL, Native_SDL_Screen, &dst);
+  ps4_view_rect(PS4_Converted->w, PS4_Converted->h, &dst);
+  ps4_draw_cursor(&dst, PS4_Converted->w, PS4_Converted->h);
 }
 
 /* Controller shortcuts (midp_msgQueue_md.c). The new setting shows at
@@ -363,6 +408,7 @@ static void ps4_present(SDL_Surface *source)
          SDL_SaveBMP(PS4_Converted, name);
        }
   }
+  ps4_last_present = SDL_GetTicks();
   ps4_draw();
 }
 #endif

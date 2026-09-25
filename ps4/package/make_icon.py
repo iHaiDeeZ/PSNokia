@@ -15,8 +15,15 @@ for candidate in (name, 'icon.png', 'icons/icon.png'):
         pass
 tile = Image.new('RGB', (512, 512), (24, 28, 40))
 if icon is not None:
-    scale = 360 // max(icon.size)
-    icon = icon.resize((icon.size[0] * scale, icon.size[1] * scale), Image.NEAREST)
+    if max(icon.size) >= 96:
+        # Detailed icons of later phones: smooth scaling to about 400px
+        scale = 400 / max(icon.size)
+        icon = icon.resize((round(icon.size[0] * scale), round(icon.size[1] * scale)),
+                           Image.LANCZOS)
+    else:
+        # Small pixel-art icons: a whole-number scale keeps them crisp
+        scale = 360 // max(icon.size)
+        icon = icon.resize((icon.size[0] * scale, icon.size[1] * scale), Image.NEAREST)
     tile.paste(icon, ((512 - icon.size[0]) // 2, (512 - icon.size[1]) // 2), icon)
 tile.save(out)
 print('icon from', name or '(none)', icon.size if icon else '')
