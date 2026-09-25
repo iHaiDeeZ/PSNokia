@@ -58,7 +58,8 @@ public interface DirectGraphics {
     public void fillPolygon(int[] xPoints, int xOffset, int[] yPoints,
             int yOffset, int nPoints, int argbColor);
 
-    public void fillTriangle(int x1, int y1, int x2, int y2, int x3, int y3);
+    public void fillTriangle(int x1, int y1, int x2, int y2, int x3, int y3,
+            int argbColor);
 
     public void getPixels(byte[] pixels, byte[] transparencyMask, int offset,
             int scanlength, int x, int y, int width, int height, int format);

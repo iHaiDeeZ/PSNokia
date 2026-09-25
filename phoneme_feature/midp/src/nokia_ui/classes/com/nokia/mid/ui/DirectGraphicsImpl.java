@@ -166,6 +166,9 @@ class DirectGraphicsImpl implements DirectGraphics {
     }
 
     public void drawTriangle(int x1, int y1, int x2, int y2, int x3, int y3, int argbColor) {
+        if ((argbColor >>> 24) == 0) {
+            return;     // fully transparent
+        }
         int savedColor = g.getColor();
         g.setColor(argbColor & 0x00FFFFFF);
         g.drawLine(x1, y1, x2, y2);
@@ -174,12 +177,12 @@ class DirectGraphicsImpl implements DirectGraphics {
         g.setColor(savedColor);
     }
 
-    public void fillTriangle(int x1, int y1, int x2, int y2, int x3, int y3) {
-        g.fillTriangle(x1, y1, x2, y2, x3, y3);
+    public void fillTriangle(int x1, int y1, int x2, int y2, int x3, int y3, int argbColor) {
+        fillPolygon(new int[] { x1, x2, x3 }, 0, new int[] { y1, y2, y3 }, 0, 3, argbColor);
     }
 
     public void drawPolygon(int[] xPoints, int xOffset, int[] yPoints, int yOffset, int nPoints, int argbColor) {
-        if (nPoints < 2) {
+        if (nPoints < 2 || (argbColor >>> 24) == 0) {
             return;
         }
         int savedColor = g.getColor();
@@ -193,20 +196,76 @@ class DirectGraphicsImpl implements DirectGraphics {
         g.setColor(savedColor);
     }
 
+    /**
+     * Fills any polygon, concave or self-intersecting, by scanlines with the
+     * even-odd rule: on each pixel row, the pixels whose centres lie between
+     * the 1st and 2nd, 3rd and 4th, ... edge crossings are filled. (A fan of
+     * triangles is only right for convex polygons: games draw concave
+     * terrain, and the fan painted outside it.) The colour's alpha blends.
+     */
     public void fillPolygon(int[] xPoints, int xOffset, int[] yPoints, int yOffset, int nPoints, int argbColor) {
-        if (nPoints < 3) {
+        int alpha = argbColor >>> 24;
+        if (nPoints < 3 || alpha == 0) {
             return;
         }
+        int minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
+        for (int i = 0; i < nPoints; i++) {
+            int y = yPoints[yOffset + i];
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        }
+        // Only the rows and columns inside the clip
+        int clipTop = g.getClipY(), clipBottom = clipTop + g.getClipHeight();
+        int clipLeft = g.getClipX(), clipRight = clipLeft + g.getClipWidth();
+        if (minY < clipTop) minY = clipTop;
+        if (maxY > clipBottom) maxY = clipBottom;
+
         int savedColor = g.getColor();
         g.setColor(argbColor & 0x00FFFFFF);
-        // fan triangulation from the first vertex: exact for convex polygons,
-        // a reasonable approximation for concave ones.
-        int x0 = xPoints[xOffset];
-        int y0 = yPoints[yOffset];
-        for (int i = 1; i < nPoints - 1; i++) {
-            g.fillTriangle(x0, y0,
-                           xPoints[xOffset + i], yPoints[yOffset + i],
-                           xPoints[xOffset + i + 1], yPoints[yOffset + i + 1]);
+        int[] crossings = new int[nPoints];
+        int[] span = null;
+        for (int y = minY; y < maxY; y++) {
+            // Where the edges cross the row's pixel centres, y + 1/2 (in
+            // half pixels, to stay in integers), rounded to the first pixel
+            // whose centre is past the crossing
+            int yc = 2 * y + 1;
+            int count = 0;
+            for (int i = 0; i < nPoints; i++) {
+                int j = i + 1 == nPoints ? 0 : i + 1;
+                int y1 = 2 * yPoints[yOffset + i], y2 = 2 * yPoints[yOffset + j];
+                if ((y1 <= yc && yc < y2) || (y2 <= yc && yc < y1)) {
+                    int x1 = xPoints[xOffset + i], x2 = xPoints[xOffset + j];
+                    double x = x1 + (double) (yc - y1) * (x2 - x1) / (y2 - y1);
+                    crossings[count++] = (int) Math.ceil(x - 0.5);
+                }
+            }
+            // Insertion sort: a row has few crossings
+            for (int a = 1; a < count; a++) {
+                int v = crossings[a], b = a - 1;
+                while (b >= 0 && crossings[b] > v) {
+                    crossings[b + 1] = crossings[b];
+                    b--;
+                }
+                crossings[b + 1] = v;
+            }
+            for (int k = 0; k + 1 < count; k += 2) {
+                int from = Math.max(crossings[k], clipLeft);
+                int to = Math.min(crossings[k + 1], clipRight);
+                if (to <= from) {
+                    continue;
+                }
+                if (alpha == 0xFF) {
+                    g.fillRect(from, y, to - from, 1);
+                } else {
+                    if (span == null || span.length < to - from) {
+                        span = new int[Math.max(to - from, 64)];
+                    }
+                    for (int p = 0; p < to - from; p++) {
+                        span[p] = argbColor;
+                    }
+                    g.drawRGB(span, 0, to - from, from, y, to - from, 1, true);
+                }
+            }
         }
         g.setColor(savedColor);
     }
