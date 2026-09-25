@@ -1,53 +1,70 @@
-# PSNokia
+<p align="center">
+  <img src="docs/icon.png" alt="PSNokia" width="220">
+</p>
 
-PSNokia runs J2ME (MIDP) phone games — the Java games of 2000s Nokia and
-other feature phones — natively on a jailbroken **PS4**. It is a port of
-**phoneME** (Sun's open-source CLDC/MIDP runtime) built with the
-[OpenOrbis PS4 toolchain](https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain).
-Each game is packaged as its own PS4 app.
+<h1 align="center">PSNokia</h1>
 
-It grew out of [VitoKia](https://github.com/iHaiDeeZ/VitoKia), the PS Vita
-port of the same code, which is built on
-[j2me-preservation/phoneME-GP2X-SDL](https://github.com/j2me-preservation/phoneME-GP2X-SDL)
-(Sun's `phoneme_feature` `mr2-rel-b23` plus a GP2X/SDL port). The Vita
-README is kept as [README-VITA.md](README-VITA.md).
+<p align="center">
+  Play classic Java phone games on your PS4.
+</p>
 
-## Status
+Remember the games on Nokia and other phones from the 2000s, like Bounce,
+Tower Bloxx, or Gameloft's Rayman and Sonic? PSNokia runs those Java
+(J2ME) games on a jailbroken PS4, played with the DualShock 4 on your TV.
 
-Tested on a real PS4 with GoldHEN:
+Each game installs as its own app on the PS4 home screen, with its own
+icon and its own saves.
 
-| Game | State |
-|---|---|
-| Sonic Advance (Gameloft) | Plays through, with music |
-| Tower Bloxx, City Bloxx (Digital Chocolate / Nokia) | Play, including the 3D (M3G) buildings, with music |
-| Bounce (Nokia) | Plays, at its original 128x128 screen scaled up |
-| Rayman 3 (Gameloft) | Plays, with its Nokia ringtone music and sounds |
+## Features
 
-## What the port does
+- **Runs the original games.** Use the game's `.jar` file as it is.
+- **Music and sound effects**, including the old Nokia ringtone-style
+  sounds.
+- **Controller rumble** when the game makes the phone vibrate.
+- **3D games** made with the phones' 3D graphics support.
+- **Saves** kept separately for each game.
+- **Your choice of picture:** keep the phone's shape, stretch to fill the
+  TV, and smooth out jagged pixels.
 
-- **A 64-bit VM.** phoneME's CLDC-HI VM only supports 32-bit machines and
-  the PS4 runs only 64-bit programs. The VM keeps its 32-bit heap layout;
-  object references are stored as 4-byte "narrow" pointers
-  (`narrow<T>` in `GlobalDefinitions.hpp`) and all VM memory is kept below
-  2GB by a dedicated allocator (`ps4/common/lowheap.c`, on dlmalloc).
-- **A PS4 platform layer** for the VM (`cldc/src/vm/os/ps4`), PCSL and MIDP:
-  SDL2 video scaled to the TV, DS4 input, file access (with a fix for the
-  OpenOrbis headers' `struct stat` layout), timers and threads.
-- **Sound:** WAV (including IMA ADPCM) and tones, plus a software
-  synthesizer for MIDI music
-  (`midp/src/media_vita/reference/native/midi_synth.c`), which most games
-  use. Nokia ringtones (`com.nokia.mid.sound`) are converted to MIDI.
-- **Vibration** on the DS4's rumble motors.
-- **Nokia UI API** (`com.nokia.mid.ui`) and **JSR 184 (M3G)** 3D, which
-  many commercial games need.
-- **Per-game settings:** save data in `/data/psnokia/<TITLE_ID>`, and the
-  phone screen size the game was made for.
+## Which games work?
+
+See the **[compatibility list](COMPATIBILITY.md)**. Games tested so far
+include Sonic Advance, Rayman 3, Tower Bloxx, City Bloxx and Bounce, and
+all of them are playable.
+
+## What you need
+
+- A jailbroken PS4 with [GoldHEN](https://github.com/GoldHEN/GoldHEN)
+- The game's `.jar` file. No games are included; use games you own.
+- A Windows PC, to turn the game into a PS4 package (see below)
+
+## Adding a game
+
+Each game becomes its own PS4 package (`.pkg`). For now you make it on a
+PC, after building PSNokia (see [Building](#building)):
+
+```bash
+ps4/package/make_game.sh path/to/game.jar "Game Title" PSNK00001 176x208
+```
+
+- **Game Title** is the name shown on the PS4 home screen.
+- **PSNK00001** is the game's ID: 4 letters and 5 digits, different for
+  every game (PSNK00002 for the next one, and so on).
+- **176x208** is the screen size the game was made for. Leave it out for
+  the common 240x320. Early Nokia games are often 128x128 and Nokia's
+  Series 60 games 176x208. The [compatibility list](COMPATIBILITY.md) has
+  the size for each tested game. If a game sits in a corner of the screen
+  or is cut off, try another size.
+
+The package is saved in `ps4/out/games/PSNK00001/`. Copy it to your PS4 and
+install it like any other package, for example with GoldHEN's package
+installer.
 
 ## Controls
 
 | DS4 | Phone key |
 |---|---|
-| Cross | Select / fire (centre key) |
+| Cross | Select / fire (the middle key) |
 | Circle | Right soft key: Back / Exit |
 | Square, Options | Left soft key: OK / Options / Menu |
 | D-pad | 2 / 4 / 6 / 8 (up, left, right, down) |
@@ -56,76 +73,54 @@ Tested on a real PS4 with GoldHEN:
 | L2 / R2 / L3 / R3 | 1 / 3 / 7 / 9 |
 | Touchpad | * |
 | Hold L1 or R1 | Cross = 5, Square = *, Circle = #, Triangle = Clear |
-| L1 + Options | Display shape: fit, 4:3, full (16:9), pixel |
-| L1 + Touchpad | Display filter: sharp or smooth (Scale2x) |
 
-As on Nokia phones, the soft key labels are drawn in the bottom corners, and
-Circle usually leaves a screen — on a game's main menu it quits.
+As on a Nokia phone, the soft key labels appear in the bottom corners of
+the screen. Circle usually goes back; on a game's main menu it quits.
 
-The display settings are saved for each game. **fit** keeps the phone's
-proportions, **full** stretches to the whole screen, and **pixel** uses the
-largest whole-number scale, so every phone pixel is the same size.
+### Picture settings
+
+| DS4 | What it does |
+|---|---|
+| L1 + Options | Change the shape: **fit** (the phone's shape), **4:3**, **full** (fills the whole TV), **pixel** (every pixel the same size) |
+| L1 + Touchpad | Switch between **sharp** pixels and **smooth** edges |
+
+Each game remembers its own settings.
+
+## Questions
+
+**Can it run N-Gage games?**
+No. N-Gage games are not Java games; they are programs for the phone's own
+system (Symbian), which PSNokia doesn't run.
+
+**Where are my saves?**
+On the PS4 in `/data/psnokia/<game ID>`, for example
+`/data/psnokia/PSNK00001`. They stay when you reinstall the game.
+
+**A game runs slowly.**
+Many phone games were made to run at 15 to 20 frames per second, so some
+slowness is normal.
 
 ## Building
 
-Everything builds on Windows from an MSYS2 shell.
+For developers. Everything builds on Windows from an MSYS2 shell, and
+needs:
 
-Requirements:
-
-- [OpenOrbis PS4 toolchain](https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain)
+- The [OpenOrbis PS4 toolchain](https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain)
   (tested with v0.5.4) and LLVM/clang 18
-- MSYS2 with the 32-bit MinGW gcc (`mingw-w64-i686-gcc`), used for the
-  VM's host-side ROM generator
-- JDK 6 (e.g. Zulu 6) for CLDC and JDK 8 for MIDP
+- MSYS2 with the 32-bit MinGW gcc (`mingw-w64-i686-gcc`)
+- JDK 6 (e.g. Zulu 6) and JDK 8
 - The .NET runtime, for the toolchain's `PkgTool.Core`
 - Optional: Python with Pillow, to make each game's icon from its own
 
-Set the tool locations if they differ from the defaults in
-[ps4/env.sh](ps4/env.sh) (`OO_PS4_TOOLCHAIN`, `PS4_LLVM`, `JDK6_DIR`,
-`JDK8_DIR`), then:
+Set the tool locations in [ps4/env.sh](ps4/env.sh) if they differ from the
+defaults, then run:
 
 ```bash
 ps4/build_all.sh
 ```
 
-This builds PCSL, the VM and MIDP into `ps4/out`. Then package a game:
-
-```bash
-ps4/package/make_game.sh path/to/game.jar "Game Title" PSNK00001
-```
-
-The title ID (4 letters and 5 digits) must be different for each game. A
-fourth argument sets the phone screen size, for games made for something
-other than a 240x320 portrait screen, for example `128x128` for early Nokia
-games. The package is written to `ps4/out/games/<title-id>/`; install it
-with GoldHEN's package installer.
-
-No games are included. Use games you own.
-
-## Logs and debugging
-
-The app writes `/data/psnokia/renderlog.txt` (the VM and MIDP output,
-exceptions with Java stack traces, crashes, FPS) and a few screenshots as
-`/data/psnokia/frameN.bmp`; fetch them with GoldHEN's FTP
-server. The log is also sent over UDP (port 18194) to the address in
-`PSN_LOG_PC_IP` (see `ps4/common/psn_log.h`) and as a LAN broadcast;
-`ps4/tools/logrecv.py` receives it.
-
-Per-game overrides, as files in `/data/psnokia/<TITLE_ID>/` or
-`/data/psnokia/`:
-
-- `screen.txt` — the phone screen size, e.g. `176x208`
-- `landscape` or `portrait` (empty files) — force the orientation
-- `display.txt` — the display shape and filter, e.g. `full smooth` (written
-  by the controller shortcuts)
-
-## Known limitations
-
-- MIDP is built in debug mode, which is slower than a release build would
-  be; there is no JIT.
-- The MIDI synthesizer approximates General MIDI with simple waveforms.
-- The Vita build shares this source tree but has not been rebuilt since the
-  64-bit changes.
+PSNokia is a port of **phoneME**, Sun's open-source Java runtime for
+phones.
 
 ## License
 
