@@ -130,6 +130,23 @@ static char* vita_find_midlet_class(const char* jarPath) {
         buf[len] = '\0';
         midpFree(data);
 
+        /* Manifest lines longer than 72 bytes continue on the next line,
+         * which starts with a single space: join them first */
+        {
+            char* in = buf;
+            char* out = buf;
+            while (*in) {
+                if (in[0] == '\r' && in[1] == '\n' && in[2] == ' ') {
+                    in += 3;
+                } else if ((in[0] == '\n' || in[0] == '\r') && in[1] == ' ') {
+                    in += 2;
+                } else {
+                    *out++ = *in++;
+                }
+            }
+            *out = '\0';
+        }
+
 #ifdef PS4
         ps4_check_display_size(buf);
 #endif

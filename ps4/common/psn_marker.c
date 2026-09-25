@@ -51,55 +51,89 @@ void write_marker(const char* text, int len) {
 //
 // Logs fatal signals (bad memory access, illegal instruction, the int3 of a
 // failed debug assertion) to the render log with the faulting instruction
-// and a frame-pointer backtrace, then lets the crash proceed. Map addresses
-// back with: llvm-symbolizer --obj=<elf> <address - 0x400000 - 1>
-// (the eboot is loaded at 0x400000).
+// and the return addresses on the stack, then lets the crash proceed. Map
+// addresses back with: llvm-symbolizer --obj=<elf> <address - 0x400000>
+// (the eboot is loaded at 0x400000; subtract 1 more for return addresses).
 
-#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 
-// The PS4 kernel is FreeBSD: its ucontext_t is a 16-byte sigset_t followed
-// by FreeBSD's amd64 mcontext_t, a flat array of 8-byte registers. The
-// OpenOrbis headers describe musl's Linux layout instead, so read by offset.
+// The PS4 kernel is FreeBSD, but the OpenOrbis signal.h describes musl's
+// Linux struct sigaction, flag values and signal numbers. Going through
+// it, the kernel never saw SA_SIGINFO and bus errors were not caught, so
+// crashes went unlogged. Use libkernel's _sigaction with FreeBSD's types.
+struct fbsd_sigaction {
+  void (*handler)(int, void*, void*);
+  int flags;
+  uint32_t mask[4];
+};
+#define FBSD_SA_SIGINFO 0x40
+#define FBSD_SIGILL 4
+#define FBSD_SIGTRAP 5
+#define FBSD_SIGABRT 6
+#define FBSD_SIGFPE 8
+#define FBSD_SIGBUS 10
+#define FBSD_SIGSEGV 11
+#define FBSD_SIGSYS 12
+int _sigaction(int sig, const struct fbsd_sigaction* action,
+               struct fbsd_sigaction* old);
+
+// FreeBSD's siginfo_t has si_addr at byte 24. Its ucontext_t is a 16-byte
+// sigset_t followed by amd64 mcontext_t, a flat array of 8-byte registers.
+#define SI_ADDR(info) (*(void* const*)((const char*)(info) + 24))
 #define UC_REG(uc, index) (((const uint64_t*)((const char*)(uc) + 16))[index])
 #define FBSD_MC_RBP 9
 #define FBSD_MC_RIP 20
 #define FBSD_MC_RSP 23
 
-static void crash_handler(int sig, siginfo_t* info, void* context) {
+// The eboot's code (it is loaded at 0x400000)
+#define CODE_START 0x400000ULL
+#define CODE_END 0x1400000ULL
+
+static void crash_handler(int sig, void* info, void* context) {
+  static int crashed;
   char line[160];
   uint64_t rip = UC_REG(context, FBSD_MC_RIP);
   uint64_t rsp = UC_REG(context, FBSD_MC_RSP);
   uint64_t rbp = UC_REG(context, FBSD_MC_RBP);
-  int n = snprintf(line, sizeof(line),
-                   "CRASH signal %d, fault address %p, rip %p, rsp %p, rbp %p\n",
-                   sig, info ? info->si_addr : NULL, (void*)rip, (void*)rsp,
-                   (void*)rbp);
+  int n;
+  if (crashed++) {
+    return;
+  }
+  n = snprintf(line, sizeof(line),
+               "CRASH signal %d, fault address %p, rip %p, rsp %p, rbp %p\n",
+               sig, info ? SI_ADDR(info) : NULL, (void*)rip, (void*)rsp,
+               (void*)rbp);
   write_marker(line, n);
-  // Follow saved frame pointers while they stay within 1MB above rsp
-  uint64_t* frame = (uint64_t*)rbp;
-  for (int i = 0; i < 16; i++) {
-    uint64_t f = (uint64_t)frame;
-    if (f < rsp || f > rsp + 0x100000 || (f & 7) != 0) {
-      break;
+  // Optimized code keeps no frame pointers: list the return addresses
+  // into our code found on the stack instead (some may be stale)
+  const uint64_t* stack = (const uint64_t*)rsp;
+  int found = 0;
+  for (int i = 0; i < 1024 && found < 24; i++) {
+    if (stack[i] >= CODE_START && stack[i] < CODE_END) {
+      n = snprintf(line, sizeof(line), "  stack+%d: %p\n", i * 8, (void*)stack[i]);
+      write_marker(line, n);
+      found++;
     }
-    n = snprintf(line, sizeof(line), "  called from %p\n", (void*)frame[1]);
-    write_marker(line, n);
-    frame = (uint64_t*)frame[0];
   }
   // Let the fault happen again with the default action (system crash report)
-  signal(sig, SIG_DFL);
+  struct fbsd_sigaction dfl = { 0 };
+  _sigaction(sig, &dfl, NULL);
 }
 
 void psn_install_crash_handler(void) {
-  static const int signals[] = { SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP };
-  struct sigaction action;
-  memset(&action, 0, sizeof(action));
-  // OpenOrbis signal.h: its sa_sigaction macro names the wrong union member
-  action.__sa_handler.__sa_sigaction = crash_handler;
-  action.sa_flags = SA_SIGINFO;
+  static const int signals[] = { FBSD_SIGSEGV, FBSD_SIGBUS, FBSD_SIGILL,
+                                 FBSD_SIGFPE, FBSD_SIGTRAP, FBSD_SIGABRT,
+                                 FBSD_SIGSYS };
+  struct fbsd_sigaction action = { 0 };
+  action.handler = crash_handler;
+  action.flags = FBSD_SA_SIGINFO;
   for (unsigned i = 0; i < sizeof(signals) / sizeof(signals[0]); i++) {
-    sigaction(signals[i], &action, NULL);
+    if (_sigaction(signals[i], &action, NULL) != 0) {
+      char line[64];
+      int n = snprintf(line, sizeof(line), "crash handler: signal %d not caught\n",
+                       signals[i]);
+      write_marker(line, n);
+    }
   }
 }
