@@ -19,6 +19,8 @@
 #include <kni.h>
 #include <SDL.h>
 #include "vita_mix_shim.h"
+#include <renderlog.h>
+#include <stdio.h>
 
 /* In media_vita.c: opens the audio device on first use, 1 when ready */
 int MediaVita_EnsureAudio(void);
@@ -51,13 +53,17 @@ typedef struct MsSong {
     int eom;
     int atEnd;
     int volume;            /* 0..100 */
+    float gain;            /* volume on a loudness curve */
     long long durationUs;
+    int notesPlayed;       /* diagnostics, logged when the player closes */
+    int peak;
+    int logged;
     unsigned char program[16], chVolume[16], expression[16], pan[16];
     int bend[16];          /* -8192..8191 */
     int sustain[16];
 } MsSong;
 
-enum { W_SINE, W_TRI, W_SQUARE, W_PULSE, W_SAW, W_NOISE };
+enum { W_SINE, W_TRI, W_SQUARE, W_PULSE, W_SAW, W_NOISE, W_BELL };
 enum { ST_OFF, ST_ATTACK, ST_DECAY, ST_SUSTAIN, ST_RELEASE };
 
 typedef struct {
@@ -69,7 +75,7 @@ typedef struct {
 /* One entry per General MIDI family (program / 8) */
 static const MsInstrument families[16] = {
     { W_TRI,    0.002f, 0.90f, 0.00f, 0.15f, 1.0f }, /* piano */
-    { W_SINE,   0.001f, 0.45f, 0.00f, 0.20f, 1.0f }, /* chromatic percussion */
+    { W_BELL,   0.001f, 0.60f, 0.00f, 0.25f, 1.4f }, /* chromatic percussion */
     { W_SQUARE, 0.005f, 0.00f, 1.00f, 0.06f, 0.5f }, /* organ */
     { W_SAW,    0.002f, 0.70f, 0.00f, 0.12f, 0.6f }, /* guitar */
     { W_TRI,    0.003f, 1.20f, 0.35f, 0.08f, 1.2f }, /* bass */
@@ -327,6 +333,7 @@ static void release_voice(MsVoice *v) {
 static void note_on_drum(MsSong *s, int note, int vel) {
     MsVoice *v = alloc_voice();
     float decay;
+    s->notesPlayed++;
     memset(v, 0, sizeof(*v));
     v->song = s;
     v->ch = 9;
@@ -393,6 +400,7 @@ static void note_on(MsSong *s, int ch, int note, int vel) {
             voices[i].stage = ST_OFF;
         }
     }
+    s->notesPlayed++;
     ins = &families[s->program[ch] >> 3];
     v = alloc_voice();
     memset(v, 0, sizeof(*v));
@@ -598,6 +606,10 @@ static float oscillator(MsVoice *v) {
     v->phase += v->inc;
     switch (v->wave) {
     case W_SINE:   return sineTable[ph >> 22] * (1.0f / 32767.0f);
+    case W_BELL:
+        /* Glockenspiel, music box, vibraphone: the fundamental plus a
+         * bright partial, which a plain sine lacks */
+        return (sineTable[ph >> 22] * 0.7f + sineTable[(ph * 4) >> 22] * 0.35f) * (1.0f / 32767.0f);
     case W_TRI: {
         float x = (float)(ph >> 8) * (1.0f / 16777216.0f); /* 0..1 */
         return x < 0.5f ? 4.0f * x - 1.0f : 3.0f - 4.0f * x;
@@ -645,7 +657,7 @@ static void render(Sint16 *out, int frames) {
             continue;
         }
         gain = v->amp * (s->chVolume[v->ch] / 127.0f) * (s->expression[v->ch] / 127.0f) *
-               (s->volume / 100.0f) * 14000.0f;
+               s->gain * 14000.0f;
         gr = s->pan[v->ch] / 127.0f;
         gl = 1.0f - gr;
         gl = gain * (gl < 0.5f ? gl * 2.0f : 1.0f);
@@ -677,6 +689,11 @@ static void render(Sint16 *out, int frames) {
             if ((v->stage == ST_SUSTAIN || v->stage == ST_RELEASE) && v->env < 0.001f) {
                 v->stage = ST_OFF;
                 break;
+            }
+            {
+                int level = (int)(x * v->env * gain);
+                if (level < 0) level = -level;
+                if (level > s->peak) s->peak = level;
             }
             mixL[f] += (int)(x * v->env * gl);
             mixR[f] += (int)(x * v->env * gr);
@@ -728,6 +745,19 @@ static void init_synth(void) {
 
 /* --- KNI: javax.microedition.media.MidiFilePlayer ----------------------- */
 
+/* One line per played song: whether it made any sound (Java threads only) */
+static void log_song(MsSong *s, const char *why) {
+    char line[160];
+    int n;
+    if (s->logged) {
+        return;
+    }
+    s->logged = 1;
+    n = snprintf(line, sizeof(line), "MIDI %s: %d bytes, %.2fs, volume %d, %d notes, peak %d\n",
+                 why, s->len, s->durationUs / 1e6, s->volume, s->notesPlayed, s->peak);
+    RENDERLOG_WRITE(line, n);
+}
+
 KNIEXPORT KNI_RETURNTYPE_INT Java_javax_microedition_media_MidiFilePlayer_nLoad() {
     MsSong *s = NULL;
     int slot = -1, i;
@@ -761,6 +791,7 @@ KNIEXPORT KNI_RETURNTYPE_INT Java_javax_microedition_media_MidiFilePlayer_nLoad(
                 s = NULL;
             } else {
                 s->volume = 100;
+                s->gain = 1.0f;
                 s->durationUs = scan_duration(s);
                 rewind_song(s);
                 SDL_LockAudio();
@@ -820,6 +851,9 @@ KNIEXPORT KNI_RETURNTYPE_VOID Java_javax_microedition_media_MidiFilePlayer_nClos
     MsSong *s = song_param(1);
     int i;
     if (s != NULL) {
+        if (s->notesPlayed > 0) {
+            log_song(s, "closed");
+        }
         SDL_LockAudio();
         release_song_voices(s, 1);
         for (i = 0; i < MS_MAX_VOICES; i++) {
@@ -842,6 +876,9 @@ KNIEXPORT KNI_RETURNTYPE_VOID Java_javax_microedition_media_MidiFilePlayer_nClos
 
 KNIEXPORT KNI_RETURNTYPE_INT Java_javax_microedition_media_MidiFilePlayer_nCheckEOM() {
     MsSong *s = song_param(1);
+    if (s != NULL && s->eom) {
+        log_song(s, "ended");
+    }
     KNI_ReturnInt(s != NULL ? s->eom : 1);
 }
 
@@ -850,6 +887,9 @@ KNIEXPORT KNI_RETURNTYPE_VOID Java_javax_microedition_media_MidiFilePlayer_nSetV
     jint level = KNI_GetParameterAsInt(2);
     if (s != NULL) {
         s->volume = level < 0 ? 0 : level > 100 ? 100 : level;
+        /* Games treat the level as loudness: 40 is quieter, not nearly
+         * inaudible, so follow a curve rather than scaling amplitude */
+        s->gain = sqrtf(s->volume / 100.0f);
     }
     KNI_ReturnVoid();
 }
