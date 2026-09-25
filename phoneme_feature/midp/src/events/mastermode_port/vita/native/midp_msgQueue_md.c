@@ -224,6 +224,10 @@ static int ps4_to_vita_button(int btn)
     default: return -1;
   }
 }
+
+/* Display settings shortcuts (lfjport_st_export.c) */
+void ps4_display_next_view(void);
+void ps4_display_toggle_smooth(void);
 #endif
 
 void JoystickCheck(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNewMidpEvent)
@@ -243,6 +247,13 @@ void JoystickCheck(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNe
     log_input_event("pss_after", 0, 0, 0);
 #endif
 #ifdef PS4
+  } else if (shiftHeld && (btn == 7 || btn == 6)) {
+    /* L1 + Options / L1 + Touchpad: display shape / filter, not keys for
+     * the game (lfjport_st_export.c) */
+    if (isPress) {
+      if (btn == 7) ps4_display_next_view();
+      else ps4_display_toggle_smooth();
+    }
   } else {
     /* DS4 layout: Cross confirms and Circle is the right soft key (usually
      * Back/Exit), matching the console's own convention; Square is the

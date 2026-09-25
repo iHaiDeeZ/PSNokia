@@ -70,6 +70,7 @@ SDL_Surface     *Native_SDL_Screen, *Native_SDL_HScreen, *Native_SDL_VScreen;
 #define PS4_SCREEN_WIDTH  1920
 #define PS4_SCREEN_HEIGHT 1080
 static SDL_Surface *PS4_Converted;
+static void ps4_display_load(void);
 #endif
 SDL_Window      *Native_SDL_Window;
 static jboolean  Native_SDL_ScreenOrientation;
@@ -118,6 +119,7 @@ int lfjport_ui_init()
          OriginalHeight = h;
        }
   }
+  ps4_display_load();
 #endif
   InitGP2XKeys();
 #ifdef PS4
@@ -202,11 +204,150 @@ static void fps_report(void) {
 }
 
 #ifdef PS4
-/* Scales the current MIDP framebuffer to the largest centered rectangle
- * with the same aspect ratio that fits the 1080p window. */
+/*
+ * How the phone screen is shown on the TV, changed live from the
+ * controller (L1 + Options: shape, L1 + Touchpad: filter) and kept per
+ * game in $MIDP_HOME/display.txt, e.g. "full smooth". The game always
+ * draws at its own resolution; these only change the scaling.
+ *   fit   - as large as fits, original aspect ratio
+ *   4:3   - stretched to a 4:3 box
+ *   full  - stretched to the whole 16:9 screen
+ *   pixel - largest whole-number scale (every phone pixel the same size)
+ *   sharp - plain pixel scaling; smooth - Scale2x first (rounded edges)
+ */
+enum { VIEW_FIT, VIEW_4_3, VIEW_FULL, VIEW_PIXEL, VIEW_COUNT };
+static const char *const view_names[VIEW_COUNT] = { "fit", "4:3", "full", "pixel" };
+static int ps4_view = VIEW_FIT;
+static int ps4_smooth;
+static SDL_Surface *PS4_Smoothed;
+
+void psn_scale2x(const Uint32 *src, int w, int h, int spitch,
+                 Uint32 *dst, int dpitch);
+
+static void ps4_display_path(char *path, int size)
+{ const char *home = getenv("MIDP_HOME");
+  snprintf(path, size, "%s/display.txt", home != NULL ? home : "/data/psnokia");
+}
+
+static void ps4_display_load(void)
+{ char path[128], word[16], buf[64];
+  int n;
+  FILE *f;
+  ps4_display_path(path, sizeof(path));
+  f = fopen(path, "r");
+  if (f == NULL) f = fopen("/data/psnokia/display.txt", "r"); /* all games */
+  if (f != NULL)
+     { while (fscanf(f, "%15s", word) == 1)
+          { int i;
+            for (i = 0; i < VIEW_COUNT; i++)
+                 if (strcmp(word, view_names[i]) == 0) ps4_view = i;
+            if (strcmp(word, "smooth") == 0) ps4_smooth = 1;
+            if (strcmp(word, "sharp") == 0) ps4_smooth = 0;
+          }
+       fclose(f);
+     }
+  n = snprintf(buf, sizeof(buf), "DISPLAY at start: %s %s\n",
+               view_names[ps4_view], ps4_smooth ? "smooth" : "sharp");
+  RENDERLOG_WRITE(buf, n);
+}
+
+static void ps4_display_save(void)
+{ char path[128], buf[64];
+  int n;
+  FILE *f;
+  ps4_display_path(path, sizeof(path));
+  f = fopen(path, "w");
+  if (f != NULL)
+     { fprintf(f, "%s %s\n", view_names[ps4_view], ps4_smooth ? "smooth" : "sharp");
+       fclose(f);
+     }
+  n = snprintf(buf, sizeof(buf), "DISPLAY: %s %s\n", view_names[ps4_view],
+               ps4_smooth ? "smooth" : "sharp");
+  RENDERLOG_WRITE(buf, n);
+}
+
+/* The rectangle of the 1080p window the phone screen is scaled into */
+static void ps4_view_rect(int w, int h, SDL_Rect *dst)
+{ int sw = Native_SDL_Screen->w, sh = Native_SDL_Screen->h;
+  switch (ps4_view)
+     { case VIEW_FULL:
+            dst->w = sw;
+            dst->h = sh;
+            break;
+       case VIEW_4_3:
+            dst->h = sh;
+            dst->w = sh * 4 / 3;
+            break;
+       case VIEW_PIXEL:
+          { int scale = sw / w < sh / h ? sw / w : sh / h;
+            if (scale < 1) scale = 1;
+            dst->w = w * scale;
+            dst->h = h * scale;
+            break;
+          }
+       default:
+            if (w * sh > h * sw)
+               { dst->w = sw;
+                 dst->h = h * sw / w;
+               }
+            else
+               { dst->h = sh;
+                 dst->w = w * sh / h;
+               }
+     }
+  dst->x = (sw - dst->w) / 2;
+  dst->y = (sh - dst->h) / 2;
+}
+
+/* Scales the last converted frame (PS4_Converted) into the window */
+static void ps4_draw(void)
+{ SDL_Surface *image = PS4_Converted;
+  SDL_Rect dst;
+  if (image == NULL) return;
+  if (ps4_smooth && image->format->BytesPerPixel == 4)
+     { if (PS4_Smoothed == NULL || PS4_Smoothed->w != image->w * 2 ||
+           PS4_Smoothed->h != image->h * 2)
+          { if (PS4_Smoothed != NULL) SDL_FreeSurface(PS4_Smoothed);
+            PS4_Smoothed = SDL_CreateRGBSurface(0, image->w * 2, image->h * 2, 32,
+                 image->format->Rmask, image->format->Gmask,
+                 image->format->Bmask, image->format->Amask);
+          }
+       if (PS4_Smoothed != NULL)
+          { psn_scale2x((const Uint32 *)image->pixels, image->w, image->h,
+                        image->pitch / 4, (Uint32 *)PS4_Smoothed->pixels,
+                        PS4_Smoothed->pitch / 4);
+            image = PS4_Smoothed;
+          }
+     }
+  ps4_view_rect(PS4_Converted->w, PS4_Converted->h, &dst);
+  /* Clear the borders every frame: the window surface may be double
+   * buffered */
+  SDL_FillRect(Native_SDL_Screen, NULL, SDL_MapRGB(Native_SDL_Screen->format, 0, 0, 0));
+  SDL_BlitScaled(image, NULL, Native_SDL_Screen, &dst);
+}
+
+/* Controller shortcuts (midp_msgQueue_md.c). The new setting shows at
+ * once, even when the game is not repainting, and is saved. */
+static void ps4_display_changed(void)
+{ ps4_display_save();
+  ps4_draw();
+  SDL_UpdateWindowSurface(Native_SDL_Window);
+  SDL_SaveBMP(Native_SDL_Screen, "/data/psnokia/display.bmp");
+}
+
+void ps4_display_next_view(void)
+{ ps4_view = (ps4_view + 1) % VIEW_COUNT;
+  ps4_display_changed();
+}
+
+void ps4_display_toggle_smooth(void)
+{ ps4_smooth = !ps4_smooth;
+  ps4_display_changed();
+}
+
+/* Converts the current MIDP framebuffer and shows it */
 static void ps4_present(SDL_Surface *source)
-{ SDL_Rect dst;
-  if (PS4_Converted == NULL || PS4_Converted->w != source->w ||
+{ if (PS4_Converted == NULL || PS4_Converted->w != source->w ||
       PS4_Converted->h != source->h)
      { if (PS4_Converted != NULL) SDL_FreeSurface(PS4_Converted);
        PS4_Converted = SDL_ConvertSurface(source, Native_SDL_Screen->format, 0);
@@ -222,20 +363,7 @@ static void ps4_present(SDL_Surface *source)
          SDL_SaveBMP(PS4_Converted, name);
        }
   }
-  if (source->w * Native_SDL_Screen->h > source->h * Native_SDL_Screen->w)
-     { dst.w = Native_SDL_Screen->w;
-       dst.h = source->h * Native_SDL_Screen->w / source->w;
-     }
-  else
-     { dst.h = Native_SDL_Screen->h;
-       dst.w = source->w * Native_SDL_Screen->h / source->h;
-     }
-  dst.x = (Native_SDL_Screen->w - dst.w) / 2;
-  dst.y = (Native_SDL_Screen->h - dst.h) / 2;
-  /* Clear the borders every frame: the window surface may be double
-   * buffered */
-  SDL_FillRect(Native_SDL_Screen, NULL, SDL_MapRGB(Native_SDL_Screen->format, 0, 0, 0));
-  SDL_BlitScaled(PS4_Converted, NULL, Native_SDL_Screen, &dst);
+  ps4_draw();
 }
 #endif
 
