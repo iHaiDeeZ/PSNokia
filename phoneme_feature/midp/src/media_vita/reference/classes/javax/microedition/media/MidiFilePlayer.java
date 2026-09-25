@@ -24,6 +24,7 @@ public class MidiFilePlayer extends ABBBasicPlayer implements VolumeControl {
     private byte[] data;
     private int songId;
     private Thread checkThread;
+    private volatile int playGeneration;
     private int volumeLevel = 100;
     private boolean muted;
 
@@ -67,16 +68,22 @@ public class MidiFilePlayer extends ABBBasicPlayer implements VolumeControl {
         return true;
     }
 
+    protected boolean doHasEnded() {
+        return songId != 0 && nCheckEOM(songId) != 0;
+    }
+
     protected void doPostStart() {
+        final int generation = ++playGeneration;
         checkThread = new Thread(new Runnable() {
             public void run() {
-                while (state == Player.STARTED) {
+                // A restart supersedes this watcher
+                while (state == Player.STARTED && generation == playGeneration) {
                     if (nCheckEOM(songId) != 0) {
                         sendEvent(PlayerListener.END_OF_MEDIA, new Long(getMediaTime()));
                         return;
                     }
                     try {
-                        Thread.sleep(50);
+                        Thread.sleep(10);
                     } catch (InterruptedException e) {
                         return;
                     }

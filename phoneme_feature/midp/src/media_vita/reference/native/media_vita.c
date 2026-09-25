@@ -95,6 +95,21 @@ static void FreeChannel(int chan)
      }
 }
 
+/* Halts and frees *chan if it still belongs to owner, then clears it. A
+ * player's channel is freed by the mixer's finished callback when its sound
+ * ends, and may already be reused by another player: releasing it blindly
+ * would cut that sound off (and its player would never see its end). */
+static void ReleaseOwnedChannel(int *chan, void *owner)
+{ SDL_LockAudio();
+  if (*chan >= 0 && *chan < MediaVita_NumChannel &&
+      MediaVita_Channels[*chan].Assigned && MediaVita_Channels[*chan].Data == owner)
+     { Mix_HaltChannel(*chan);
+       FreeChannel(*chan);
+     }
+  *chan = -1;
+  SDL_UnlockAudio();
+}
+
 /*****************************************************************************/
 /* Tone playback (Manager.playTone) */
 
@@ -168,12 +183,15 @@ KNIEXPORT KNI_RETURNTYPE_VOID Java_javax_microedition_media_Manager_nPlayTone()
   if (AudioSubsystemReady == 1)
      { NTP = CreateToneChunk(Note, Volume);
        if (NTP != NULL)
-          { NTP->Chan = ReserveChannel();
+          { SDL_LockAudio();
+            NTP->Chan = ReserveChannel();
+            if (NTP->Chan != -1)
+               { MediaVita_Channels[NTP->Chan].Data = NTP;
+                 MediaVita_Channels[NTP->Chan].Callback = TonePlayerCallback;
+                 Mix_PlayChannelTimed(NTP->Chan, &NTP->MC, -1, Duration);
+               }
+            SDL_UnlockAudio();
             if (NTP->Chan == -1) FreeToneChunk(NTP);
-            else { MediaVita_Channels[NTP->Chan].Data = NTP;
-                   MediaVita_Channels[NTP->Chan].Callback = TonePlayerCallback;
-                   Mix_PlayChannelTimed(NTP->Chan, &NTP->MC, -1, Duration);
-                 }
           }
      }
   KNI_ReturnVoid();
@@ -454,7 +472,9 @@ KNIEXPORT KNI_RETURNTYPE_INT Java_javax_microedition_media_ToneSequencePlayer_nT
   int ret=0;
   NMP = (struct NativeTSPlayer *)id;
   if (AudioSubsystemReady != 1) { KNI_ReturnInt(-1); }
+  SDL_LockAudio();
   NMP->Chan = ReserveChannel();
+  SDL_UnlockAudio();
   if (NMP->Chan == -1) ret = -1;
   else
      { MediaVita_Channels[NMP->Chan].Data = NMP;
@@ -484,11 +504,7 @@ KNIEXPORT KNI_RETURNTYPE_VOID Java_javax_microedition_media_ToneSequencePlayer_n
   jint id = KNI_GetParameterAsInt(1);
   NMP = (struct NativeTSPlayer *)id;
   NMP->Stopped = 1;
-  if (NMP->Chan >= 0)
-     { Mix_HaltChannel(NMP->Chan);
-       FreeChannel(NMP->Chan);
-       NMP->Chan = -1;
-     }
+  ReleaseOwnedChannel(&NMP->Chan, NMP);
   KNI_ReturnVoid();
 }
 
@@ -497,11 +513,7 @@ KNIEXPORT KNI_RETURNTYPE_VOID Java_javax_microedition_media_ToneSequencePlayer_n
   jint id = KNI_GetParameterAsInt(1);
   NMP = (struct NativeTSPlayer *)id;
   NMP->Stopped = 1;
-  if (NMP->Chan != -1)
-     { Mix_HaltChannel(NMP->Chan);
-       FreeChannel(NMP->Chan);
-       NMP->Chan = -1;
-     }
+  ReleaseOwnedChannel(&NMP->Chan, NMP);
   if (NMP->Loaded != NULL)
      { free(NMP->Loaded->Buffer);
        free(NMP->Loaded->Sequence);
@@ -643,10 +655,62 @@ static int DecodeImaAdpcmWav(const unsigned char *data, unsigned int size, SDL_A
   return 1;
 }
 
+/*
+ * Converts 8/16-bit mono/stereo PCM at any rate to the mixer's S16 stereo
+ * at SAMPLE_FREQ, resampling by linear interpolation into a malloc'd
+ * buffer. The old SDL2 in the OpenOrbis toolchain predates SDL's rework of
+ * its resampler, whose output for ratios like 8000 -> 22050 is unreliable.
+ * Returns 1 on success, 0 for formats left to SDL_BuildAudioCVT.
+ */
+static int ConvertToMixFormat(const SDL_AudioSpec *spec, const Uint8 *in, Uint32 len,
+                              Uint8 **out, Uint32 *outLen)
+{ int bytes, ch = spec->channels, frames, outFrames, i;
+  Sint16 *dst;
+  if (spec->format == AUDIO_U8 || spec->format == AUDIO_S8) bytes = 1;
+  else if (spec->format == AUDIO_S16LSB) bytes = 2;
+  else return 0;
+  if (ch < 1 || ch > 2 || spec->freq <= 0) return 0;
+  frames = (int)(len / (Uint32)(bytes * ch));
+  if (frames <= 0) return 0;
+  outFrames = (int)((long long)frames * SAMPLE_FREQ / spec->freq);
+  if (outFrames <= 0) outFrames = 1;
+  dst = (Sint16 *)malloc((size_t)outFrames * 4);
+  if (dst == NULL) return 0;
+  for (i = 0; i < outFrames; i++)
+     { /* Source position in 16.16 fixed point */
+       long long pos = (long long)i * spec->freq * 65536 / SAMPLE_FREQ;
+       int f0 = (int)(pos >> 16), frac = (int)(pos & 0xFFFF), c;
+       int f1 = f0 + 1 < frames ? f0 + 1 : f0;
+       int v[2];
+       for (c = 0; c < ch; c++)
+          { int a, b;
+            if (bytes == 1)
+               { a = in[f0 * ch + c];
+                 b = in[f1 * ch + c];
+                 if (spec->format == AUDIO_U8) { a = (a - 128) << 8; b = (b - 128) << 8; }
+                 else { a = (Sint8)a << 8; b = (Sint8)b << 8; }
+               }
+            else
+               { a = (Sint16)(in[(f0 * ch + c) * 2] | (in[(f0 * ch + c) * 2 + 1] << 8));
+                 b = (Sint16)(in[(f1 * ch + c) * 2] | (in[(f1 * ch + c) * 2 + 1] << 8));
+               }
+            v[c] = a + (int)(((long long)(b - a) * frac) >> 16);
+          }
+       dst[i * 2] = (Sint16)v[0];
+       dst[i * 2 + 1] = (Sint16)(ch == 2 ? v[1] : v[0]);
+     }
+  *out = (Uint8 *)dst;
+  *outLen = (Uint32)outFrames * 4;
+  return 1;
+}
+
 static void WavPlayerCallback(int chan)
 { struct NativeWavPlayer *NWP = (struct NativeWavPlayer *)MediaVita_Channels[chan].Data;
-  NWP->CheckEOM = 1;
   FreeChannel(chan);
+  if (NWP != NULL && NWP->Chan == chan)
+     { NWP->Chan = -1;
+       NWP->CheckEOM = 1;
+     }
 }
 
 KNIEXPORT KNI_RETURNTYPE_INT Java_javax_microedition_media_GenericPlayer_nWavLoad()
@@ -681,6 +745,10 @@ KNIEXPORT KNI_RETURNTYPE_INT Java_javax_microedition_media_GenericPlayer_nWavLoa
                          { NWP->MC.abuf = wav_buf;
                            NWP->MC.alen = wav_len;
                            NWP->OwnsSdlWav = 1;
+                         }
+                      else if (ConvertToMixFormat(&wav_spec, wav_buf, wav_len, &NWP->MC.abuf, &NWP->MC.alen))
+                         { NWP->OwnsSdlWav = 0;
+                           SDL_FreeWAV(wav_buf);
                          }
                       else
                          { SDL_AudioCVT cvt;
@@ -720,7 +788,10 @@ KNIEXPORT KNI_RETURNTYPE_INT Java_javax_microedition_media_GenericPlayer_nWavSta
   int ret = -1;
   NWP = (struct NativeWavPlayer *)id;
   if (NWP != NULL && AudioSubsystemReady == 1)
-     { NWP->Chan = ReserveChannel();
+     { /* Starting a sound that is still playing restarts it */
+       ReleaseOwnedChannel(&NWP->Chan, NWP);
+       SDL_LockAudio();
+       NWP->Chan = ReserveChannel();
        if (NWP->Chan != -1)
           { MediaVita_Channels[NWP->Chan].Data = NWP;
             MediaVita_Channels[NWP->Chan].Callback = WavPlayerCallback;
@@ -728,6 +799,7 @@ KNIEXPORT KNI_RETURNTYPE_INT Java_javax_microedition_media_GenericPlayer_nWavSta
             Mix_PlayChannel(NWP->Chan, &NWP->MC, (int)loops);
             ret = 0;
           }
+       SDL_UnlockAudio();
      }
   KNI_ReturnInt(ret);
 }
@@ -736,11 +808,8 @@ KNIEXPORT KNI_RETURNTYPE_VOID Java_javax_microedition_media_GenericPlayer_nWavSt
 { struct NativeWavPlayer *NWP;
   jint id = KNI_GetParameterAsInt(1);
   NWP = (struct NativeWavPlayer *)id;
-  if (NWP != NULL && NWP->Chan != -1)
-     { Mix_HaltChannel(NWP->Chan);
-       FreeChannel(NWP->Chan);
-       NWP->Chan = -1;
-     }
+  if (NWP != NULL)
+     ReleaseOwnedChannel(&NWP->Chan, NWP);
   KNI_ReturnVoid();
 }
 
@@ -748,11 +817,8 @@ KNIEXPORT KNI_RETURNTYPE_VOID Java_javax_microedition_media_GenericPlayer_nWavDe
 { struct NativeWavPlayer *NWP;
   jint id = KNI_GetParameterAsInt(1);
   NWP = (struct NativeWavPlayer *)id;
-  if (NWP != NULL && NWP->Chan != -1)
-     { Mix_HaltChannel(NWP->Chan);
-       FreeChannel(NWP->Chan);
-       NWP->Chan = -1;
-     }
+  if (NWP != NULL)
+     ReleaseOwnedChannel(&NWP->Chan, NWP);
   KNI_ReturnVoid();
 }
 
@@ -761,10 +827,7 @@ KNIEXPORT KNI_RETURNTYPE_VOID Java_javax_microedition_media_GenericPlayer_nWavCl
   jint id = KNI_GetParameterAsInt(1);
   NWP = (struct NativeWavPlayer *)id;
   if (NWP != NULL)
-     { if (NWP->Chan != -1)
-          { Mix_HaltChannel(NWP->Chan);
-            FreeChannel(NWP->Chan);
-          }
+     { ReleaseOwnedChannel(&NWP->Chan, NWP);
        if (NWP->MC.abuf != NULL)
           { if (NWP->OwnsSdlWav) SDL_FreeWAV(NWP->MC.abuf);
             else free(NWP->MC.abuf);

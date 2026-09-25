@@ -28,6 +28,10 @@ int MediaVita_EnsureAudio(void);
 #define MS_MAX_TRACKS 64
 #define MS_MAX_VOICES 40
 #define MS_BLOCK      64   /* samples rendered between sequencer steps */
+/* Full-scale voice level. Phone MIDI synths ran well below the level of
+ * sampled (WAV) sound effects, and games balance their music against
+ * effects on that basis, so leave the same headroom. */
+#define MS_VOICE_LEVEL 7000.0f
 
 typedef struct {
     const unsigned char *data;
@@ -657,7 +661,7 @@ static void render(Sint16 *out, int frames) {
             continue;
         }
         gain = v->amp * (s->chVolume[v->ch] / 127.0f) * (s->expression[v->ch] / 127.0f) *
-               s->gain * 14000.0f;
+               s->gain * MS_VOICE_LEVEL;
         gr = s->pan[v->ch] / 127.0f;
         gl = 1.0f - gr;
         gl = gain * (gl < 0.5f ? gl * 2.0f : 1.0f);

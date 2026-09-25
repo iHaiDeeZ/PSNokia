@@ -43,12 +43,21 @@ public class DeviceControl {
     }
 
     public static void startVibra(int freq, long duration) {
+        if (freq < 0 || freq > 100 || duration < 0) {
+            throw new IllegalArgumentException();
+        }
+        nVibrate(freq, duration);
     }
 
     public static void stopVibra() {
+        nVibrate(0, 0);
     }
 
     public static boolean isVibraSupported() {
-        return false;
+        return nVibrate(0, 0);
     }
+
+    // Vibrates (the PS4 controller's rumble) at strength freq for duration
+    // ms; 0 stops. Returns whether vibration is supported.
+    private static native boolean nVibrate(int freq, long duration);
 }

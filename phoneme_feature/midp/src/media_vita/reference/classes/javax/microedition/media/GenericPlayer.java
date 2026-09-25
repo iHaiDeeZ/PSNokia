@@ -51,6 +51,7 @@ public class GenericPlayer extends ABBBasicPlayer implements VolumeControl {
     private byte[] data;
     private int wavId;
     private Thread checkThread;
+    private volatile int playGeneration;
     private int volumeLevel = 100;
 
     public GenericPlayer(String contentType) {
@@ -91,15 +92,28 @@ public class GenericPlayer extends ABBBasicPlayer implements VolumeControl {
         return true;
     }
 
+    protected boolean doHasEnded() {
+        return wavId != 0 && nWavCheckEOM(wavId) != 0;
+    }
+
     protected void doPostStart() {
+        final int generation = ++playGeneration;
         checkThread = new Thread(new Runnable() {
             public void run() {
-                while (state == Player.STARTED) {
+                // A restart supersedes this watcher
+                while (state == Player.STARTED && generation == playGeneration) {
                     if (nWavCheckEOM(wavId) != 0) {
                         sendEvent(PlayerListener.END_OF_MEDIA, new Long(getMediaTime()));
                         return;
                     }
-                    Thread.yield();
+                    // Poll often enough that a game re-triggering an effect
+                    // right after it ends sees the end first, without the
+                    // busy loop (Thread.yield) competing with the game
+                    try {
+                        Thread.sleep(10);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
                 }
             }
         });

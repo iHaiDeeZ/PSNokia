@@ -31,6 +31,7 @@
 
 #include "SDL.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <renderlog.h>
 
@@ -394,6 +395,66 @@ void CheckEvent(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNewMi
  *       caller immediately regardless of the if a signal was sent.
  *  -1 = Do not timeout. Block until a signal is sent to MIDP.
  */
+#ifdef PS4
+/*
+ * Phone vibration (Display.vibrate, Nokia's DeviceControl.startVibra) as
+ * DS4 rumble. A timer thread turns the motors off when the duration is up;
+ * a newer request supersedes it.
+ */
+#include <pthread.h>
+#include <unistd.h>
+#include <orbis/Pad.h>
+#include <orbis/UserService.h>
+
+static int ps4_pad_handle = -1;
+static volatile unsigned int ps4_vibra_generation;
+
+static void ps4_set_motors(int level)
+{ OrbisPadVibeParam param;
+  if (ps4_pad_handle < 0)
+     { int32_t user = -1;
+       /* The pad SDL opened for the logged-in user */
+       if (sceUserServiceGetInitialUser(&user) == 0)
+          ps4_pad_handle = scePadGetHandle(user, 0, 0);
+       if (ps4_pad_handle < 0) return;
+     }
+  param.lgMotor = (uint8_t)level;
+  param.smMotor = (uint8_t)level;
+  scePadSetVibration(ps4_pad_handle, &param);
+}
+
+struct ps4_vibra_timer { unsigned int generation; int ms; };
+
+static void *ps4_vibra_stop(void *arg)
+{ struct ps4_vibra_timer *t = (struct ps4_vibra_timer *)arg;
+  usleep((useconds_t)t->ms * 1000);
+  if (t->generation == ps4_vibra_generation) ps4_set_motors(0);
+  free(t);
+  return NULL;
+}
+
+/* level 0..255; level or ms <= 0 stops */
+void ps4_vibrate(int level, int ms)
+{ struct ps4_vibra_timer *t;
+  pthread_t thread;
+  unsigned int generation = ++ps4_vibra_generation;
+  if (level <= 0 || ms <= 0)
+     { ps4_set_motors(0);
+       return;
+     }
+  if (level > 255) level = 255;
+  ps4_set_motors(level);
+  t = (struct ps4_vibra_timer *)malloc(sizeof(*t));
+  if (t == NULL) return;
+  t->generation = generation;
+  t->ms = ms;
+  if (pthread_create(&thread, NULL, ps4_vibra_stop, t) == 0)
+     pthread_detach(thread);
+  else
+     free(t);
+}
+#endif
+
 void checkForSystemSignal(MidpReentryData* pNewSignal, MidpEvent* pNewMidpEvent, jlong timeout) 
 { SDL_Event event;
   jlong currentTime = JVM_JavaMilliSeconds(), stopTime;

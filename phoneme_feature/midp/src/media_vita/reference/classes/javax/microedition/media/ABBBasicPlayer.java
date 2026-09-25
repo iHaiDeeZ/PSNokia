@@ -495,7 +495,14 @@ public abstract class ABBBasicPlayer implements Player {
         chkClosed(false);
 
         if (state >= STARTED) {
-            return;
+            // A short sound that has already ended, but whose END_OF_MEDIA
+            // is still on its way, restarts rather than ignoring the call:
+            // games re-trigger effects as soon as they are over
+            if (!doHasEnded()) {
+                return;
+            }
+            state = PREFETCHED;
+            EOM = true;
         }
 
         if (state < PREFETCHED) {
@@ -538,6 +545,17 @@ public abstract class ABBBasicPlayer implements Player {
      * @return    Description of the Return Value
      */
     protected abstract boolean doStart();
+
+    /**
+     * Whether a started Player's media has actually finished playing,
+     * before its END_OF_MEDIA event has been delivered. Players that can
+     * tell override this.
+     *
+     * @return true if playback has ended
+     */
+    protected boolean doHasEnded() {
+        return false;
+    }
 
 
     /**
