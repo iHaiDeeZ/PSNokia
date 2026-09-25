@@ -88,6 +88,9 @@ Java_com_nokia_mid_ui_DeviceControl_nVibrate() {
     jint freq = KNI_GetParameterAsInt(1);
     jlong duration = KNI_GetParameterAsLong(2);
 #ifdef PS4
+    if (freq < 0) {
+        KNI_ReturnBoolean(KNI_TRUE); /* support query only */
+    }
     if (freq > 100) freq = 100;
     if (duration > 10000) duration = 10000;
     ps4_vibrate(freq > 0 ? 80 + freq * 175 / 100 : 0, (int)duration);

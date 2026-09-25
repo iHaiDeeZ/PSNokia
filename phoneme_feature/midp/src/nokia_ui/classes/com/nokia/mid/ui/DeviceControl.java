@@ -54,10 +54,10 @@ public class DeviceControl {
     }
 
     public static boolean isVibraSupported() {
-        return nVibrate(0, 0);
+        return nVibrate(-1, 0);
     }
 
     // Vibrates (the PS4 controller's rumble) at strength freq for duration
-    // ms; 0 stops. Returns whether vibration is supported.
+    // ms; 0 stops, -1 only asks. Returns whether vibration is supported.
     private static native boolean nVibrate(int freq, long duration);
 }

@@ -407,6 +407,7 @@ void CheckEvent(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNewMi
 #include <orbis/UserService.h>
 
 static int ps4_pad_handle = -1;
+static int ps4_vibra_result;  /* last scePadSetVibration result, for the log */
 static volatile unsigned int ps4_vibra_generation;
 
 static void ps4_set_motors(int level)
@@ -416,11 +417,11 @@ static void ps4_set_motors(int level)
        /* The pad SDL opened for the logged-in user */
        if (sceUserServiceGetInitialUser(&user) == 0)
           ps4_pad_handle = scePadGetHandle(user, 0, 0);
-       if (ps4_pad_handle < 0) return;
+       if (ps4_pad_handle < 0) { ps4_vibra_result = ps4_pad_handle; return; }
      }
   param.lgMotor = (uint8_t)level;
   param.smMotor = (uint8_t)level;
-  scePadSetVibration(ps4_pad_handle, &param);
+  ps4_vibra_result = scePadSetVibration(ps4_pad_handle, &param);
 }
 
 struct ps4_vibra_timer { unsigned int generation; int ms; };
@@ -444,6 +445,14 @@ void ps4_vibrate(int level, int ms)
      }
   if (level > 255) level = 255;
   ps4_set_motors(level);
+  {
+    char line[80];
+    int n = snprintf(line, sizeof(line), "VIBRATE level %d, %d ms: pad %d, result %d", level, ms,
+                     ps4_pad_handle, ps4_vibra_result);
+    if (n > (int)sizeof(line) - 2) n = (int)sizeof(line) - 2;
+    line[n] = 10;
+    RENDERLOG_WRITE(line, n + 1);
+  }
   t = (struct ps4_vibra_timer *)malloc(sizeof(*t));
   if (t == NULL) return;
   t->generation = generation;
