@@ -29,6 +29,15 @@
 #include <stdarg.h>
 #include <setjmp.h>
 #include <stdio.h>
+
+// Vita-era tracing of locks, native calls and a heartbeat, written with
+// write_marker(). Off by default: on ports where write_marker() really
+// writes (the PS4 render log) it would log every native call. When off,
+// TRACE_SNPRINTF returns 0 so neither the formatting nor the write runs.
+#ifndef INTERP_TRACE
+#define INTERP_TRACE 0
+#endif
+#define TRACE_SNPRINTF(...) (INTERP_TRACE ? snprintf(__VA_ARGS__) : 0)
 #if __has_include(<psp2/io/fcntl.h>)
 #include <psp2/io/fcntl.h>
 #define HAVE_VITA_SCEIO 1
@@ -185,14 +194,14 @@ extern "C" {
   // frame accessors
 #define FRAME_OFFSET(name) (JavaFrame::name##_offset())
 #define ENTRY_FRAME_OFFSET(name) (EntryFrame::name##_offset())
-#define GET_FRAME(name) *(address*)(g_jfp + FRAME_OFFSET(name))
+#define GET_FRAME(name) *(AddressSlot*)(g_jfp + FRAME_OFFSET(name))
 #define GET_FRAME_OFFSET(name, offset) \
-        *(address*)(g_jfp + FRAME_OFFSET(name) + offset)
+        *(AddressSlot*)(g_jfp + FRAME_OFFSET(name) + offset)
 #define SET_FRAME(name, value) \
-        *(address*)(g_jfp + FRAME_OFFSET(name)) = (value)
+        *(AddressSlot*)(g_jfp + FRAME_OFFSET(name)) = (value)
 #define SET_FRAME_OFFSET(name, value, offset) \
-        *(address*)(g_jfp + FRAME_OFFSET(name) + offset) = (value)
-#define GET_ENTRY_FRAME(name) *(address*)(g_jfp + ENTRY_FRAME_OFFSET(name))
+        *(AddressSlot*)(g_jfp + FRAME_OFFSET(name) + offset) = (value)
+#define GET_ENTRY_FRAME(name) *(AddressSlot*)(g_jfp + ENTRY_FRAME_OFFSET(name))
 #define SET_ENTRY_FRAME(name, value) \
         *(jint*)(g_jfp + ENTRY_FRAME_OFFSET(name)) = (value)
 
@@ -226,19 +235,19 @@ extern "C" {
 
   // stacklock access
 #define STACKLOCK_OFFSET(name) StackLock::name##_offset()
-#define GET_STACKLOCK(lock, name) *(address*)(lock + STACKLOCK_OFFSET(name))
+#define GET_STACKLOCK(lock, name) *(AddressSlot*)(lock + STACKLOCK_OFFSET(name))
 #define GET_STACKLOCK_OFFSET(lock, name, offset) \
-      *(address*)(lock + STACKLOCK_OFFSET(name) + offset)
+      *(AddressSlot*)(lock + STACKLOCK_OFFSET(name) + offset)
 #define SET_STACKLOCK(lock, name, value) \
-        *(address*)(lock + STACKLOCK_OFFSET(name)) = (value)
+        *(AddressSlot*)(lock + STACKLOCK_OFFSET(name)) = (value)
 #define SET_STACKLOCK_OFFSET(lock, name, offset, value) \
-        *(address*)(lock + STACKLOCK_OFFSET(name) + offset) = (value)
+        *(AddressSlot*)(lock + STACKLOCK_OFFSET(name) + offset) = (value)
 
   // near access
 #define NEAR_OFFSET(name) JavaNear::name##_offset()
-#define GET_NEAR(near, name) *(address*)(near + NEAR_OFFSET(name))
+#define GET_NEAR(near, name) *(AddressSlot*)(near + NEAR_OFFSET(name))
 #define GET_NEAR_OFFSET(near, name, offset) \
-        *(address*)(near + NEAR_OFFSET(name) + offset)
+        *(AddressSlot*)(near + NEAR_OFFSET(name) + offset)
 
 // argument for the native functions calls - current thread pointer
 #define NATIVE_ARG ((Thread*)&_current_thread)
@@ -279,7 +288,7 @@ enum {
   }
 
   static inline address address_from_sp(int index) {
-    return *(address*)arg_address_from_sp(index);
+    return *(AddressSlot*)arg_address_from_sp(index);
   }
 
   static inline jushort first_ushort_from_cpool(address cpool, int index) {
@@ -303,15 +312,15 @@ enum {
   }
 
   static inline address get_class_by_id(jushort id) {
-    return *(address*)(_class_list_base + id*4);
+    return *(AddressSlot*)(_class_list_base + id*4);
   }
 
   static inline address get_method_from_ci(address ci, jint idx) {
-    return *(address*)(ci + idx * 4 + ClassInfoDesc::header_size());
+    return *(AddressSlot*)(ci + idx * 4 + ClassInfoDesc::header_size());
   }
 
   static inline address get_method_from_vtable(address klazz, jint idx) {
-    address ci = *(address*)(klazz + JavaNear::class_info_offset());
+    address ci = *(AddressSlot*)(klazz + JavaNear::class_info_offset());
     return get_method_from_ci(ci, idx);
   }
 
@@ -339,7 +348,7 @@ enum {
   }
 
   static inline address get_quick_native(address method) {
-    return *(address*)(method + Method::quick_native_code_offset());
+    return *(AddressSlot*)(method + Method::quick_native_code_offset());
   }
 
   static inline jint get_from_cpool(address cpool, jushort index) {
@@ -347,7 +356,7 @@ enum {
   }
 
   static inline void write_barrier(address addr) {
-    ObjectHeap::set_bit_for((OopDesc**)addr);
+    ObjectHeap::set_bit_for((OopSlot*)addr);
   }
 
   static inline void call_from_interpreter(address addr, int offset) {
@@ -363,7 +372,7 @@ enum {
     if (get_access_flags(method) & JVM_ACC_HAS_COMPRESSED_HEADER)  {
       rv = (address)_rom_constant_pool;
     } else {
-      rv = *(address*)(method + Method::constants_offset());
+      rv = *(AddressSlot*)(method + Method::constants_offset());
     }
     return (rv + ConstantPool::base_offset());
   }
@@ -376,8 +385,8 @@ enum {
   }
 
   static inline address OBJ_POP() {
-    address value = *(address*)g_jsp;
-    g_jsp += sizeof(address);
+    address value = *(AddressSlot*)g_jsp;
+    g_jsp += BytesPerWord;
     return value;
   }
 
@@ -393,8 +402,8 @@ enum {
   }
 
   static inline void OBJ_PUSH(address v) {
-    g_jsp -= sizeof(address);
-    *(address*)g_jsp = v;
+    g_jsp -= BytesPerWord;
+    *(AddressSlot*)g_jsp = v;
   }
 
   static inline void FLOAT_PUSH(jfloat v) {
@@ -435,7 +444,7 @@ enum {
   }
 
   static inline address OBJ_PEEK(jint n) {
-    return *((address*)g_jsp + n);
+    return *((AddressSlot*)g_jsp + n);
   }
 
   static inline jint int_from_addr(address addr) {
@@ -530,10 +539,10 @@ enum {
     }
 
     address exec_entry =
-      *(address*)(method + Method::variable_part_offset());
+      *(AddressSlot*)(method + Method::variable_part_offset());
     // double indirection to keep in-heap footprint of ROMized methods
     // minimal
-    exec_entry = *(address*)exec_entry;
+    exec_entry = *(AddressSlot*)exec_entry;
 
     // store method in obj_value field of current thread
     set_callee_method(method);
@@ -607,7 +616,7 @@ enum {
     jint offset = *(jint*)(obj + String::offset_offset());
     int max = offset + count;
     jchar* v = (jchar*)
-      (*(address*)(obj + String::value_offset()) + Array::base_offset());
+      (*(AddressSlot*)(obj + String::value_offset()) + Array::base_offset());
 
     for (int i = offset + fromIndex ; i < max ; i++) {
       if (v[i] == ch) {
@@ -811,13 +820,13 @@ enum {
   static bool lock_object(address object, address lock) {
 
     // Store the object in the stack lock and lock it
-    *(address*)(lock + StackLock::size()) = object;
-    { char __tbLW[128]; int __tlLW = snprintf(__tbLW, sizeof(__tbLW), "LOCKWRITE lock=%p addr=%p wrote=%p readback=%p | ", (void*)lock, (void*)(lock+StackLock::size()), (void*)object, (void*)(*(address*)(lock+StackLock::size()))); if (__tlLW>0) write_marker(__tbLW, __tlLW); }
+    *(AddressSlot*)(lock + StackLock::size()) = object;
+    { char __tbLW[128]; int __tlLW = TRACE_SNPRINTF(__tbLW, sizeof(__tbLW), "LOCKWRITE lock=%p addr=%p wrote=%p readback=%p | ", (void*)lock, (void*)(lock+StackLock::size()), (void*)object, (void*)(*(AddressSlot*)(lock+StackLock::size()))); if (__tlLW>0) write_marker(__tbLW, __tlLW); }
 
     // Get the near object
-    address near_obj = *(address*)object;
+    address near_obj = *(AddressSlot*)object;
     address tmp1;
-    { char __tb[160]; int __tl = snprintf(__tb, sizeof(__tb), "LOCKOBJ obj=%p near=%p interned=%p bit=%d | ", (void*)object, (void*)near_obj, (void*)_interned_string_near_addr, (int)((jint)(address_word)GET_NEAR(near_obj, raw_value) & 0x1)); if (__tl>0) write_marker(__tb, __tl); }
+    { char __tb[160]; int __tl = TRACE_SNPRINTF(__tb, sizeof(__tb), "LOCKOBJ obj=%p near=%p interned=%p bit=%d | ", (void*)object, (void*)near_obj, (void*)_interned_string_near_addr, (int)((jint)(address_word)GET_NEAR(near_obj, raw_value) & 0x1)); if (__tl>0) write_marker(__tb, __tl); }
 
     // see if it's an interned string
     if  (near_obj == (address)_interned_string_near_addr) {
@@ -830,7 +839,7 @@ enum {
       // maybe slow case
 
       // thread of object's lock
-      tmp1 = *(address*)(near_obj + StackLock::thread_offset() -
+      tmp1 = *(AddressSlot*)(near_obj + StackLock::thread_offset() -
                          StackLock::copied_near_offset());
 
       // is this a recursive lock?
@@ -853,7 +862,7 @@ enum {
     SET_STACKLOCK(lock, waiters, 0);
 
     // Update the near pointer in the object
-    *(address*)object = lock + StackLock::copied_near_offset();
+    *(AddressSlot*)object = lock + StackLock::copied_near_offset();
 
     // fill in stacklock fields
     SET_STACKLOCK(lock, real_java_near, near_obj);
@@ -861,9 +870,9 @@ enum {
 
     // Copy the locked near object to the stack
     SET_STACKLOCK_OFFSET(lock, copied_near, 0,
-                         *(address*)(near_obj + 0));
+                         *(AddressSlot*)(near_obj + 0));
     SET_STACKLOCK_OFFSET(lock, copied_near, 4,
-                         *(address*)(near_obj+4));
+                         *(AddressSlot*)(near_obj+4));
     // set lock bit
     jint raw_value =  *(jint*)(near_obj+8) | 0x1;
     SET_STACKLOCK_OFFSET(lock, copied_near, 8,
@@ -873,8 +882,8 @@ enum {
 
   static bool unlock_object(address object, address lock) {
     // Get near object
-    address tmp1 =  *(address*)object;
-    { char __tb[128]; int __tl = snprintf(__tb, sizeof(__tb), "UNLOCKOBJ1 tmp1=%p interned=%p | ", (void*)tmp1, (void*)_interned_string_near_addr); if (__tl>0) write_marker(__tb, __tl); }
+    address tmp1 =  *(AddressSlot*)object;
+    { char __tb[128]; int __tl = TRACE_SNPRINTF(__tb, sizeof(__tb), "UNLOCKOBJ1 tmp1=%p interned=%p | ", (void*)tmp1, (void*)_interned_string_near_addr); if (__tl>0) write_marker(__tb, __tl); }
     if (tmp1 == (address)_interned_string_near_addr) {
        return shared_call_vm_internal((address)&unlock_special_stack_lock, NULL,
                                       T_VOID, 1, object);
@@ -882,10 +891,10 @@ enum {
 
     // Get the real java near pointer from the stack lock
     tmp1 = GET_STACKLOCK(lock, real_java_near);
-    { char __tb[128]; int __tl = snprintf(__tb, sizeof(__tb), "UNLOCKOBJ2 realjavanear=%p | ", (void*)tmp1); if (__tl>0) write_marker(__tb, __tl); }
+    { char __tb[128]; int __tl = TRACE_SNPRINTF(__tb, sizeof(__tb), "UNLOCKOBJ2 realjavanear=%p | ", (void*)tmp1); if (__tl>0) write_marker(__tb, __tl); }
 
     // Zero out the object field so that lock is free
-    *(address*)(lock + StackLock::size()) = NULL;
+    *(AddressSlot*)(lock + StackLock::size()) = NULL;
 
     // Is this the reentrant case
     if (tmp1 == NULL) {
@@ -894,7 +903,7 @@ enum {
 
     // Set the object near pointer
     // tmp1 contains the real java near
-    *(address*)object = tmp1;
+    *(AddressSlot*)object = tmp1;
 
     // The last argument can be false if we separate out the case of
     // unlocking synchronized methods into a separate case. There are
@@ -926,7 +935,7 @@ enum {
     address lock = g_jsp;
     {
       char __tbuf[128];
-      int __tlen = snprintf(__tbuf, sizeof(__tbuf), "LOCKSYNC jfp=%p jsp=%p lock=%p obj=%p | ", (void*)g_jfp, (void*)g_jsp, (void*)lock, (void*)object);
+      int __tlen = TRACE_SNPRINTF(__tbuf, sizeof(__tbuf), "LOCKSYNC jfp=%p jsp=%p lock=%p obj=%p | ", (void*)g_jfp, (void*)g_jsp, (void*)lock, (void*)object);
       if (__tlen > 0) write_marker(__tbuf, __tlen);
     }
     return lock_object(object, lock);
@@ -936,7 +945,7 @@ enum {
     address lock = g_jfp + JavaFrame::first_stack_lock_offset();
     {
       char __tbuf[128];
-      int __tlen = snprintf(__tbuf, sizeof(__tbuf), "UNLOCKSYNC jfp=%p lock=%p obj=%p | ", (void*)g_jfp, (void*)lock, (void*)object);
+      int __tlen = TRACE_SNPRINTF(__tbuf, sizeof(__tbuf), "UNLOCKSYNC jfp=%p lock=%p obj=%p | ", (void*)g_jfp, (void*)lock, (void*)object);
       if (__tlen > 0) write_marker(__tbuf, __tlen);
     }
     if (!object) {
@@ -945,7 +954,7 @@ enum {
     bool __unlock_r = unlock_object(object, lock);
     if (!__unlock_r) {
       SET_FRAME(stack_bottom_pointer, g_jfp + JavaFrame::pre_first_stack_lock_offset());
-      { char __tb[96]; int __tl = snprintf(__tb, sizeof(__tb), "UNLOCKSYNC_RESTORE sbp=%p | ", (void*)(g_jfp + JavaFrame::pre_first_stack_lock_offset())); if (__tl>0) write_marker(__tb, __tl); }
+      { char __tb[96]; int __tl = TRACE_SNPRINTF(__tb, sizeof(__tb), "UNLOCKSYNC_RESTORE sbp=%p | ", (void*)(g_jfp + JavaFrame::pre_first_stack_lock_offset())); if (__tl>0) write_marker(__tb, __tl); }
     }
     return __unlock_r;
   }
@@ -963,7 +972,7 @@ enum {
 
     if (flagz & JVM_ACC_SYNCHRONIZED) {
       bool __r = unlock_synchronized_method_internal();
-      { char __tb[96]; int __tl = snprintf(__tb, sizeof(__tb), "SYNCRET r=%d | ", (int)__r); if (__tl>0) write_marker(__tb, __tl); }
+      { char __tb[96]; int __tl = TRACE_SNPRINTF(__tb, sizeof(__tb), "SYNCRET r=%d | ", (int)__r); if (__tl>0) write_marker(__tb, __tl); }
       if (__r) {
         return true;
       }
@@ -976,21 +985,21 @@ enum {
     // lock is pointing at first word of stack lock
 
     address tmp1 = g_jfp + JavaFrame::pre_first_stack_lock_offset();
-    { char __tb[96]; int __tl = snprintf(__tb, sizeof(__tb), "TMP1VAL tmp1=%p | ", (void*)tmp1); if (__tl>0) write_marker(__tb, __tl); }
+    { char __tb[96]; int __tl = TRACE_SNPRINTF(__tb, sizeof(__tb), "TMP1VAL tmp1=%p | ", (void*)tmp1); if (__tl>0) write_marker(__tb, __tl); }
     // We know that there is at least one stack lock, or we wouldn't be here in
     // the first place!
     { int __lc_iters = 0;
     while (lock != tmp1) {
       GUARANTEE(lock <= tmp1, "sanity");
       if (__lc_iters < 40) {
-        char __tb[128]; int __tl = snprintf(__tb, sizeof(__tb), "LOOPCHK lock=%p val=%p | ", (void*)lock, (void*)(*(address*)(lock + StackLock::size()))); if (__tl>0) write_marker(__tb, __tl);
+        char __tb[128]; int __tl = TRACE_SNPRINTF(__tb, sizeof(__tb), "LOOPCHK lock=%p val=%p | ", (void*)lock, (void*)(*(AddressSlot*)(lock + StackLock::size()))); if (__tl>0) write_marker(__tb, __tl);
       }
       __lc_iters++;
       if (__lc_iters > 40) {
-        char __tb4[64]; int __tl4 = snprintf(__tb4, sizeof(__tb4), "LOOPCHK_ABORT | "); if (__tl4>0) write_marker(__tb4, __tl4);
+        char __tb4[64]; int __tl4 = TRACE_SNPRINTF(__tb4, sizeof(__tb4), "LOOPCHK_ABORT | "); if (__tl4>0) write_marker(__tb4, __tl4);
         break;
       }
-      if (*(address*)(lock + StackLock::size()) != NULL) {
+      if (*(AddressSlot*)(lock + StackLock::size()) != NULL) {
         return interpreter_call_vm((address)&illegal_monitor_state_exception,
                                    T_VOID);
       }
@@ -1030,7 +1039,7 @@ enum {
     address lock = NULL;
     {
       char __tb[200];
-      int __tl = snprintf(__tb, sizeof(__tb), "MENT_ENTRY jfp=%p tmp0=%p tmp1=%p empty=%p obj=%p | ", (void*)g_jfp, (void*)tmp0, (void*)tmp1, (void*)(g_jfp + JavaFrame::empty_stack_offset()), (void*)object);
+      int __tl = TRACE_SNPRINTF(__tb, sizeof(__tb), "MENT_ENTRY jfp=%p tmp0=%p tmp1=%p empty=%p obj=%p | ", (void*)g_jfp, (void*)tmp0, (void*)tmp1, (void*)(g_jfp + JavaFrame::empty_stack_offset()), (void*)object);
       if (__tl>0) write_marker(__tb, __tl);
     }
 
@@ -1040,16 +1049,16 @@ enum {
     while (tmp0 != tmp1) {
       if (__ment_iters < 40) {
         char __tb2[128];
-        int __tl2 = snprintf(__tb2, sizeof(__tb2), "MENT_LOOP tmp0=%p val=%p | ", (void*)tmp0, (void*)(*(address*)(tmp0 + StackLock::size())));
+        int __tl2 = TRACE_SNPRINTF(__tb2, sizeof(__tb2), "MENT_LOOP tmp0=%p val=%p | ", (void*)tmp0, (void*)(*(AddressSlot*)(tmp0 + StackLock::size())));
         if (__tl2>0) write_marker(__tb2, __tl2);
       }
       __ment_iters++;
       if (__ment_iters > 40) {
-        { char __tb3[64]; int __tl3 = snprintf(__tb3, sizeof(__tb3), "MENT_ABORT | "); if (__tl3>0) write_marker(__tb3, __tl3); }
+        { char __tb3[64]; int __tl3 = TRACE_SNPRINTF(__tb3, sizeof(__tb3), "MENT_ABORT | "); if (__tl3>0) write_marker(__tb3, __tl3); }
         break;
       }
       // Start the loop by checking if the current stack lock is empty
-      address tmp2 = *(address*)(tmp0 + StackLock::size());
+      address tmp2 = *(AddressSlot*)(tmp0 + StackLock::size());
 
       if (tmp2 == 0) {
         lock = tmp0;
@@ -1073,7 +1082,7 @@ enum {
   }
 
   static bool monitor_exit_internal(address object) {
-    if (*(address*)object == (address)_interned_string_near_addr) {
+    if (*(AddressSlot*)object == (address)_interned_string_near_addr) {
       // IMPL_NOTE: we already check for _interned_strings in unlock_object()
       return shared_call_vm_internal((address)&unlock_special_stack_lock, NULL,
                                      T_VOID, 1, object);
@@ -1085,7 +1094,7 @@ enum {
     //JavaFrame::stack_bottom_pointer_offset();
     {
       char __tb[160];
-      int __tl = snprintf(__tb, sizeof(__tb), "MEI_ENTRY jfp=%p lock=%p tmp1=%p obj=%p | ", (void*)g_jfp, (void*)lock, (void*)tmp1, (void*)object);
+      int __tl = TRACE_SNPRINTF(__tb, sizeof(__tb), "MEI_ENTRY jfp=%p lock=%p tmp1=%p obj=%p | ", (void*)g_jfp, (void*)lock, (void*)tmp1, (void*)object);
       if (__tl>0) write_marker(__tb, __tl);
     }
 
@@ -1096,18 +1105,18 @@ enum {
     while (lock != tmp1) {
       if (__mei_iters < 40) {
         char __tb2[128];
-        int __tl2 = snprintf(__tb2, sizeof(__tb2), "MEI_LOOP lock=%p val=%p | ", (void*)lock, (void*)(*(address*)(lock + StackLock::size())));
+        int __tl2 = TRACE_SNPRINTF(__tb2, sizeof(__tb2), "MEI_LOOP lock=%p val=%p | ", (void*)lock, (void*)(*(AddressSlot*)(lock + StackLock::size())));
         if (__tl2>0) write_marker(__tb2, __tl2);
       }
       __mei_iters++;
       if (__mei_iters > 40) {
-        { char __tb3[64]; int __tl3 = snprintf(__tb3, sizeof(__tb3), "MEI_ABORT | "); if (__tl3>0) write_marker(__tb3, __tl3); }
+        { char __tb3[64]; int __tl3 = TRACE_SNPRINTF(__tb3, sizeof(__tb3), "MEI_ABORT | "); if (__tl3>0) write_marker(__tb3, __tl3); }
         break;
       }
       // Is monitor pointed at by lock the right one?
 
       // get object field
-      address tmp0 = *(address*)(lock + StackLock::size());
+      address tmp0 = *(AddressSlot*)(lock + StackLock::size());
 
       // is this the right object?
       if (object == tmp0) {
@@ -1136,7 +1145,7 @@ enum {
     jint arg1, arg2;
     {
       char __tb[80];
-      int __tl = snprintf(__tb, sizeof(__tb), "NATIVE_CALL entry=%p\n", (void*)entry_point);
+      int __tl = TRACE_SNPRINTF(__tb, sizeof(__tb), "NATIVE_CALL entry=%p\n", (void*)entry_point);
       if (__tl > 0) write_marker(__tb, __tl);
     }
     switch (return_value_type) {
@@ -1291,7 +1300,7 @@ enum {
     }
     {
       char __tb[80];
-      int __tl = snprintf(__tb, sizeof(__tb), "NATIVE_RETURN entry=%p\n", (void*)entry_point);
+      int __tl = TRACE_SNPRINTF(__tb, sizeof(__tb), "NATIVE_RETURN entry=%p\n", (void*)entry_point);
       if (__tl > 0) write_marker(__tb, __tl);
     }
   }
@@ -1630,7 +1639,7 @@ enum {
   }
 
   static inline address get_mirror_by_id(jushort id) {
-    return *((address*)_mirror_list_base + id);
+    return *((AddressSlot*)_mirror_list_base + id);
   }
   static inline address get_cib_marker() {
     return (address)_task_class_init_marker;
@@ -1641,17 +1650,17 @@ enum {
   }
 
   static inline address get_real_mirror(address obj) {
-    return *(address*)(obj + TaskMirror::real_java_mirror_offset());
+    return *(AddressSlot*)(obj + TaskMirror::real_java_mirror_offset());
   }
 
   static inline address get_clinit_list() {
-    return *(address*)(get_current_task() + Task::clinit_list_offset());
+    return *(AddressSlot*)(get_current_task() + Task::clinit_list_offset());
   }
 
   address get_mirror_from_clinit_list(address clazz) {
     address tmp = get_clinit_list();
-    while (clazz != *(address*)(tmp + TaskMirror::containing_class_offset())) {
-      tmp = *(address*)(tmp + TaskMirror::next_in_clinit_list_offset());
+    while (clazz != *(AddressSlot*)(tmp + TaskMirror::containing_class_offset())) {
+      tmp = *(AddressSlot*)(tmp + TaskMirror::next_in_clinit_list_offset());
       GUARANTEE(tmp != NULL, "sanity");
     }
     return tmp;
@@ -1679,14 +1688,14 @@ enum {
 #else
 
   static inline bool is_initialized_class(address klass) {
-    address java_mirror = *(address*)(klass + JavaClass::java_mirror_offset());
+    address java_mirror = *(AddressSlot*)(klass + JavaClass::java_mirror_offset());
     jint status = *(jint*)(java_mirror + JavaClassObj::status_offset());
     if (status & JavaClassObj::INITIALIZED) {
       return true;
     }
     if (status & JavaClassObj::IN_PROGRESS) {
       address this_thread = (address)(address_word)GET_THREAD_INT(thread_obj);
-      address init_thread = *(address*)(java_mirror +
+      address init_thread = *(AddressSlot*)(java_mirror +
                                         JavaClassObj::thread_offset());
       return this_thread == init_thread;
     }
@@ -1758,7 +1767,7 @@ enum {
         // constant pool of current method
         jushort id = get_holder_id(method);
         obj = get_class_by_id(id);
-        obj = *(address*)(obj + JavaClass::java_mirror_offset());
+        obj = *(AddressSlot*)(obj + JavaClass::java_mirror_offset());
 #endif
       } else {
         // Synchronize on local 0
@@ -2085,7 +2094,7 @@ enum {
         if (!type_check(ref, val, idx)) return false;
 
         write_barrier(ref + Array::base_offset() + idx * sizeof(jint));
-        SET_ARRAY_ELEMENT(ref, idx, address, val);
+        SET_ARRAY_ELEMENT(ref, idx, AddressSlot, val);
       }
       break;
     case T_LONG    :
@@ -2219,6 +2228,10 @@ enum {
 
     switch(type) {
     case T_OBJECT :
+      // A 4-byte stack word; object_val is pointer-sized, so writing only
+      // int_val would leave its upper half undefined on 64-bit hosts
+      rv.object_val = (address)(address_word)(juint)int_from_sp(0);
+      break;
     case T_INT    :
     case T_FLOAT  :
       rv.int_val =  int_from_sp(0);
@@ -2400,7 +2413,7 @@ enum {
       // Get class by its id
       address klazz = get_class_by_id(klazz_id);
       // Get the ClassInfo
-      address ci = *(address*)(klazz + JavaClass::class_info_offset());
+      address ci = *(AddressSlot*)(klazz + JavaClass::class_info_offset());
       // Get method from vtable of the ClassInfo
       method = get_method_from_ci(ci, vindex);
       // Get the number of parameters from method
@@ -2410,7 +2423,7 @@ enum {
       NULL_CHECK(receiver);
 
       // Get prototype of receiver object
-      receiver = *(address*)receiver;    // java near
+      receiver = *(AddressSlot*)receiver;    // java near
       // Get method from vtable of the class
       method = get_method_from_vtable(receiver, vindex);
       GUARANTEE(method != NULL, "must be in the vtable");
@@ -3785,7 +3798,7 @@ enum {
   BYTECODE_IMPL(fast_a_putstatic)
     address addr = get_static_field_offset();
     if (addr != NULL) {
-      *(address*)addr = OBJ_POP();
+      *(AddressSlot*)addr = OBJ_POP();
       write_barrier(addr);
       ADVANCE(3);
     }
@@ -3880,7 +3893,7 @@ enum {
     address obj = OBJ_POP();
     NULL_CHECK(obj);
     obj += GET_SHORT_NATIVE(0) * 4;
-    *(address*)obj = value;
+    *(AddressSlot*)obj = value;
     write_barrier(obj);
     ADVANCE(3);
   BYTECODE_IMPL_END
@@ -3937,7 +3950,7 @@ enum {
   BYTECODE_IMPL(fast_agetfield)
     address obj = OBJ_POP();
     NULL_CHECK(obj);
-    OBJ_PUSH(*(address*)(obj + GET_SHORT_NATIVE(0) * 4));
+    OBJ_PUSH(*(AddressSlot*)(obj + GET_SHORT_NATIVE(0) * 4));
     ADVANCE(3);
   BYTECODE_IMPL_END
 
@@ -3970,12 +3983,12 @@ enum {
     NULL_CHECK(receiver);
 
     // Get class of receiver object
-    receiver = *(address*)receiver;
-    receiver = *(address*)receiver;
+    receiver = *(AddressSlot*)receiver;
+    receiver = *(AddressSlot*)receiver;
 
     // Get the itable from the class of the receiver object
     // Get the ClassInfo
-    address ci = *(address*)(receiver + JavaClass::class_info_offset());
+    address ci = *(AddressSlot*)(receiver + JavaClass::class_info_offset());
     // get length of vtable and itable
     jushort vlength = *(jushort*)(ci + ClassInfo::vtable_length_offset());
     jint ilength = *(jushort*)(ci + ClassInfo::itable_length_offset());
@@ -4000,7 +4013,7 @@ enum {
 
     // method table of the receiver class
     address table = int_from_addr(itable + 4) + ci;
-    address method = *(address*)(table + method_index * 4);
+    address method = *(AddressSlot*)(table + method_index * 4);
     invoke_java_method(method, 5);
   BYTECODE_IMPL_END
 
@@ -4070,7 +4083,7 @@ enum {
 
     // Get the native method pointer from the bytecode
     address native_ptr =
-      *(address*)(g_jpc + Method::native_code_offset_from_bcp());
+      *(AddressSlot*)(g_jpc + Method::native_code_offset_from_bcp());
 
     method_transition();
 
@@ -4114,7 +4127,7 @@ enum {
     // Get class by its id
     address klazz = get_class_by_id(klazz_id);
     // Get the ClassInfo
-    address ci = *(address*)(klazz + JavaClass::class_info_offset());
+    address ci = *(AddressSlot*)(klazz + JavaClass::class_info_offset());
     // Get method from vtable of the ClassInfo
     address method = get_method_from_ci(ci, vindex);
     // Get the number of parameters from method
@@ -4136,7 +4149,7 @@ enum {
   BYTECODE_IMPL(fast_agetfield_1)
     address obj = OBJ_POP();
     NULL_CHECK(obj);
-    OBJ_PUSH(*(address*)(obj + GET_BYTE(0) * 4));
+    OBJ_PUSH(*(AddressSlot*)(obj + GET_BYTE(0) * 4));
     ADVANCE(2);
   BYTECODE_IMPL_END
 
@@ -4172,7 +4185,7 @@ enum {
     aload(0);
     address obj = OBJ_POP();
     NULL_CHECK(obj);
-    OBJ_PUSH(*(address*)(obj + 4));
+    OBJ_PUSH(*(AddressSlot*)(obj + 4));
     ADVANCE(1);
   BYTECODE_IMPL_END
 
@@ -4180,7 +4193,7 @@ enum {
     aload(0);
     address obj = OBJ_POP();
     NULL_CHECK(obj);
-    OBJ_PUSH(*(address*)(obj + 8));
+    OBJ_PUSH(*(AddressSlot*)(obj + 8));
     ADVANCE(1);
   BYTECODE_IMPL_END
 
@@ -4572,7 +4585,7 @@ static void Interpret() {
     for (;;) {
       if ((++__hb_counter & 0xFFFFFul) == 0) {
         char __tb[96];
-        int __tl = snprintf(__tb, sizeof(__tb), "HEARTBEAT n=%lu jpc=%p op=%d\n",
+        int __tl = TRACE_SNPRINTF(__tb, sizeof(__tb), "HEARTBEAT n=%lu jpc=%p op=%d\n",
                              __hb_counter, (void*)g_jpc, (int)*g_jpc);
         if (__tl > 0) write_marker(__tb, __tl);
       }

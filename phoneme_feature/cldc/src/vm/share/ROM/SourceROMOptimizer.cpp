@@ -1337,8 +1337,8 @@ void ROMOptimizer::compact_static_field_containers(ObjArray *directory) {
       // Clear all bits in the holder, in case a stale bit that used to
       // cover an Oop field now covers an INT slot. We'll set the Oop bits
       // later.
-      OopDesc **start =DERIVED(OopDesc**, holder.obj(), static_field_start);
-      OopDesc **ex_end=DERIVED(OopDesc**, holder.obj(), holder().object_size());
+      OopSlot*start =DERIVED(OopSlot*, holder.obj(), static_field_start);
+      OopSlot*ex_end=DERIVED(OopSlot*, holder.obj(), holder().object_size());
       ObjectHeap::clear_bit_range(start, ex_end);
 
       // Write a new static oopmap according to the remaining static fields
@@ -1373,7 +1373,7 @@ void ROMOptimizer::compact_static_field_containers(ObjArray *directory) {
             prev_oop_offset = new_offset;
 
             // Set the barrier bit for each remaining oop field.
-            OopDesc** loc = DERIVED(OopDesc**, holder.obj(), new_offset);
+            OopSlot* loc = DERIVED(OopSlot*, holder.obj(), new_offset);
             ObjectHeap::set_bit_for(loc);
           }
         }

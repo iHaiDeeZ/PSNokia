@@ -27,6 +27,20 @@
 #include "incls/_precompiled.incl"
 #include "incls/_FileDecoder.cpp.incl"
 
+/* Diagnostic added 2026-09-05: the previous caller-address capture in
+ * Throw::out_of_memory_error resolved to garbage (dis(), an unrelated
+ * debug disassembler - almost certainly tail-call optimization eating
+ * the real caller's stack frame). This throw site is a strong
+ * candidate found by direct code reading instead: it fires when
+ * JarFileParser's cache (hardcoded MAX_CACHED_PARSERS=4,
+ * MaxCachedJarParsers flag also defaults to 4) is exhausted - a
+ * resource-cache-size failure completely unrelated to the Java heap,
+ * which would explain why bumping MIDP_HEAP_REQUIREMENT (6MB, 7MB)
+ * never changed anything. Confirming directly before trusting the fix
+ * applied alongside this (MAX_CACHED_PARSERS/MaxCachedJarParsers
+ * bumped 4 -> 16, see Globals.hpp and JarFileParser.hpp). */
+extern "C" void write_marker(const char* text, int len);
+
 HANDLE_CHECK(FileDecoder, is_file_decoder())
 
 ReturnOop FileDecoder::allocate(OsFile_Handle handle, int pos, int size,
@@ -134,6 +148,11 @@ ReturnOop FileDecoder::get_jar_parser_if_needed(JVM_SINGLE_ARG_TRAPS) {
       GUARANTEE(JarFileParser::parser_cache_is_empty(), "sanity");
 
       // We can't proceed with reading when we don't have a file handle.
+      {
+        char diag_buf[48];
+        int diag_len = jvm_sprintf(diag_buf, "JAR_PARSER_CACHE_EXHAUSTED\n");
+        write_marker(diag_buf, diag_len);
+      }
       Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW_0);
     }
     return result.obj();

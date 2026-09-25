@@ -41,14 +41,14 @@ void StackmapListDesc::initialize(OopDesc* klass, int size) {
   OopDesc::initialize(klass);
 }
 
-void StackmapListDesc::variable_oops_do(void do_oop(OopDesc**)) {
+void StackmapListDesc::variable_oops_do(void do_oop(OopSlot*)) {
   unsigned int* entries = stackmap_entries_base();
   unsigned int* end = entries + _entry_count;
 
   while (entries < end) {
     unsigned int _entry_stat = *entries;
     if (!(_entry_stat & SHORT_ENTRY_FLAG)) {
-      do_oop((OopDesc**)entries);
+      do_oop((OopSlot*)entries);
     }
     ++ entries;
   }

@@ -1,74 +1,124 @@
-# VitoKia
+# PSNokia
 
-A native port of **phoneME** (Sun/Oracle's CLDC/MIDP Java ME runtime) to the
-**PS Vita**, cross-compiled with [vitasdk](https://vitasdk.org) and tested
-primarily under the [Vita3K](https://vita3k.org) emulator, with real-hardware
-testing in progress.
+PSNokia runs J2ME (MIDP) phone games — the Java games of 2000s Nokia and
+other feature phones — natively on a jailbroken **PS4**. It is a port of
+**phoneME** (Sun's open-source CLDC/MIDP runtime) built with the
+[OpenOrbis PS4 toolchain](https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain).
+Each game is packaged as its own PS4 app.
 
-This lets original J2ME/MIDP `.jar` MIDlets — the games and apps that used to
-run on 2000s-era feature phones — run natively on the Vita.
+It grew out of [VitoKia](https://github.com/iHaiDeeZ/VitoKia), the PS Vita
+port of the same code, which is built on
+[j2me-preservation/phoneME-GP2X-SDL](https://github.com/j2me-preservation/phoneME-GP2X-SDL)
+(Sun's `phoneme_feature` `mr2-rel-b23` plus a GP2X/SDL port). The Vita
+README is kept as [README-VITA.md](README-VITA.md).
 
-Built on top of [j2me-preservation/phoneME-GP2X-SDL](https://github.com/j2me-preservation/phoneME-GP2X-SDL),
-itself a GP2X-SDL fork of Sun's original phoneME (`phoneme_feature`
-`mr2-rel-b23`). All of Sun/Oracle's and Intel's original copyright notices
-are preserved throughout the source tree.
+## Status
 
-## What's implemented
+Tested on a real PS4 with GoldHEN:
 
-- Native SDL2-based input (D-pad, analog stick, face/shoulder buttons,
-  touch), following pspkvm's digit/navigation mapping convention.
-- Full 2D LCDUI rendering pipeline (Chameleon skin, softkeys, Canvas/GameCanvas).
-- A `com.nokia.mid.ui` (Nokia UI API) stub subsystem — `DirectGraphics`,
-  `DirectUtils`, `FullCanvas` — for the many S40-originated commercial MIDlets
-  that depend on it.
-- A from-scratch JSR184 (M3G / Mobile 3D Graphics) engine: a binary `.m3g`
-  scene loader plus a software triangle rasterizer (edge-function barycentric
-  fill, Z-buffer, nearest-neighbor texture sampling) rendering directly into
-  the shared 2D framebuffer. Work in progress — see Known issues.
-- A real VM timer tick, wired up so `Thread.yield()`-paced MIDlet loops keep
-  polling native input (this port's original OS layer never called it).
-- CLDC's native `Math.sin/cos/tan` replaced with a pure-Java implementation
-  system-wide — the original native trig routines returned garbage for
-  ordinary angles.
+| Game | State |
+|---|---|
+| Sonic Advance (Gameloft) | Plays through, with music |
+| Tower Bloxx, City Bloxx (Digital Chocolate / Nokia) | Play, including the 3D (M3G) buildings, with music |
+| Bounce (Nokia) | Plays, at its original 128x128 screen scaled up |
 
-## Known issues
+## What the port does
 
-- JSR184 (M3G) rendering pipeline is confirmed writing real pixels, but at
-  least one tested game's 3D content doesn't fully appear on screen yet —
-  under active investigation.
-- A build that runs cleanly under the Vita3K emulator has been reported not
-  to run on real Vita hardware; root cause not yet identified (Vita3K's HLE
-  is known to be more forgiving than real firmware about things like
-  unresolved imports and enforced memory budgets).
-- No JIT — the interpreter-only `-int` flag is currently always passed;
-  removing it produced no measurable speedup in testing so far, but the
-  question of whether the JIT is actually being invoked at all was never
-  fully answered.
+- **A 64-bit VM.** phoneME's CLDC-HI VM only supports 32-bit machines and
+  the PS4 runs only 64-bit programs. The VM keeps its 32-bit heap layout;
+  object references are stored as 4-byte "narrow" pointers
+  (`narrow<T>` in `GlobalDefinitions.hpp`) and all VM memory is kept below
+  2GB by a dedicated allocator (`ps4/common/lowheap.c`, on dlmalloc).
+- **A PS4 platform layer** for the VM (`cldc/src/vm/os/ps4`), PCSL and MIDP:
+  SDL2 video scaled to the TV, DS4 input, file access (with a fix for the
+  OpenOrbis headers' `struct stat` layout), timers and threads.
+- **Sound:** WAV and tones, plus a software synthesizer for MIDI music
+  (`midp/src/media_vita/reference/native/midi_synth.c`), which most games
+  use.
+- **Nokia UI API** (`com.nokia.mid.ui`) and **JSR 184 (M3G)** 3D, which
+  many commercial games need.
+- **Per-game settings:** save data in `/data/psnokia/<TITLE_ID>`, and the
+  phone screen size the game was made for.
+
+## Controls
+
+| DS4 | Phone key |
+|---|---|
+| Cross | Select / fire (centre key) |
+| Circle | Right soft key: Back / Exit |
+| Square, Options | Left soft key: OK / Options / Menu |
+| D-pad | 2 / 4 / 6 / 8 (up, left, right, down) |
+| Left stick | Arrow keys |
+| Triangle | 0 |
+| L2 / R2 / L3 / R3 | 1 / 3 / 7 / 9 |
+| Touchpad | * |
+| Hold L1 or R1 | Cross = 5, Square = *, Circle = #, Triangle = Clear |
+
+As on Nokia phones, the soft key labels are drawn in the bottom corners, and
+Circle usually leaves a screen — on a game's main menu it quits.
 
 ## Building
 
-Requires:
-- [vitasdk](https://vitasdk.org) (`arm-vita-eabi-*` toolchain)
-- A JDK 6-compatible `javac` for CLDC's old stub classes (e.g. Zulu 6)
-- JDK 8 for MIDP's own sources
-- MSYS2/MinGW for the build (phoneME's Makefiles expect a POSIX toolchain)
+Everything builds on Windows from an MSYS2 shell.
 
-High level:
+Requirements:
+
+- [OpenOrbis PS4 toolchain](https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain)
+  (tested with v0.5.4) and LLVM/clang 18
+- MSYS2 with the 32-bit MinGW gcc (`mingw-w64-i686-gcc`), used for the
+  VM's host-side ROM generator
+- JDK 6 (e.g. Zulu 6) for CLDC and JDK 8 for MIDP
+- The .NET runtime, for the toolchain's `PkgTool.Core`
+- Optional: Python with Pillow, to make each game's icon from its own
+
+Set the tool locations if they differ from the defaults in
+[ps4/env.sh](ps4/env.sh) (`OO_PS4_TOOLCHAIN`, `PS4_LLVM`, `JDK6_DIR`,
+`JDK8_DIR`), then:
+
 ```bash
-# CLDC
-cd phoneme_feature/cldc/build/vita_arm
-make PCSL_OUTPUT_DIR=<path>
-
-# MIDP (after CLDC)
-cd phoneme_feature/midp/build/vita_arm
-make USE_DEBUG=true
+ps4/build_all.sh
 ```
 
-Package the resulting `runMidlet_g` into a bootable VPK with vitasdk's
-`vita-elf-create`, `vita-make-fself`, and `vita-pack-vpk`.
+This builds PCSL, the VM and MIDP into `ps4/out`. Then package a game:
+
+```bash
+ps4/package/make_game.sh path/to/game.jar "Game Title" PSNK00001
+```
+
+The title ID (4 letters and 5 digits) must be different for each game. A
+fourth argument sets the phone screen size, for games made for something
+other than a 240x320 portrait screen, for example `128x128` for early Nokia
+games. The package is written to `ps4/out/games/<title-id>/`; install it
+with GoldHEN's package installer.
+
+No games are included. Use games you own.
+
+## Logs and debugging
+
+The app writes `/data/psnokia/renderlog.txt` (the VM and MIDP output,
+exceptions with Java stack traces, crashes, FPS) and a few screenshots as
+`/data/psnokia/frameN.bmp`; fetch them with GoldHEN's FTP
+server. The log is also sent over UDP (port 18194) to the address in
+`PSN_LOG_PC_IP` (see `ps4/common/psn_log.h`) and as a LAN broadcast;
+`ps4/tools/logrecv.py` receives it.
+
+Per-game overrides, as files in `/data/psnokia/<TITLE_ID>/` or
+`/data/psnokia/`:
+
+- `screen.txt` — the phone screen size, e.g. `176x208`
+- `landscape` or `portrait` (empty files) — force the orientation
+
+## Known limitations
+
+- MIDP is built in debug mode, which is slower than a release build would
+  be; there is no JIT.
+- The MIDI synthesizer approximates General MIDI with simple waveforms.
+- The Vita build shares this source tree but has not been rebuilt since the
+  64-bit changes.
 
 ## License
 
-GPL v2 (inherited from phoneME — see the license header at the top of any
-source file in this tree). Portions Copyright 2000-2007 Sun Microsystems,
-Inc. / Oracle, and Intel Corporation.
+phoneME is licensed under the GNU General Public License version 2, as
+stated at the top of its source files, and so are the changes in this
+repository.
+dlmalloc (`ps4/common/dlmalloc`) is by Doug Lea under an MIT-style license.

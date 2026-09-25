@@ -27,9 +27,9 @@
 class ObjArrayDesc: public ArrayDesc {
  public:
   // GC support.
-  void variable_oops_do(void do_oop(OopDesc**)) {
-    OopDesc** base = (OopDesc**)((address)this + ArrayDesc::header_size());
-    OopDesc** end  = base + _length;
+  void variable_oops_do(void do_oop(OopSlot*)) {
+    OopSlot* base = (OopSlot*)((address)this + ArrayDesc::header_size());
+    OopSlot* end  = base + _length;
     while (base < end) {
       // Inline null check, fairly common case in object arrays
       if (*base != NULL) {

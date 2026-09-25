@@ -61,9 +61,9 @@ void SegmentedSourceROMWriter::write_text_undefines(FileStream* stream) {
 
 void SegmentedSourceROMWriter::write_text_defines(FileStream* stream) {
   for (int i = 0; i < ROM::TEXT_BLOCK_SEGMENTS_COUNT; i++) {
-    stream->print_cr("#define TEXT%i(x)  (int)&_rom_text_block%i[x]", i, i);
+    stream->print_cr("#define TEXT%i(x)  ROMPTR(&_rom_text_block%i[x])", i, i);
     stream->print_cr(
-      "#define TEXTb%i(x) (int)&(((char*)_rom_text_block%i)[x])", i, i);
+      "#define TEXTb%i(x) ROMPTR(&(((char*)_rom_text_block%i)[x]))", i, i);
   }
 }
 

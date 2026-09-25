@@ -2,10 +2,12 @@
  * Concrete DirectGraphics implementation backed by a standard
  * javax.microedition.lcdui.Graphics instance. Pixel-drawing operations
  * (drawPixels/drawPolygon/fillPolygon/drawTriangle) are implemented for
- * real via Graphics.drawRGB()/fillTriangle()/drawLine(); flip/rotate
- * image manipulation and the getPixels() readback family are not
- * implemented (best-effort no-ops) since they need native pixel access
- * this port doesn't currently expose. See build notes for details.
+ * real via Graphics.drawRGB()/fillTriangle()/drawLine(); drawImage's
+ * flip/rotate manipulation is implemented for real too (getRGB() + manual
+ * per-pixel rotate/flip + createRGBImage()), cached per (image identity,
+ * manipulation) pair - see getTransformedImage()'s doc for why the cache
+ * matters. The getPixels() readback family remains unimplemented (needs
+ * native pixel access this port doesn't currently expose).
  */
 
 package com.nokia.mid.ui;
@@ -43,17 +45,116 @@ class DirectGraphicsImpl implements DirectGraphics {
         g.setColor(argbColor & 0x00FFFFFF);
     }
 
+    // Cache of (image identity, manipulation) -> pre-transformed Image. The
+    // naive approach (recompute the rotated/flipped pixel buffer on every
+    // drawImage call, via getRGB()+manual per-pixel index math+createRGBImage)
+    // is a genuine interpreted-bytecode per-pixel loop - tried unthrottled
+    // once before and dropped a game's FPS from ~10 to ~2 (a large image
+    // redrawn with manipulation every single frame for scrolling background
+    // tiles). Caching keyed by (image, manipulation) turns that into a
+    // one-time cost per distinct combo - cheap for the common case (static
+    // level decoration built from a handful of mirrored/rotated source
+    // tiles), same as any other per-mesh-not-per-frame cache in this port.
+    private static final int MAX_TRANSFORM_CACHE = 64;
+    private static final int[] cacheKey = new int[MAX_TRANSFORM_CACHE];
+    private static final Image[] cacheImg = new Image[MAX_TRANSFORM_CACHE];
+    private static final long[] cacheAge = new long[MAX_TRANSFORM_CACHE];
+    private static int cacheCount = 0;
+    private static long cacheClock = 0;
+
     public void drawImage(Image img, int x, int y, int anchor, int manipulation) {
         diagLog("drawImage", img.getWidth() * img.getHeight());
-        // flip/rotate manipulation not implemented; draw as-is.
-        // (A real implementation via getRGB()+manual rotate+drawRGB() was tried
-        // and reverted - it's a genuine per-pixel interpreted-bytecode loop, and
-        // for a large, every-frame-redrawn image it dropped FPS from ~10 to ~2.
-        // A future attempt should cache the rotated pixel buffer keyed by
-        // (image identity, manipulation) instead of recomputing every call -
-        // very likely a big win since the same image+manipulation combo seems
-        // to repeat every frame for static background tiles.)
-        g.drawImage(img, x, y, anchor);
+        if (manipulation == 0) {
+            g.drawImage(img, x, y, anchor);
+            return;
+        }
+        g.drawImage(getTransformedImage(img, manipulation), x, y, anchor);
+    }
+
+    private static Image getTransformedImage(Image img, int manipulation) {
+        int key = System.identityHashCode(img) * 31 + manipulation;
+        for (int i = 0; i < cacheCount; i++) {
+            if (cacheKey[i] == key) {
+                cacheAge[i] = ++cacheClock;
+                return cacheImg[i];
+            }
+        }
+        Image result = computeTransformedImage(img, manipulation);
+        int slot;
+        if (cacheCount < MAX_TRANSFORM_CACHE) {
+            slot = cacheCount++;
+        } else {
+            slot = 0;
+            for (int i = 1; i < MAX_TRANSFORM_CACHE; i++) {
+                if (cacheAge[i] < cacheAge[slot]) { slot = i; }
+            }
+        }
+        cacheKey[slot] = key;
+        cacheImg[slot] = result;
+        cacheAge[slot] = ++cacheClock;
+        return result;
+    }
+
+    /** Rotation (counter-clockwise) is applied first, then the vertical and
+     *  horizontal flips - the order the Nokia UI API specifies. */
+    private static Image computeTransformedImage(Image img, int manipulation) {
+        int w = img.getWidth();
+        int h = img.getHeight();
+        int[] src = new int[w * h];
+        img.getRGB(src, 0, w, 0, 0, w, h);
+
+        boolean flipH = (manipulation & DirectGraphics.FLIP_HORIZONTAL) != 0;
+        boolean flipV = (manipulation & DirectGraphics.FLIP_VERTICAL) != 0;
+        int rotation = manipulation & ~(DirectGraphics.FLIP_HORIZONTAL | DirectGraphics.FLIP_VERTICAL);
+
+        int[] cur = src;
+        int cw = w, ch = h;
+        // Nokia's rotations are counter-clockwise
+        if (rotation == DirectGraphics.ROTATE_270) {
+            int[] tmp = new int[w * h];
+            for (int yy = 0; yy < h; yy++) {
+                for (int xx = 0; xx < w; xx++) {
+                    tmp[xx * h + (h - 1 - yy)] = cur[yy * w + xx];
+                }
+            }
+            cur = tmp; cw = h; ch = w;
+        } else if (rotation == DirectGraphics.ROTATE_180) {
+            int[] tmp = new int[w * h];
+            int n = w * h;
+            for (int i = 0; i < n; i++) {
+                tmp[n - 1 - i] = cur[i];
+            }
+            cur = tmp;
+        } else if (rotation == DirectGraphics.ROTATE_90) {
+            int[] tmp = new int[w * h];
+            for (int yy = 0; yy < h; yy++) {
+                for (int xx = 0; xx < w; xx++) {
+                    tmp[(w - 1 - xx) * h + yy] = cur[yy * w + xx];
+                }
+            }
+            cur = tmp; cw = h; ch = w;
+        }
+
+        if (flipH) {
+            int[] tmp = new int[cw * ch];
+            for (int yy = 0; yy < ch; yy++) {
+                for (int xx = 0; xx < cw; xx++) {
+                    tmp[yy * cw + (cw - 1 - xx)] = cur[yy * cw + xx];
+                }
+            }
+            cur = tmp;
+        }
+        if (flipV) {
+            int[] tmp = new int[cw * ch];
+            for (int yy = 0; yy < ch; yy++) {
+                for (int xx = 0; xx < cw; xx++) {
+                    tmp[(ch - 1 - yy) * cw + xx] = cur[yy * cw + xx];
+                }
+            }
+            cur = tmp;
+        }
+
+        return Image.createRGBImage(cur, cw, ch, true);
     }
 
     public void drawTriangle(int x1, int y1, int x2, int y2, int x3, int y3, int argbColor) {

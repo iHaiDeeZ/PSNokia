@@ -97,7 +97,7 @@ class Frame {
   }
 
   inline void set_values(Thread* thread, address stack_base,
-                         address* pc_addr, address sp, address fp);
+                         AddressSlot* pc_addr, address sp, address fp);
 
   static Frame* _last_frame;
 
@@ -112,10 +112,10 @@ class Frame {
   // Accessor for the stack and frame pointers
   address sp( void ) const { return _sp; }
   address fp( void ) const { return _fp; }
-  address pc( void ) const { return *(address*)(_pc_addr); }
+  address pc( void ) const { return *(AddressSlot*)(_pc_addr); }
   Thread * thread() const { return _thread; }
 
-  void set_pc(address pc) { *(address*)(_pc_addr) = pc; }
+  void set_pc(address pc) { *(AddressSlot*)(_pc_addr) = pc; }
 
   void print_on(Stream*, int /*index*/, const char* /*title*/) PRODUCT_RETURN;
   void print_raw_frame_on(Stream*) PRODUCT_RETURN;
@@ -204,7 +204,7 @@ public:
   bool      is_obj()    { return is_obj(tag()); }
 
   jint*     int_addr()  { return (jint*) base(); }
-  OopDesc** obj_addr()  { return (OopDesc**) base(); }
+  OopSlot* obj_addr()  { return (OopSlot*) base(); }
 
   jint      as_int()    { return *((jint*) base()); }
   jlong     as_long()   { 
@@ -222,7 +222,7 @@ public:
   }
 #endif
 
-  ReturnOop as_obj()    { return ReturnOop(*((OopDesc**) base())); }
+  ReturnOop as_obj()    { return ReturnOop(*((OopSlot*) base())); }
   jint      as_ret()    { return *((jint*) base()); }
   Oop*      as_oop()    { return (Oop*) (base()); }
 
@@ -395,9 +395,9 @@ class JavaFrame : public Frame {
 
   // Returns calling frame
   void caller_is(Frame& result) const {
-    const address caller_fp = *(address*) (fp() + caller_fp_offset());
+    const address caller_fp = *(AddressSlot*) (fp() + caller_fp_offset());
     const address caller_sp = this->caller_sp();
-    address* caller_pc_addr = (address*) (fp() + return_address_offset());
+    AddressSlot* caller_pc_addr = (AddressSlot*) (fp() + return_address_offset());
     result.set_values(_thread, _stack_base, caller_pc_addr, caller_sp, caller_fp);
   }
 
@@ -430,8 +430,8 @@ class JavaFrame : public Frame {
   jint        stack_lock_length();
 
   // GC support
-  void oops_do(void do_oop(OopDesc**));
-  void gc_prologue(void do_oop(OopDesc**));
+  void oops_do(void do_oop(OopSlot*));
+  void gc_prologue(void do_oop(OopSlot*));
   void gc_epilogue(void);
   void relocate_internal_pointers(int delta, bool do_locks);
   static void relocate_starting_frame_pointers(Thread *, int) {}
@@ -461,7 +461,7 @@ class JavaFrame : public Frame {
   address locals_pointer() const;
   address caller_sp() const { return locals_pointer() - arg_offset_from_sp(-1); }
   address calculated_locals_pointer() const;
-  OopDesc** stack_lock_obj_addr_at(int index) const;
+  OopSlot* stack_lock_obj_addr_at(int index) const;
 
   ReturnOop generate_stack_map(int& map_length);
   ReturnOop generate_compiled_method_stack_map(int& map_length);
@@ -483,31 +483,31 @@ class JavaFrame : public Frame {
 
   // Accessors to the byte code pointer
   address raw_bcp( void ) const {
-    return *(address*)(fp() + bcp_store_offset());
+    return *(AddressSlot*)(fp() + bcp_store_offset());
   }
   void set_raw_bcp( const address value) {
-    *(address*)(fp() + bcp_store_offset()) = value;
+    *(AddressSlot*)(fp() + bcp_store_offset()) = value;
   }
   void set_raw_method(MethodDesc* value) {
-    *(MethodDesc**) (fp() + method_offset()) = value;
+    *(NARROW(MethodDesc*)*) (fp() + method_offset()) = value;
   }
   MethodDesc* raw_method( void ) const {
-   return *(MethodDesc**) (fp() + method_offset());
+   return *(NARROW(MethodDesc*)*) (fp() + method_offset());
   }
   address cpool( void ) const { 
-    return *(address*)(fp() + cpool_offset());
+    return *(AddressSlot*)(fp() + cpool_offset());
   }
   void set_cpool(address value) { 
-    *(address*)(fp() + cpool_offset()) = value;
+    *(AddressSlot*)(fp() + cpool_offset()) = value;
   }
 
 #if ENABLE_COMPILER
   CompiledMethodDesc* raw_compiled_method( void ) const {
-    return *(CompiledMethodDesc**) (fp() + method_offset());
+    return *(NARROW(CompiledMethodDesc*)*) (fp() + method_offset());
   }
 
   void set_raw_compiled_method(CompiledMethodDesc* value) { 
-    *(CompiledMethodDesc**) (fp() + method_offset()) = value;
+    *(NARROW(CompiledMethodDesc*)*) (fp() + method_offset()) = value;
   }
 #else
   CompiledMethodDesc* raw_compiled_method( void ) const {
@@ -582,23 +582,23 @@ class EntryFrame : public Frame {
 
   // Returns calling frame
   void caller_is( Frame& result ) const {
-    const address caller_fp = *(address*)(fp() + stored_last_fp_offset());
-    const address caller_sp = *(address*)(fp() + stored_last_sp_offset());
-    address* caller_pc_addr =  (address*)(caller_sp + JavaStackDirection * (int)sizeof(jint));
+    const address caller_fp = *(AddressSlot*)(fp() + stored_last_fp_offset());
+    const address caller_sp = *(AddressSlot*)(fp() + stored_last_sp_offset());
+    AddressSlot* caller_pc_addr =  (AddressSlot*)(caller_sp + JavaStackDirection * (int)sizeof(jint));
     result.set_values(_thread, _stack_base, caller_pc_addr,
                       caller_sp, caller_fp);
   }
 
   // Tells whether we are at the end of the stack
   bool is_first_frame() const {
-    const address caller_fp = *(address*) (fp() + stored_last_fp_offset());
+    const address caller_fp = *(AddressSlot*) (fp() + stored_last_fp_offset());
     return caller_fp == NULL;
   }
 
   // GC support
-  void oops_do(void do_oop(OopDesc**));
+  void oops_do(void do_oop(OopSlot*));
   void relocate_internal_pointers(int delta);
-  void gc_prologue(void do_oop(OopDesc**)) {
+  void gc_prologue(void do_oop(OopSlot*)) {
     oops_do(do_oop);
   }
   void gc_epilogue(void) {
@@ -617,14 +617,14 @@ class EntryFrame : public Frame {
   int& stored_int_value2( void ) const { 
     return *(int*)(fp() + stored_int_value2_offset());
   }
-  ReturnOop& stored_obj_value( void ) const { 
-    return *(OopDesc**)(fp() + stored_obj_value_offset());
+  OopSlot& stored_obj_value( void ) const { 
+    return *(OopSlot*)(fp() + stored_obj_value_offset());
   }
-  ReturnOop& pending_exception( void ) const { 
-    return *(OopDesc**)(fp() + pending_exception_offset());
+  OopSlot& pending_exception( void ) const { 
+    return *(OopSlot*)(fp() + pending_exception_offset());
   }
-  ReturnOop& pending_activation( void ) const { 
-    return *(OopDesc**)(fp() + pending_activation_offset());
+  OopSlot& pending_activation( void ) const { 
+    return *(OopSlot*)(fp() + pending_activation_offset());
   }
 
   friend class SharedStubs;
@@ -675,7 +675,7 @@ class RuntimeFrame: public Frame {
       
 #endif
   ReturnOop obj_at    (const jint index) const {
-    return ReturnOop(*((OopDesc**) (address_for(index))));
+    return ReturnOop(*((OopSlot*) (address_for(index))));
   }
   Oop*      oop_at    (const jint index) const {
     return (Oop*) address_for(index);
@@ -688,12 +688,12 @@ inline bool Frame::is_entry_frame( void ) const {
   GUARANTEE(EntryFrame::fake_return_address_offset() == 
             JavaFrame::return_address_offset(), "Test Sanity");
 
-  const address ret_addr = *(address*) (fp() + JavaFrame::return_address_offset());
+  const address ret_addr = *(AddressSlot*) (fp() + JavaFrame::return_address_offset());
   return ret_addr == (address)EntryFrame::FakeReturnAddress;
 }
 
 inline void Frame::set_values(Thread* thread, address stack_base,
-                              address* pc_addr, address sp, address fp) {
+                              AddressSlot* pc_addr, address sp, address fp) {
   _thread = thread;
   _stack_base = stack_base;
   _fp = fp;

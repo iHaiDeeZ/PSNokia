@@ -26,7 +26,7 @@
 
 class MixedOopDesc: public OopDesc {
 public:
-  void variable_oops_do(void do_oop(OopDesc**));
+  void variable_oops_do(void do_oop(OopSlot*));
   size_t object_size() const {
     return (size_t)_size;
   }

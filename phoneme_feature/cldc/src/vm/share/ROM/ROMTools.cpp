@@ -211,9 +211,9 @@ void ROMVector::sort() {
   void *base = array.base_address();
   int length = size();
   if (length > 0) {
-    jvm_qsort(base, length, sizeof(OopDesc*), ROMVector::compare_to_forwarder);
+    jvm_qsort(base, length, sizeof(OopSlot), ROMVector::compare_to_forwarder);
     // some of array items might be in young gen while the others are in old gen
-    oop_write_barrier_range((OopDesc**)base, length);
+    oop_write_barrier_range((OopSlot*)base, length);
   }
   _current_sorting_vector = NULL;
 }
@@ -395,8 +395,8 @@ jint ROMVector::compare_to(TypeArray *s1, TypeArray *s2) {
 }
 
 jint ROMVector::compare_to_forwarder(const void* p1, const void *p2) {
-  Oop::Raw obj1 = *(OopDesc**)p1;
-  Oop::Raw obj2 = *(OopDesc**)p2;
+  Oop::Raw obj1 = (OopDesc*)*(OopSlot*)p1;
+  Oop::Raw obj2 = (OopDesc*)*(OopSlot*)p2;
 
   return _current_sorting_vector->compare_to(&obj1, &obj2);
 }
@@ -429,7 +429,7 @@ void ROMTools::shrink_object(Oop *obj, size_t old_size, size_t reduction) {
 
     // Clear thr write barrier bit for the word that would be occupied by the
     // _length field of the byte array
-    OopDesc **length_word = DERIVED(OopDesc**, stuffing, sizeof(OopDesc));
+    OopSlot*length_word = DERIVED(OopSlot*, stuffing, sizeof(OopDesc));
     ObjectHeap::clear_bit_for(length_word);
 
     // Make <stuffing> into a bytearray of the desired length. This assumes

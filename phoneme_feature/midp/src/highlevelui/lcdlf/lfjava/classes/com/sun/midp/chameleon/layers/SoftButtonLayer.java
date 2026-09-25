@@ -389,8 +389,10 @@ public class SoftButtonLayer extends CLayer implements CommandListener {
         // For further clarification please refer to
         // isSoft1Active() and isSoft2Active() methods.
 
+        // Nokia layout (see SoftButtonResources): the right soft key runs
+        // soft1 (Back/Exit/Cancel), the left one soft2 (commands, menu)
         boolean ret = false;
-        if (keyCode == EventConstants.SOFT_BUTTON1) {
+        if (keyCode == EventConstants.SOFT_BUTTON2) {
             if (isSoft1Active()) {
                 if (type == EventConstants.PRESSED) {
                     setInteractive(true);
@@ -400,7 +402,7 @@ public class SoftButtonLayer extends CLayer implements CommandListener {
                     ret = true;
                 }
             }
-        } else if (keyCode == EventConstants.SOFT_BUTTON2) {
+        } else if (keyCode == EventConstants.SOFT_BUTTON1) {
             if (isSoft2Active()) {
                 if (type == EventConstants.PRESSED) {
                     setInteractive(true);

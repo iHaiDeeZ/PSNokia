@@ -571,7 +571,7 @@ void ObjectReferenceImpl::object_reference_invoke_method(PacketInputStream *in,
 
 jlong ObjectReferenceImpl::invoke_return(Oop *o, Oop *exc, Oop *transport,
                                          int id, int options, int return_type,
-                                         OopDesc **obj_ret_val) {
+                                         OopSlot*obj_ret_val) {
 
   UsingFastOops fastoops;
   Oop::Fast ret_obj;

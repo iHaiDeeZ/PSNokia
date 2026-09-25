@@ -42,7 +42,7 @@ public:
 #endif
   static void common_invoke_method(COMMAND_ARGS, bool);
   static jlong invoke_return(Oop *o, Oop *exc, Oop *t, int id, int options,
-                             int return_type, OopDesc **ret_val);
+                             int return_type, OopSlot*ret_val);
 private:
   static void object_reference_reference_type(COMMAND_ARGS);
   static void object_reference_get_values(COMMAND_ARGS);

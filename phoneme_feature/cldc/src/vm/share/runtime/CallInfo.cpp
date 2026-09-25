@@ -27,6 +27,8 @@
 #include "incls/_precompiled.incl"
 #include "incls/_CallInfo.cpp.incl"
 
+extern "C" void write_marker(const char* text, int len);
+
 #if ENABLE_EMBEDDED_CALLINFO
 
 // A CompiledMethod start at a workboundary which means we can shave
@@ -69,6 +71,7 @@ CallInfo CallInfo::compiled(int bci, int offset_to_start JVM_TRAPS) {
   int sso = stored_start_offset(offset_to_start) + 1;
   if (   bci >= (1 << format2_bci_width)
       || sso >= (1 << format2_start_offset_width)) {
+    { char b[32]; int l=jvm_sprintf(b,"OOM_SITE_CALLINFO72\n"); write_marker(b,l); }
     Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW_(0));
   }
   return CallInfo( (bci  << format2_bci_start)

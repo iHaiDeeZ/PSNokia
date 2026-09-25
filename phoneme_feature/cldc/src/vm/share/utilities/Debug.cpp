@@ -285,7 +285,7 @@ void report_unimplemented() {
 #endif
 
 void find(int x) {
-  OopDesc** p = (OopDesc**)(address_word) x;
+  OopSlot* p = (OopSlot*)(address_word) x;
   if (ObjectHeap::contains_live(p)) {
     Oop o = ObjectHeap::slow_object_start(p);
     tty->print_cr("0x%p in object 0x%p", x, o.obj());
@@ -307,7 +307,7 @@ void ppv(int x) {
 void pp(int x) {
   DebugHandleMarker debug_handle_marker;
 
-  OopDesc** p = (OopDesc**)(address_word) x;
+  OopSlot* p = (OopSlot*)(address_word) x;
   Oop::Raw o;
 
   Oop::disable_on_stack_check();
@@ -410,7 +410,7 @@ void ref(int x) {
 }
 #endif
 
-void print_trace_do(Thread* thread, void do_oop(OopDesc**)) {
+void print_trace_do(Thread* thread, void do_oop(OopSlot*)) {
     (void)&do_oop;
 
     tty->print("[Thread: 0x%x", thread->obj());
@@ -803,7 +803,7 @@ static void product_trace_stack_from(Frame* frame, Stream* st) {
   st->cr();
 }
 
-static void product_print_trace_do(Thread* thread, void do_oop(OopDesc**)) {
+static void product_print_trace_do(Thread* thread, void do_oop(OopSlot*)) {
   (void)do_oop;
   marker_stream.print("[Thread: 0x%x", thread->obj());
   if (thread->obj() == Thread::current()->obj()) {
@@ -845,5 +845,29 @@ extern "C" void pss() {
 
   marker_stream.print_cr("[Finished dumping all threads]");
   write_marker("PSS_RAW_EXIT\n", 13);
+}
+#endif
+
+#if USE_NARROW_POINTERS
+// A pointer above 4GB was about to be stored in a 4-byte VM word (see
+// narrow<T> in GlobalDefinitions.hpp): some memory the VM references was
+// not allocated in the low arena. Stop right here - truncating it would
+// corrupt the heap much later and far away.
+extern "C" void narrow_pointer_overflow(const void* p) {
+  // The callers' return addresses identify the culprit when no debugger is
+  // attached (e.g. on the PS4: map them with the ELF and main()'s address).
+  tty->print_cr("FATAL: pointer %p does not fit in a narrow (32-bit) slot", p);
+  // Walk the frame-pointer chain (debug builds keep frame pointers)
+  void** frame = (void**)__builtin_frame_address(0);
+  for (int i = 0; i < 8 && frame != NULL; i++) {
+    tty->print_cr("  called from %p", frame[1]);
+    void** next = (void**)frame[0];
+    if (next <= frame) {
+      break;
+    }
+    frame = next;
+  }
+  BREAKPOINT;
+  JVM::exit(-1);
 }
 #endif

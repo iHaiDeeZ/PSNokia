@@ -43,7 +43,7 @@ jint ClassInfo::itable_size() {
 
 jint ClassInfo::itable_size(int nof_interfaces, int nof_methods) {
   return nof_interfaces * (sizeof(jint) + sizeof(int))
-       + nof_methods    * sizeof(jobject);
+       + nof_methods    * sizeof(OopSlot);
 }
 
 #ifndef PRODUCT
@@ -231,7 +231,7 @@ void ClassInfo::iterate_tables(OopROMVisitor* visitor) {
         visitor->do_comment(buffer);
         for (int i = 0; i < methods.length(); i ++) {
           IndexableField field(i, true);
-          visitor->do_oop(&field, offset + i * sizeof(jobject), true);
+          visitor->do_oop(&field, offset + i * sizeof(OopSlot), true);
         }
       }
     }
@@ -284,10 +284,10 @@ int ClassInfo::generate_fieldmap(TypeArray* field_map) {
   } else {
     // _methods
     field_map->byte_at_put(map_index++, T_OBJECT);
-    offset += sizeof(jobject);
+    offset += sizeof(OopSlot);
     // _fields
     field_map->byte_at_put(map_index++, T_OBJECT);
-    offset += sizeof(jobject);
+    offset += sizeof(OopSlot);
 #if ENABLE_ISOLATES
     // static_field size
     field_map->byte_at_put(map_index++, T_INT);
@@ -295,15 +295,15 @@ int ClassInfo::generate_fieldmap(TypeArray* field_map) {
 #endif
     // _local_interfaces
     field_map->byte_at_put(map_index++, T_OBJECT);
-    offset += sizeof(jobject);
+    offset += sizeof(OopSlot);
 #if ENABLE_REFLECTION
     // _inner_classes
     field_map->byte_at_put(map_index++, T_OBJECT);
-    offset += sizeof(jobject);
+    offset += sizeof(OopSlot);
 #endif
     // _constants
     field_map->byte_at_put(map_index++, T_OBJECT);
-    offset += sizeof(jobject);
+    offset += sizeof(OopSlot);
   }
 
   while (offset < header_size()) {
@@ -317,7 +317,7 @@ int ClassInfo::generate_fieldmap(TypeArray* field_map) {
   // vtable
   for (i = 0; i < vtable_length(); i++) {
     field_map->byte_at_put(map_index++, T_OBJECT);
-    offset += sizeof(jobject);
+    offset += sizeof(OopSlot);
   }
   // itable
   for (i = 0; i < itable_length(); i++) {
@@ -328,7 +328,7 @@ int ClassInfo::generate_fieldmap(TypeArray* field_map) {
   }
   while (offset < itable_end_offset()) {
     field_map->byte_at_put(map_index++, T_OBJECT); // interface method
-    offset += sizeof(jobject);
+    offset += sizeof(OopSlot);
   }
 
   return map_index;

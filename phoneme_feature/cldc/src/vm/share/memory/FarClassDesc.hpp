@@ -164,9 +164,9 @@ protected:
 
   union {
     jint             _embedded_start; // offset of embedded oop map (if any)
-    jubyte*          _extern;         // pointer to pregenerated oop map
+    NARROW(jubyte*) _extern;         // pointer to pregenerated oop map
   } _oop_map;
-  OopDesc*           _prototypical_near;
+  NARROW(OopDesc*) _prototypical_near;
 
   friend class FarClass;
 };

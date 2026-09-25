@@ -405,7 +405,7 @@ void BinaryROMWriter::stream_object(Oop* object JVM_TRAPS) {
   if (!is_current_subtype(object) || ROM::system_contains(object->obj())) {
     return;
   }
-  int field_count = object->object_size() / sizeof(OopDesc*);
+  int field_count = object->object_size() / sizeof(OopSlot);
   if (field_count > current_fieldmap()->length()) {
     alloc_field_map(field_count JVM_CHECK);
   }
@@ -433,19 +433,19 @@ void BinaryROMWriter::stream_object(Oop* object JVM_TRAPS) {
       switch (current_fieldmap()->byte_at(i)) {
       case 0:
         {
-          jint value = object->int_field(i * sizeof(OopDesc*));
+          jint value = object->int_field(i * sizeof(OopSlot));
           writebinary_int(value);
           ((BinaryObjectWriter*)_obj_writer)->advance_offset();
         }
         break;
       case 1: {
-          int offset = i * sizeof(OopDesc*);
+          int offset = i * sizeof(OopSlot);
           value = object->obj_field(offset);
           _obj_writer->put_reference(object, offset, &value JVM_CHECK);
         }
         break;
       case 2:
-        put_symbolic_field(object, i * sizeof(OopDesc*) JVM_CHECK);
+        put_symbolic_field(object, i * sizeof(OopSlot) JVM_CHECK);
         break;
       default:
         SHOULD_NOT_REACH_HERE();
@@ -456,16 +456,16 @@ void BinaryROMWriter::stream_object(Oop* object JVM_TRAPS) {
       switch (current_fieldmap()->byte_at(i)) {
       case 0:
         {
-          //put_int_field(object, i * sizeof(OopDesc*) JVM_CHECK);
-          jint value = object->int_field(i * sizeof(OopDesc*));
+          //put_int_field(object, i * sizeof(OopSlot) JVM_CHECK);
+          jint value = object->int_field(i * sizeof(OopSlot));
           visitor()->put_int(object, value JVM_CHECK);
         }
         break;
       case 1:
-        put_oop_field(object, i * sizeof(OopDesc*) JVM_CHECK);
+        put_oop_field(object, i * sizeof(OopSlot) JVM_CHECK);
         break;
       case 2:
-        put_symbolic_field(object, i * sizeof(OopDesc*) JVM_CHECK);
+        put_symbolic_field(object, i * sizeof(OopSlot) JVM_CHECK);
         break;
       default:
         SHOULD_NOT_REACH_HERE();
@@ -474,8 +474,8 @@ void BinaryROMWriter::stream_object(Oop* object JVM_TRAPS) {
   }
 }
 
-void BinaryROMWriter::generate_fast_fieldmap_by_oops_do(OopDesc**p) {
-  int i = ((int)p - (int)_streaming_oop) / sizeof(OopDesc*);
+void BinaryROMWriter::generate_fast_fieldmap_by_oops_do(OopSlot*p) {
+  int i = ((int)p - (int)_streaming_oop) / sizeof(OopSlot);
   _streaming_fieldmap->byte_at_put(i, 1);
 }
 
@@ -892,7 +892,7 @@ int BinaryROMWriter::binary_compiled_method_table_addr() {
 }
 
 int BinaryROMWriter::binary_compiled_method_table_size() {
-  return compiled_method_list()->size() * sizeof(OopDesc*);
+  return compiled_method_list()->size() * sizeof(OopSlot);
 }
 
 int BinaryROMWriter::binary_symbol_table_addr() {

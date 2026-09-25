@@ -491,7 +491,12 @@ void Java_com_sun_cldchi_io_ConsoleOutputStream_write() {
    * write_marker(), exactly like pss()'s MarkerStream does, to isolate
    * whether this KNI call is even being reached at all. */
   char ch = (char)value;
+#if __has_include(<psp2/io/fcntl.h>)
   write_marker(&ch, 1);
+#else
+  // write_marker() is a no-op off the Vita; use the normal console.
+  tty->print("%c", ch);
+#endif
 }
 
   // com.sun.cldchi.jvm natives
@@ -1549,6 +1554,7 @@ Java_java_lang_ref_WeakReference_initializeWeakReference(JVM_SINGLE_ARG_TRAPS)
     const int refIndex = ObjectHeap::register_global_ref_object(&referent,
       type JVM_MUST_SUCCEED);
     if( refIndex < 0 ) {
+      { char b[32]; int l=jvm_sprintf(b,"OOM_SITE_NATIVES1552\n"); write_marker(b,l); }
       Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW);
     }
     thisObj().set_referent_index(refIndex);

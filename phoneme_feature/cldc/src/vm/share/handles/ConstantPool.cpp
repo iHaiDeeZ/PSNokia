@@ -96,7 +96,7 @@ void ConstantPool::klass_at_put(int index, JavaClass* k) {
   GUARANTEE(k->obj() == Universe::class_from_id(k->class_id()), "sanity");
   tag_at_put(index, JVM_CONSTANT_Class);
   // We may have put a symbol pointer here, so clear the write barrier bit
-  OopDesc** klass = obj()->obj_field_addr(offset_from_index(index));
+  OopSlot* klass = obj()->obj_field_addr(offset_from_index(index));
   // another possible location for the klass is mmaped/malloced Monet bundle
   if (ObjectHeap::contains(klass)) {
     ObjectHeap::clear_bit_for(klass);

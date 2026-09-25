@@ -35,8 +35,8 @@ class ROMizerHashEntryDesc: public MixedOopDesc {
 
  private:
   // pointers
-  OopDesc *_referent;
-  ROMizerHashEntryDesc *_next;
+  NARROW(OopDesc*) _referent;
+  NARROW(ROMizerHashEntryDesc*) _next;
 
   /* All oops must go before here.  If you change the number of oops, 
    * be sure to change pointer_count()

@@ -27,7 +27,7 @@
 #include "incls/_precompiled.incl"
 #include "incls/_TaskMirrorDesc.cpp.incl"
 
-void TaskMirrorDesc::variable_oops_do(void do_oop(OopDesc **)) {
+void TaskMirrorDesc::variable_oops_do(void do_oop(OopSlot*)) {
 
   if (_object_size == header_size()) {
     // no statics so don't continue.  It may be a size_type_array class which

@@ -318,26 +318,12 @@ public class Loader {
             return bg;
         }
 
-        private static int diagAppearanceDump = 0;
         private static int diagImage2DDump = 0;
 
         private Appearance parseAppearance(DataInputStream bOrig) throws IOException {
             Appearance ap = new Appearance();
             readObject3DHeader(bOrig, ap);
-            int remaining = bOrig.available();
-            byte[] rest = new byte[remaining];
-            bOrig.readFully(rest);
-            if (remaining != 25 && diagAppearanceDump < 20) {
-                diagAppearanceDump++;
-                StringBuffer hex = new StringBuffer();
-                for (int i = 0; i < rest.length && i < 40; i++) {
-                    int v = rest[i] & 0xFF;
-                    if (v < 16) hex.append('0');
-                    hex.append(Integer.toHexString(v)).append(' ');
-                }
-                System.out.println("M3G_APPEARANCE_RAW_ANOMALY remaining=" + remaining + " bytes=" + hex);
-            }
-            DataInputStream b = new DataInputStream(new java.io.ByteArrayInputStream(rest));
+            DataInputStream b = bOrig;
             b.readByte(); // layer (signed byte, range -63..63)
             readU32(b); // compositingMode
             readU32(b); // fog
@@ -345,23 +331,9 @@ public class Loader {
             int matIdx = (int) readU32(b);
             Object mat = resolve(matIdx);
             if (mat instanceof Material) ap.material = (Material) mat;
-            /*
-             * There is no explicit texture-unit count field: confirmed via
-             * two raw hex dumps (M3G_APPEARANCE_RAW/_ANOMALY) that some real
-             * chunks end after exactly 1 more ObjectIndex field (21 bytes
-             * total) and others after exactly 2 (25 bytes total), with zero
-             * bytes left over either way. So the real rule is simply "read
-             * one ObjectIndex-sized texture slot at a time until the chunk's
-             * own declared length runs out" (matching this whole parser's
-             * declared per-object self-bounding design), not a fixed count
-             * of 8 (the original assumption, which overran every chunk by 6
-             * slots/24 bytes and threw EOFException on all of them) nor a
-             * fixed count of 2 (an intermediate guess that also turned out
-             * wrong once a real 1-texture-slot chunk showed up). The 8-slot
-             * cap below is just a safety bound against a corrupt chunk
-             * running away, not the real per-object limit.
-             */
-            for (int i = 0; i < 8 && b.available() >= 4; i++) {
+            // ObjectIndex[] textures: a UInt32 count, then the indices
+            long textureCount = readU32(b);
+            for (int i = 0; i < textureCount && b.available() >= 4; i++) {
                 int texIdx = (int) readU32(b);
                 Object tex = resolve(texIdx);
                 if (i < ap.textures.length && tex instanceof Texture2D) {
@@ -543,22 +515,30 @@ public class Loader {
         private VertexArray parseVertexArray(DataInputStream b) throws IOException {
             Object3D header = new Material(); // any concrete Object3D to host the common header
             readObject3DHeader(b, header);
+            // Spec layout: componentSize, componentCount, encoding, vertexCount
+            // (UInt16, little-endian like the rest of the file). Skipping the
+            // encoding byte shifted every vertex value by one byte, which
+            // collapsed e.g. Tower Bloxx's building blocks to a few units.
             int componentSize = b.readUnsignedByte();
             int componentCount = b.readUnsignedByte();
-            int vertexCount = readU16BE(b);
+            int encoding = b.readUnsignedByte();
+            int vertexCount = readU16(b);
             int total = vertexCount * componentCount;
-            if (total < 0 || total > b.available()) {
+            if (total < 0 || total * componentSize > b.available()) {
                 // Field layout mismatch for this chunk - empty array, same defensive
                 // fallback used elsewhere in this parser.
                 return new VertexArray(0, componentCount == 0 ? 1 : componentCount, new float[0]);
             }
             float[] data = new float[total];
             for (int i = 0; i < data.length; i++) {
-                if (componentSize == 1) {
-                    data[i] = b.readByte();
-                } else {
-                    data[i] = readS16(b);
+                int v = componentSize == 1 ? b.readByte() : readS16(b);
+                if (encoding == 1 && i >= componentCount) {
+                    // Delta encoding: each component adds to the previous
+                    // vertex's, wrapping at the component size
+                    v += (int) data[i - componentCount];
+                    v = componentSize == 1 ? (byte) v : (short) v;
                 }
+                data[i] = v;
             }
             VertexArray va = new VertexArray(vertexCount, componentCount, data);
             va.userID = header.userID;
@@ -572,11 +552,9 @@ public class Loader {
             vb.defaultColor = (a << 24) | (r << 16) | (g << 8) | bl;
             int posIdx = (int) readU32(b);
             Object pos = resolve(posIdx);
-            float pbx = 0, pby = 0, pbz = 0, psc = 1;
-            if (pos != null) {
-                pbx = readFloat(b); pby = readFloat(b); pbz = readFloat(b);
-                psc = readFloat(b);
-            }
+            // The bias and scale are present even without positions
+            float pbx = readFloat(b), pby = readFloat(b), pbz = readFloat(b);
+            float psc = readFloat(b);
             if (pos instanceof VertexArray) {
                 vb.positions = applyBiasScale((VertexArray) pos, pbx, pby, pbz, 0, psc);
             }
@@ -594,7 +572,9 @@ public class Loader {
             for (int i = 0; i < texArrayCount; i++) {
                 int tcIdx = (int) readU32(b);
                 Object tc = resolve(tcIdx);
+                // Float32[3] texCoordBias, then Float32 texCoordScale
                 float bu = readFloat(b), bv = readFloat(b);
+                readFloat(b);
                 float su = readFloat(b);
                 if (i == 0 && tc instanceof VertexArray) {
                     vb.texCoords = applyBiasScale((VertexArray) tc, bu, bv, 0, 0, su);
@@ -736,22 +716,6 @@ public class Loader {
             return (b1 << 8) | b0;
         }
         private short readS16(DataInputStream s) throws IOException { return (short) readU16(s); }
-        /**
-         * VertexArray's vertexCount field is the sole confirmed exception to
-         * this format's otherwise-uniform little-endian encoding (empirically
-         * found via live diagnostic logging against Tower Bloxx's real .m3g
-         * file: every observed vertexCount was a multiple of 256 - e.g. 57344
-         * = 0xE000 - with the actually-meaningful small value (8-224, matching
-         * real per-submesh vertex counts) sitting in the byte read SECOND,
-         * not first). Scoped to just this one field, since every other
-         * multi-byte field in this parser (all U32 reads, confirmed via
-         * sane userID/chunk-length/stripCount values) is genuinely LE.
-         */
-        private int readU16BE(DataInputStream s) throws IOException {
-            int b0 = s.readUnsignedByte();
-            int b1 = s.readUnsignedByte();
-            return (b0 << 8) | b1;
-        }
         private float readFloat(DataInputStream s) throws IOException {
             return Float.intBitsToFloat(readS32(s));
         }

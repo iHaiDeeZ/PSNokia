@@ -1107,6 +1107,9 @@ public class RecordStoreImpl implements AbstractRecordStoreImpl {
             dbIndex = new RecordStoreIndex(this, suiteId, recordStoreName);
 
         } catch (java.io.IOException ioe) {
+            // Port diagnostics: the cause is otherwise lost
+            System.out.println("RecordStoreImpl: " + ioe);
+            ioe.printStackTrace();
             try {
                 if (dbFile != null) {
                     dbFile.close();

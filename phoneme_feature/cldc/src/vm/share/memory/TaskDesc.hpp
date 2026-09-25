@@ -26,23 +26,23 @@
 
 class TaskDescPointers: public MixedOopDesc {
 protected:
-  ObjArrayDesc*     _app_classpath;
-  ObjArrayDesc*     _sys_classpath;
-  ObjArrayDesc*     _hidden_packages;
-  ObjArrayDesc*     _restricted_packages;
-  ObjArrayDesc*     _dictionary;
+  NARROW(ObjArrayDesc*) _app_classpath;
+  NARROW(ObjArrayDesc*) _sys_classpath;
+  NARROW(ObjArrayDesc*) _hidden_packages;
+  NARROW(ObjArrayDesc*) _restricted_packages;
+  NARROW(ObjArrayDesc*) _dictionary;
 
 #if USE_BINARY_IMAGE_LOADER
-  ObjArrayDesc*     _binary_images;
-  ObjArrayDesc*     _names_of_bad_classes; // ObjArray
+  NARROW(ObjArrayDesc*) _binary_images;
+  NARROW(ObjArrayDesc*) _names_of_bad_classes; // ObjArray
 #endif
 
 #if USE_BINARY_IMAGE_LOADER && USE_IMAGE_MAPPING && !ENABLE_LIB_IMAGES
-  TypeArrayDesc*    _mapped_image_handles;
+  NARROW(TypeArrayDesc*) _mapped_image_handles;
 #endif
 
 #if ENABLE_COMPILER && ENABLE_INLINE
-  ObjArrayDesc*     _direct_callers;
+  NARROW(ObjArrayDesc*) _direct_callers;
 #endif
 
 #if ENABLE_ISOLATES
@@ -51,12 +51,12 @@ protected:
   // This static variable itself can be found from the TaskMirror object
   // reference from the embedded table in the Isolate class, at the offset
   // corresponding to the task id kept in this task object.
-  OopDesc*          _special_thread;
+  NARROW(OopDesc*) _special_thread;
 
   // A Task may be represented by multiple Isolate objects. 
   // _primary_isolate_obj is the Isolate object that's visible to this
   // Task.
-  OopDesc*          _primary_isolate_obj;
+  NARROW(OopDesc*) _primary_isolate_obj;
 
   // List of all Isolate objects that have been 'seen' by this Task. I.e.,
   // This includes:
@@ -64,19 +64,19 @@ protected:
   //   - isolate objects that have been created by this Task
   //   - isolate objects that have been created by executing
   //     the Java method Isolate.isolates() in this Task.
-  OopDesc*          _seen_isolates;
+  NARROW(OopDesc*) _seen_isolates;
 
   
-  OopDesc*          _transport;         // Used by JAVA_DEBUGGER
-  OopDesc*          _class_list;
-  OopDesc*          _mirror_list;
-  OopDesc*          _clinit_list;       // list of class task mirror of 
+  NARROW(OopDesc*) _transport;         // Used by JAVA_DEBUGGER
+  NARROW(OopDesc*) _class_list;
+  NARROW(OopDesc*) _mirror_list;
+  NARROW(OopDesc*) _clinit_list;       // list of class task mirror of 
                                         // classes being initialized by this
                                         // task.
-  OopDesc*          _priority_queue;    // list of thread queues of this task
-  OopDesc*          _string_table;      // string table for this task
-  OopDesc*          _symbol_table;      // symbol table for this task
-  OopDesc*          _global_references; // global references for this task
+  NARROW(OopDesc*) _priority_queue;    // list of thread queues of this task
+  NARROW(OopDesc*) _string_table;      // string table for this task
+  NARROW(OopDesc*) _symbol_table;      // symbol table for this task
+  NARROW(OopDesc*) _global_references; // global references for this task
 #endif //  ENABLE_ISOLATES
 };
 
@@ -97,7 +97,7 @@ private:
 
   static int pointer_count() {
     return (sizeof(TaskDescPointers) - sizeof(MixedOopDesc)) /
-      sizeof(OopDesc*);
+      sizeof(OopSlot);
   }
 
   jint              _string_table_count;

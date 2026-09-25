@@ -31,21 +31,21 @@ class ThreadObj : public Instance {
   HANDLE_DEFINITION_CHECK(ThreadObj, Instance);
 
   static int priority_offset() {
-    return header_size() + 0 * sizeof(jobject);
+    return header_size() + 0 * sizeof(OopSlot);
   }
   static int thread_offset() {
-    return header_size() + 2 * sizeof(jobject);
+    return header_size() + 2 * sizeof(OopSlot);
   }
   static int is_terminated_offset() {
-    return header_size() + 3 * sizeof(jobject);
+    return header_size() + 3 * sizeof(OopSlot);
   }
   static int is_stillborn_offset() {
-    return header_size() + 4 * sizeof(jobject);
+    return header_size() + 4 * sizeof(OopSlot);
   }
 
 #if ENABLE_CLDC_11
   static int name_offset() {
-    return header_size() + 5*sizeof(jobject);
+    return header_size() + 5*sizeof(OopSlot);
   }
 #endif
 

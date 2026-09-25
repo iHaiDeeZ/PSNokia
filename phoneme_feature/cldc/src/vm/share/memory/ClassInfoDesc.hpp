@@ -39,7 +39,7 @@ protected:
   jushort     _itable_length;    // length of Java itable (in words)
   jushort     _class_id;         // Index for this class in 
                                  // Universe::class_list().
-  SymbolDesc* _name;             // Name of this array class
+  NARROW(SymbolDesc*) _name;             // Name of this array class
   AccessFlags _access_flags;     // access flags
 };
 
@@ -65,8 +65,8 @@ class ClassInfoDesc : public GenericClassInfoDesc {
 #endif
 
   struct _instance {
-    ObjArrayDesc*      _methods;           // Method array
-    TypeArrayDesc*     _fields;            // Instance and static variable
+    NARROW(ObjArrayDesc*) _methods;           // Method array
+    NARROW(TypeArrayDesc*) _fields;            // Instance and static variable
                                            // information, 5-tuples of
                                            // shorts [access, name_index,
                                            // sig_index, initval_index,
@@ -76,15 +76,15 @@ class ClassInfoDesc : public GenericClassInfoDesc {
                                            // of mirror object.
 #endif //ENABLE_ISOLATES
 
-    TypeArrayDesc*     _local_interfaces;  // Interfaces this class declares
+    NARROW(TypeArrayDesc*) _local_interfaces;  // Interfaces this class declares
                                            // locally to implement (an array
                                            // of class_id)
 #if ENABLE_REFLECTION
-    TypeArrayDesc*     _inner_classes;     // Array of the inner classes
+    NARROW(TypeArrayDesc*) _inner_classes;     // Array of the inner classes
                                            // declared by this class
 #endif
 
-    ConstantPoolDesc*  _constants;         // Constant pool for this class
+    NARROW(ConstantPoolDesc*) _constants;         // Constant pool for this class
   };
 
   struct _array {
@@ -113,7 +113,7 @@ public:
 
   static size_t allocation_size(int vtable_length, size_t itable_size) {
     return align_allocation_size(sizeof(ClassInfoDesc)
-         + vtable_length * sizeof(jobject)
+         + vtable_length * sizeof(OopSlot)
          + itable_size);
   }
 
@@ -138,14 +138,14 @@ public:
     OopDesc::initialize(klass);
   }
 
-  void variable_oops_do(void do_oop(OopDesc**));
+  void variable_oops_do(void do_oop(OopSlot*));
 
   size_t object_size() const {
     return _object_size;
   }
 
-  OopDesc** vtable_base() {
-    return (OopDesc**)  (((address)this) + header_size());
+  OopSlot* vtable_base() {
+    return (OopSlot*)  (((address)this) + header_size());
   }
 
 friend class Method;

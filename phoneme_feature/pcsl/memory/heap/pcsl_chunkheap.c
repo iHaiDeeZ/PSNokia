@@ -76,7 +76,7 @@ static ChunkInfo *get_chunk_info(void* chunk_ptr) {
  * to or greater than <code>ptr</code> 
  */
 void* align_size_up(void *ptr, unsigned int alignment) {
-    return (void*)(((unsigned int)ptr + alignment - 1) & ~(alignment - 1));
+    return (void*)(((size_t)ptr + alignment - 1) & ~(size_t)(alignment - 1));
 }
 
 /*

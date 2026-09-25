@@ -614,9 +614,9 @@ class Thread: public Oop {
   static void print_current_pending_exception_stack_trace();
 
   // Garbage collection support.
-  void stack_oops_do(void do_oop(OopDesc**));
-  void nonstack_oops_do(void do_oop(OopDesc**));
-  void gc_prologue(void do_oop(OopDesc**));
+  void stack_oops_do(void do_oop(OopSlot*));
+  void nonstack_oops_do(void do_oop(OopSlot*));
+  void gc_prologue(void do_oop(OopSlot*));
   void gc_epilogue(void);
 
   // Printing and debugging support.

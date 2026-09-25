@@ -75,6 +75,18 @@ public class SoftButtonResources {
         SoftButtonSkin.BUTTON_MAX_WIDTH = SkinResources.getNumbersSequence(
                 SkinPropertiesIDs.SOFTBTN_BUTTON_MAX_WIDTH);
         
+        // Nokia layout: button 0 (the Back/Exit/Cancel command) sits on the
+        // right and button 1 (the other commands or the menu) on the left,
+        // the reverse of this skin's layout. Games written for Nokia phones
+        // expect Exit on the right soft key. SoftButtonLayer.keyInput swaps
+        // the keys to match.
+        if (SoftButtonSkin.NUM_BUTTONS >= 2) {
+            swapFirstTwo(SoftButtonSkin.BUTTON_ANCHOR_X);
+            swapFirstTwo(SoftButtonSkin.BUTTON_ANCHOR_Y);
+            swapFirstTwo(SoftButtonSkin.BUTTON_ALIGN_X);
+            swapFirstTwo(SoftButtonSkin.BUTTON_MAX_WIDTH);
+        }
+
         int shdAlign = SkinResources.getInt(
                 SkinPropertiesIDs.SOFTBTN_BUTTON_SHD_ALIGN);
         SoftButtonSkin.BUTTON_SHD_ALIGN = 
@@ -112,5 +124,13 @@ public class SoftButtonResources {
                 SkinPropertiesIDs.SOFTBTN_IMAGE_AU_BG, 3);
 
         init = true;
+    }
+
+    private static void swapFirstTwo(int[] values) {
+        if (values != null && values.length >= 2) {
+            int t = values[0];
+            values[0] = values[1];
+            values[1] = t;
+        }
     }
 }

@@ -1,0 +1,30 @@
+#
+# PS4 compiler and library settings. CC/CPP/LD are the gcc-style clang
+# wrappers (see ps4/toolchain), which compile for
+# x86_64 FreeBSD ELF against the OpenOrbis sysroot and link like the
+# OpenOrbis samples.
+#
+
+# PSNOKIA_PS4, PSNOKIA_OUT and OO_PS4_TOOLCHAIN come from ps4/build_midp.sh
+PS4_WRAP        = $(PSNOKIA_PS4)/toolchain/bin/
+PS4_COMMON      = $(PSNOKIA_PS4)/common
+OO              = $(OO_PS4_TOOLCHAIN)
+
+CC              = $(PS4_WRAP)gcc
+CPP             = $(PS4_WRAP)g++
+LD              = $(PS4_WRAP)g++
+AR              = $(PS4_WRAP)ar
+CREATE_LIB      = $(AR) -rcs
+RANLIB          = $(PS4_WRAP)ranlib
+ASM             = $(PS4_WRAP)as
+
+EXTRA_CFLAGS    += -DPS4 -D_GNU_SOURCE=1 -D_REENTRANT -I$(PS4_COMMON)
+EXTRA_INCLUDES  += -I$(OO)/include/SDL2
+
+# The low heap objects (malloc replacement) come in with the VM's exported
+# LINK_FLAGS (ps4_c.cfg). Add the render log, then SDL2 and the system
+# libraries it needs, as in the OpenOrbis SDL2 sample.
+LIBS += $(PSNOKIA_OUT)/common/psn_marker.o \
+        -L$(OO)/lib -lSDL2 -lSceUserService -lSceVideoOut -lSceAudioOut \
+        -lScePad -lSceSysmodule
+LIBS := $(filter-out -lnsl -lpthread -lm -ldl,$(LIBS))

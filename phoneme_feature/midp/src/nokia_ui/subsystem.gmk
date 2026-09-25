@@ -14,7 +14,10 @@ SUBSYSTEM_NOKIAUI_JAVA_FILES = \
     $(SUBSYSTEM_DIR)/nokia_ui/classes/com/nokia/mid/ui/DirectGraphics.java \
     $(SUBSYSTEM_DIR)/nokia_ui/classes/com/nokia/mid/ui/DirectGraphicsImpl.java \
     $(SUBSYSTEM_DIR)/nokia_ui/classes/com/nokia/mid/ui/DirectUtils.java \
-    $(SUBSYSTEM_DIR)/nokia_ui/classes/com/nokia/mid/ui/FullCanvas.java
+    $(SUBSYSTEM_DIR)/nokia_ui/classes/com/nokia/mid/ui/FullCanvas.java \
+    $(SUBSYSTEM_DIR)/nokia_ui/classes/com/nokia/mid/ui/DeviceControl.java \
+    $(SUBSYSTEM_DIR)/nokia_ui/classes/com/nokia/mid/sound/Sound.java \
+    $(SUBSYSTEM_DIR)/nokia_ui/classes/com/nokia/mid/sound/SoundListener.java
 
 nokia_ui:
 

@@ -38,10 +38,10 @@ class String : public Instance {
   // To avoid endless lists of friends the static offset computation
   // routines are all public.
   static int offset_offset() {
-    return header_size() + sizeof(jobject);
+    return header_size() + sizeof(OopSlot);
   }
   static int count_offset(){
-    return header_size() + sizeof(jobject) + sizeof(jint);
+    return header_size() + sizeof(OopSlot) + sizeof(jint);
   }
 
  public:

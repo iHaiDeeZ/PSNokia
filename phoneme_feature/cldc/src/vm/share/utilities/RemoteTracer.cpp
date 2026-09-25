@@ -216,10 +216,10 @@ void RemoteTracer::update_stats(OopDesc* obj) {
   }
 }
 
-void RemoteTracer::update_stats_from_heap(OopDesc** heap_start, OopDesc** collection_area_start) {
+void RemoteTracer::update_stats_from_heap(OopSlot* heap_start, OopSlot* collection_area_start) {
   jvm_memset(&tmp_stats, 0, sizeof(tmp_stats));
   
-  OopDesc** p = heap_start;
+  OopSlot* p = heap_start;
   while (p < collection_area_start) {
     OopDesc* obj = (OopDesc*) p;
     update_stats(obj);

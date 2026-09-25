@@ -32,22 +32,22 @@ public:
     return allocation_size();
   }
 
-  void variable_oops_do(void do_oop(OopDesc**)) {
+  void variable_oops_do(void do_oop(OopSlot*)) {
     if (_ref_obj != NULL &&
         ObjectHeap::contains(_ref_obj) &&
-        ObjectHeap::test_bit_for((OopDesc**)_ref_obj)) {
+        ObjectHeap::test_bit_for((OopSlot*)_ref_obj)) {
       // if the object is not marked, don't mark it
       // if the object IS marked, then no harm re-marking it; but the
       // real reason for this is so that when we go through the
       // update_object_pointers phase we call the do_oop routine IFF the
       // object is marked.
-      do_oop((OopDesc **)&_ref_obj);
+      do_oop((OopSlot*)&_ref_obj);
     }
     if (_next_by_ref != NULL) {
-      do_oop((OopDesc**)&_next_by_ref);
+      do_oop((OopSlot*)&_next_by_ref);
     }
     if (_next_by_id != NULL) {
-      do_oop((OopDesc**)&_next_by_id);
+      do_oop((OopSlot*)&_next_by_id);
     }
   }
 

@@ -27,34 +27,34 @@
 # include "incls/_precompiled.incl"
 # include "incls/_ClassInfoDesc.cpp.incl"
 
-void ClassInfoDesc::variable_oops_do(void do_oop(OopDesc**)) {
+void ClassInfoDesc::variable_oops_do(void do_oop(OopSlot*)) {
   //
   // Reminder:: remember to change ROMWriter::stream_class_info()
   // whenever you change this function!
   //
 
   if (_access_flags.is_array_class()) {
-    //do_oop((OopDesc**)&array._name);
+    //do_oop((OopSlot*)&array._name);
   } else {
-    do_oop((OopDesc**)&instance._methods);
-    do_oop((OopDesc**)&instance._local_interfaces);
-    do_oop((OopDesc**)&instance._fields);
-    do_oop((OopDesc**)&instance._constants);
+    do_oop((OopSlot*)&instance._methods);
+    do_oop((OopSlot*)&instance._local_interfaces);
+    do_oop((OopSlot*)&instance._fields);
+    do_oop((OopSlot*)&instance._constants);
 #if ENABLE_REFLECTION
-    do_oop((OopDesc**)&instance._inner_classes);
+    do_oop((OopSlot*)&instance._inner_classes);
 #endif
   }
 
   // vtable
-  OopDesc** vtable = (OopDesc**) ((address) this + header_size());
+  OopSlot* vtable = (OopSlot*) ((address) this + header_size());
   int i;
   for (i = 0; i < _vtable_length; i++) {
     do_oop(vtable++);  // visit virtual method
   }
 
   // itable
-  OopDesc** itable = vtable;
-  OopDesc** itable_end = (OopDesc**) ((address) this + _object_size);
+  OopSlot* itable = vtable;
+  OopSlot* itable_end = (OopSlot*) ((address) this + _object_size);
   for (i = 0; i < _itable_length; i++) {
     itable++;          // skip interface klass_index
     itable++;          // skip integer method index

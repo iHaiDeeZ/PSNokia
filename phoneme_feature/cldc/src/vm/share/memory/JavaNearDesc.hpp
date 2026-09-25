@@ -28,7 +28,7 @@ class JavaNearDesc: public NearDesc {
  private:
   static size_t allocation_size() { return sizeof(JavaNearDesc); }
 
-  ClassInfoDesc* _class_info;  
+  NARROW(ClassInfoDesc*) _class_info;  
   jint _value;
 
   friend class JavaNear;

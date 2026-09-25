@@ -27,7 +27,7 @@
 class InstanceClassDesc: public JavaClassDesc { 
  public:
   // GC support.
-  void variable_oops_do(void do_oop(OopDesc**));
+  void variable_oops_do(void do_oop(OopSlot*));
 
  private:
   // Compute allocation size

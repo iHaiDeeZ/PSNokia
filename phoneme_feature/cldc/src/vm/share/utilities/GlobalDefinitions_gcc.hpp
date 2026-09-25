@@ -34,7 +34,7 @@
 
 # include <ctype.h>
 # include <string.h>
-#if defined(LINUX) && !defined(SOLARIS)
+#if (defined(LINUX) && !defined(SOLARIS)) || defined(PS4)
 # include <stdint.h>
 #endif
 # include <stdarg.h>

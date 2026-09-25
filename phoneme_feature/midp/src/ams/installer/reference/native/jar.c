@@ -145,7 +145,8 @@ jarCRC32(unsigned char *data, unsigned long length) {
             crc = (crc & 1) ? ((crc >> 1) ^ 0xedb88320) : (crc >> 1);
         }
     }
-    return ~crc;
+    /* CRC-32 is 32 bits; unsigned long is 64 bits on LP64 hosts (PS4) */
+    return ~crc & 0xFFFFFFFFUL;
 }
 
 /**

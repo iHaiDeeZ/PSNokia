@@ -34,14 +34,14 @@ class FinalizerConsDesc: public ObjArrayDesc {
     Size           = 2
   };
 
-  OopDesc** obj_at_addr(int index) {
-    OopDesc** base = (OopDesc**)((address)this + ArrayDesc::header_size());
+  OopSlot* obj_at_addr(int index) {
+    OopSlot* base = (OopSlot*)((address)this + ArrayDesc::header_size());
     return base + index;
   }
 
   // Raw functions during GC
-  OopDesc** referent_addr()           { return obj_at_addr(ReferentOffset); }
-  FinalizerConsDesc** next_addr()     { return (FinalizerConsDesc**) obj_at_addr(NextOffset); }
+  OopSlot* referent_addr()           { return obj_at_addr(ReferentOffset); }
+  NARROW(FinalizerConsDesc*)* next_addr()     { return (NARROW(FinalizerConsDesc*)*) obj_at_addr(NextOffset); }
 
   // Referent (finalizer reachable object)
   OopDesc* referent()                 { return *referent_addr(); }
@@ -49,7 +49,7 @@ class FinalizerConsDesc: public ObjArrayDesc {
 
   // Link to next element in list
   FinalizerConsDesc* next()           { return *next_addr(); }
-  void set_next(FinalizerConsDesc* n) { oop_write_barrier((OopDesc**) next_addr(), n); }
+  void set_next(FinalizerConsDesc* n) { oop_write_barrier((OopSlot*) next_addr(), n); }
 
   void run_finalizer(void);
 

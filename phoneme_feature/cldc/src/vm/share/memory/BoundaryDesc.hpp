@@ -27,5 +27,5 @@
 class BoundaryDesc: public OopDesc {
 public:
   static size_t allocation_size( void ) { return sizeof(BoundaryDesc); }
-  BoundaryDesc* _next;
+  NARROW(BoundaryDesc*) _next;
 };

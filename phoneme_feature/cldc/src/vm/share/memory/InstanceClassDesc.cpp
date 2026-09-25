@@ -28,7 +28,7 @@
 # include "incls/_InstanceClassDesc.cpp.incl"
 
 #if !ENABLE_ISOLATES 
-void InstanceClassDesc::variable_oops_do(void do_oop(OopDesc**)) {
+void InstanceClassDesc::variable_oops_do(void do_oop(OopSlot*)) {
   // Static fields
   jubyte* map = embedded_oop_map();
   while (*map++ != OopMapSentinel) {}; // Skip embedded non-static oop map
@@ -36,7 +36,7 @@ void InstanceClassDesc::variable_oops_do(void do_oop(OopDesc**)) {
   map_oops_do(map, do_oop);
 }
 #else
-typedef void dummy_function(OopDesc**);
+typedef void dummy_function(OopSlot*);
 void InstanceClassDesc::variable_oops_do(dummy_function) {
 }
 #endif

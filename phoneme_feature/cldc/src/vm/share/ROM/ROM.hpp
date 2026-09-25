@@ -83,7 +83,7 @@ private:
   bool heap_src_block_contains(const address target) const;
   static ROMBundle* _current;
   static int  heap_relocation_offset;
-  static void relocate_pointer_to_heap(OopDesc** p);
+  static void relocate_pointer_to_heap(OopSlot* p);
   static void update_system_array_class(JVM_SINGLE_ARG_TRAPS);
 #if ENABLE_COMPILER && ENABLE_INLINE
   void update_vtable_bitmaps(const int sys_class_count JVM_TRAPS) const;
@@ -139,17 +139,17 @@ public:
   juint string_table_num_buckets( void ) const {
     return uint_at(STRING_TABLE_NUM_BUCKETS);
   }
-  OopDesc** symbol_table( void ) const {
-    return (OopDesc**)ptr_at( SYMBOL_TABLE );
+  OopSlot* symbol_table( void ) const {
+    return (OopSlot*)ptr_at( SYMBOL_TABLE );
   }
-  OopDesc** string_table( void ) const {
-    return (OopDesc**)ptr_at( STRING_TABLE );
+  OopSlot* string_table( void ) const {
+    return (OopSlot*)ptr_at( STRING_TABLE );
   }
   int stackmap_size( void ) const {
     return uint_at( GC_STACKMAP_SIZE );
   }
-  OopDesc** persistent_handles( void ) const {
-    return (OopDesc**) ptr_at(PERSISTENT_HANDLES);
+  OopSlot* persistent_handles( void ) const {
+    return (OopSlot*) ptr_at(PERSISTENT_HANDLES);
   }
 
   bool text_contains(const OopDesc* target) const {
@@ -205,7 +205,7 @@ public:
   static OsFile_Handle open(const JvmPathChar* file, int& length, int* bundle_id);
   static ROMBundle* load(const int task_id, const JvmPathChar path_name[],
                                             void** map_handle, bool* already_loaded);
-  void method_variable_parts_oops_do(void do_oop(OopDesc**));
+  void method_variable_parts_oops_do(void do_oop(OopSlot*));
   void update_rom_default_entries( void )
 #if ENABLE_COMPILER
    ;
@@ -299,7 +299,7 @@ public:
   static ReturnOop decode_heap_reference(int value);
   static int encode_heap_reference(Oop* object);
   static void initialize(const JvmPathChar* class_path);
-  static bool link_static(OopDesc** persistent_handles,
+  static bool link_static(OopSlot* persistent_handles,
                           int number_of_persistent_handles);
 #if ENABLE_PREINITED_TASK_MIRRORS && ENABLE_ISOLATES
   static ReturnOop link_static_mirror_list(JVM_SINGLE_ARG_TRAPS);
@@ -311,7 +311,7 @@ public:
   static bool system_contains(const OopDesc* target)  {
     return system_text_contains(target) || system_data_contains(target);
   }
-  static bool system_contains(OopDesc** target) {
+  static bool system_contains(OopSlot* target) {
     return system_contains((OopDesc*)target);
   }
 
@@ -326,9 +326,9 @@ public:
 #endif
 
 #ifndef PRODUCT
-  static void system_method_variable_parts_oops_do(void do_oop(OopDesc**));
+  static void system_method_variable_parts_oops_do(void do_oop(OopSlot*));
 #endif
-  static void oops_do(void do_oop(OopDesc**), bool do_all_data_objects,
+  static void oops_do(void do_oop(OopSlot*), bool do_all_data_objects,
                       bool do_method_variable_parts);
   static size_t get_max_offset();
 
@@ -479,7 +479,7 @@ public:
       return true;
     }
 #else
-    juint offset = ((juint)target) - ((juint)&_rom_text_block[0]);
+    juint offset = (juint)(((address_word)target) - ((address_word)&_rom_text_block[0]));
     if (offset < (juint)_rom_text_block_size_fast) {
       return true;
     }
@@ -594,7 +594,7 @@ private:
 #endif
 
   static OopDesc* raw_text_klass_of(const OopDesc* /*obj*/) PRODUCT_RETURN0;
-  static void relocate_pointer_to_heap(OopDesc** p);
+  static void relocate_pointer_to_heap(OopSlot* p);
   static void decompress_strings();
 
 #if ENABLE_JVMPI_PROFILE

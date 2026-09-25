@@ -25,6 +25,7 @@
  */
 
 #include <string.h>
+#include <stdio.h>
 
 #include <jar.h>
 #include <pcsl_memory.h>
@@ -539,6 +540,24 @@ readHeader(imageSrcPtr src, long length, pngData *data, unsigned long CRC)
     data->compress  = buf[10];
     data->filter    = buf[11];
     data->interlace = buf[12];
+
+    {
+        /* Diagnostic added 2026-09-05: chasing a real-hardware
+         * OutOfMemoryError (Metal Slug) that fires with the Java heap
+         * barely touched, right around PNG decode / suite-storage
+         * jar-path activity per SAMPLE native=... markers. Class-file
+         * parsing was already ruled out (CFP_CP_LEN/CFP_NUM_STACKMAPS
+         * came back sane). Logging the real IHDR width/height directly
+         * - unconditional, but bounded to once per PNG image decoded
+         * (a handful per boot, not a per-frame flood) - to see if a
+         * corrupted/garbage image header is what's actually driving a
+         * single huge pixel-buffer allocation request. */
+        extern void write_marker(const char* text, int len);
+        char diag_buf[64];
+        int diag_len = sprintf(diag_buf, "PNG_IHDR w=%d h=%d depth=%d\n",
+            data->width, data->height, data->depth);
+        write_marker(diag_buf, diag_len);
+    }
 
 #if REPORT_LEVEL <= LOG_INFORMATION
     reportToLog(LOG_INFORMATION, LC_LOWUI, 

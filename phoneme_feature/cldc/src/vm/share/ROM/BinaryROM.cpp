@@ -119,7 +119,7 @@ inline void ROMBundle::restore_vm_structures(
   } else 
 #endif //ENABLE_LIB_IMAGES
   {
-    OopDesc** handles = persistent_handles();            
+    OopSlot* handles = persistent_handles();            
 
     // Dictionary
     OopDesc *object = handles[0];  
@@ -275,7 +275,7 @@ ROMBundle::compiled_method_from_address(const address addr) {
       return (OopDesc*)CompiledMethodDesc::find(
         (const CompiledMethodDesc * const *)
         bundle->compiled_method_table_addr(),
-        bundle->compiled_method_table_size() / sizeof (OopDesc*),
+        bundle->compiled_method_table_size() / sizeof(OopSlot),
         addr);
     }
   }
@@ -396,7 +396,7 @@ inline void ROMBundle::fixup( void ) {
 }
 
 int ROMBundle::heap_relocation_offset;
-void ROMBundle::relocate_pointer_to_heap(OopDesc** p) {
+void ROMBundle::relocate_pointer_to_heap(OopSlot* p) {
   GUARANTEE( ROMBundle::current() != NULL, "sanity" );
   const address obj = *(address*)p;    
   if( ROMBundle::current()->heap_src_block_contains( obj ) ) {
@@ -1175,7 +1175,7 @@ void ROMBundle::update_rom_default_entries( void ) {
 #endif
 
 #ifndef PRODUCT
-void ROMBundle::method_variable_parts_oops_do(void do_oop(OopDesc**)) {
+void ROMBundle::method_variable_parts_oops_do(void do_oop(OopSlot*)) {
 #if 0
   // IMPL_NOTE: ptr->_execution_entry may point inside the CompiledMethodDesc, so
   // oop verification may fail. This is disabled right now.
@@ -1184,9 +1184,9 @@ void ROMBundle::method_variable_parts_oops_do(void do_oop(OopDesc**)) {
     DERIVED(MethodVariablePart*, ptr, method_variable_parts_size());
 
   for( ; ptr < end; ptr++ ) {
-    OopDesc **obj = (OopDesc**)(ptr->_execution_entry);
+    OopSlot*obj = (OopSlot*)(ptr->_execution_entry);
     if (_heap_start <= obj && obj < _heap_top) {
-      do_oop((OopDesc**)&(ptr->_execution_entry));
+      do_oop((OopSlot*)&(ptr->_execution_entry));
     }
   }
 #endif

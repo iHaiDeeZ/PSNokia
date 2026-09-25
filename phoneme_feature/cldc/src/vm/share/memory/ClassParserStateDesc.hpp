@@ -41,12 +41,12 @@ class ClassParserStateDesc: public MixedOopDesc {
   }
 
   // pointers
-  ClassParserStateDesc *_next;
-  SymbolDesc *_class_name;
-  TypeArrayDesc * _buffer;
-  ConstantPoolDesc* _cp;
-  TypeArrayDesc * _interface_indices;
-  InstanceClassDesc *_result;
+  NARROW(ClassParserStateDesc*) _next;
+  NARROW(SymbolDesc*) _class_name;
+  NARROW(TypeArrayDesc*) _buffer;
+  NARROW(ConstantPoolDesc*) _cp;
+  NARROW(TypeArrayDesc*) _interface_indices;
+  NARROW(InstanceClassDesc*) _result;
 
   /* All oops must go before here.  If you change the number of oops, be
    * sure to change pointer_count()

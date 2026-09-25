@@ -209,7 +209,7 @@ const int* rom_linkcheck_mffd = &_ROM_LINKCHECK_MFFD;
 #if USE_BINARY_IMAGE_GENERATOR
 OopDesc* ROM::_romized_heap_marker;
 #endif
-OopDesc** _romized_heap_top;
+OopSlot* _romized_heap_top;
 
 #if !defined(PRODUCT) || ENABLE_JVMPI_PROFILE
 OopDesc* ROM::_original_class_name_list;
@@ -228,7 +228,7 @@ inline bool ROM::heap_src_block_contains(address target) {
   return ret;
 }
 
-void ROM::relocate_pointer_to_heap(OopDesc** p) {
+void ROM::relocate_pointer_to_heap(OopSlot* p) {
   OopDesc* const obj = *p;
   if( heap_src_block_contains( address(obj) ) ) {
     *p = DERIVED(OopDesc*, obj, _heap_relocation_offset);
@@ -240,7 +240,7 @@ void ROM::relocate_heap_block() {
   int offset = _heap_relocation_offset;
 
   while (q < (OopDesc*)_inline_allocation_top) { 
-    relocate_pointer_to_heap((OopDesc**)q);
+    relocate_pointer_to_heap((OopSlot*)q);
     FarClassDesc* blueprint = q->blueprint();
     if (heap_src_block_contains((address)blueprint)) { 
       blueprint = DERIVED(FarClassDesc*, blueprint, offset);
@@ -255,7 +255,7 @@ void ROM::relocate_heap_block() {
 /* A statically linked ROM image is contained in a C++ source/object file */
 /* (usually 'ROMImage.cpp'/'ROMImage.o') */
 
-bool ROM::link_static(OopDesc** ram_persistent_handles, int num_handles) {
+bool ROM::link_static(OopSlot* ram_persistent_handles, int num_handles) {
   check_consistency();
 
   // (1) Copy heap, data, and persistent handles to their final locations
@@ -283,7 +283,7 @@ bool ROM::link_static(OopDesc** ram_persistent_handles, int num_handles) {
              _rom_rom_duplicated_handles_size);
 #endif
 #if !ROMIZED_PRODUCT
-  int num_bytes = Symbols::number_of_system_symbols() * sizeof(OopDesc*);
+  int num_bytes = Symbols::number_of_system_symbols() * sizeof(OopSlot);
   jvm_memcpy(system_symbols, _rom_system_symbols_src, num_bytes);
 #endif
 
@@ -294,11 +294,11 @@ bool ROM::link_static(OopDesc** ram_persistent_handles, int num_handles) {
   // (2) Allocate the heap space and calculate the offset
   _heap_relocation_offset= DISTANCE(&_rom_heap_block[0],_inline_allocation_top);
   _romized_heap_top = _inline_allocation_top;
-  _inline_allocation_top = DERIVED(OopDesc**,
+  _inline_allocation_top = DERIVED(OopSlot*,
         _inline_allocation_top, _rom_heap_block_size);
 
-  OopDesc **permanent_top = 
-      DERIVED(OopDesc**, _romized_heap_top, _rom_heap_block_permanent_size);
+  OopSlot*permanent_top = 
+      DERIVED(OopSlot*, _romized_heap_top, _rom_heap_block_permanent_size);
   ObjectHeap::rom_init_heap_bounds(_inline_allocation_top, permanent_top);
 
 #if USE_BINARY_IMAGE_GENERATOR
@@ -566,16 +566,16 @@ void ROM::relocate_data_block() {
     // won't be moved during GC. This means at anytime obj->blueprint()
     // is always available and won't be encoded by the GC during compaction
     // phase.
-    relocate_pointer_to_heap((OopDesc**)obj);
+    relocate_pointer_to_heap((OopSlot*)obj);
 
     OopDesc *near_obj = obj->klass();
     GUARANTEE(ROM::system_contains(near_obj) ||
-              ObjectHeap::permanent_contains((OopDesc**)near_obj),
+              ObjectHeap::permanent_contains((OopSlot*)near_obj),
               "near object must never move");
 
     FarClassDesc* blueprint = (FarClassDesc*)near_obj->klass();
     GUARANTEE(ROM::system_text_contains(blueprint) ||
-              ObjectHeap::permanent_contains((OopDesc**)near_obj),
+              ObjectHeap::permanent_contains((OopSlot*)near_obj),
               "blueprint object must never move");
 
     obj->oops_do_for(blueprint, relocate_pointer_to_heap);
@@ -585,28 +585,28 @@ void ROM::relocate_data_block() {
 }
 
 #ifndef PRODUCT
-void ROM::system_method_variable_parts_oops_do(void do_oop(OopDesc**)) {
+void ROM::system_method_variable_parts_oops_do(void do_oop(OopSlot*)) {
   (void)do_oop;
 #if 0
   int count = _rom_method_variable_parts_size / sizeof(MethodVariablePart);
   MethodVariablePart *ptr = (MethodVariablePart*)&_rom_method_variable_parts[0];
   MethodVariablePart *end = ptr + count;
-  OopDesc ** heap_start = ::_heap_start; // cache in register
-  OopDesc ** heap_top   = ::_heap_top;   // cache in register
+  OopSlot* heap_start = ::_heap_start; // cache in register
+  OopSlot* heap_top   = ::_heap_top;   // cache in register
 
   // IMPL_NOTE: ptr->_execution_entry may point inside the CompiledMethodDesc, so
   // oop verification may fail. This is disabled right now.
   for (; ptr<end; ptr++) {
-    OopDesc **obj = (OopDesc**)(ptr->_execution_entry);
+    OopSlot*obj = (OopSlot*)(ptr->_execution_entry);
     if (heap_start <= obj && obj < heap_top) {
-      do_oop((OopDesc**)&(ptr->_execution_entry));
+      do_oop((OopSlot*)&(ptr->_execution_entry));
     } else {
 #if ENABLE_METHOD_TRAPS
       InvokeTrap* trap = ptr->get_trap();
       if (trap != NULL) {
-        obj = (OopDesc**)(trap->old_entry);
+        obj = (OopSlot*)(trap->old_entry);
         if (heap_start <= obj && obj < heap_top) {
-          do_oop((OopDesc**) &(trap->old_entry));
+          do_oop((OopSlot*) &(trap->old_entry));
         }
       }
 #endif
@@ -616,7 +616,7 @@ void ROM::system_method_variable_parts_oops_do(void do_oop(OopDesc**)) {
 }
 #endif 
 
-void ROM::oops_do(void do_oop(OopDesc**), bool do_all_data_objects,
+void ROM::oops_do(void do_oop(OopSlot*), bool do_all_data_objects,
                   bool do_method_variable_parts) {
 #if ENABLE_PERFORMANCE_COUNTERS
   jlong start_time = Os::elapsed_counter();
@@ -637,12 +637,12 @@ void ROM::oops_do(void do_oop(OopDesc**), bool do_all_data_objects,
     // phase.
     OopDesc *near_obj = obj->klass();
     GUARANTEE(ROM::system_contains(near_obj) ||
-              ObjectHeap::permanent_contains((OopDesc**)near_obj),
+              ObjectHeap::permanent_contains((OopSlot*)near_obj),
               "near object must never move");
 
     FarClassDesc* blueprint = (FarClassDesc*)near_obj->klass();
     GUARANTEE(ROM::system_contains(blueprint) ||
-              ObjectHeap::permanent_contains((OopDesc**)near_obj),
+              ObjectHeap::permanent_contains((OopSlot*)near_obj),
               "blueprint object must never move");
 
     obj->oops_do_for(blueprint, do_oop);
@@ -655,10 +655,10 @@ void ROM::oops_do(void do_oop(OopDesc**), bool do_all_data_objects,
 
 #if ENABLE_JVMPI_PROFILE
   if (UseROM || GenerateROMImage) {
-    do_oop((OopDesc**)&_original_class_name_list);
-    do_oop((OopDesc**)&_original_method_info_list);
-    do_oop((OopDesc**)&_original_fields_list);
-    do_oop((OopDesc**)&_alternate_constant_pool);
+    do_oop((OopSlot*)&_original_class_name_list);
+    do_oop((OopSlot*)&_original_method_info_list);
+    do_oop((OopSlot*)&_original_fields_list);
+    do_oop((OopSlot*)&_alternate_constant_pool);
   }
 #endif
 
@@ -696,10 +696,10 @@ void ROM::oops_do(void do_oop(OopDesc**), bool do_all_data_objects,
   }
 
   if (UseROM || GenerateROMImage) {
-    do_oop((OopDesc**)&_original_class_name_list);
-    do_oop((OopDesc**)&_original_method_info_list);
-    do_oop((OopDesc**)&_original_fields_list);
-    do_oop((OopDesc**)&_alternate_constant_pool);
+    do_oop((OopSlot*)&_original_class_name_list);
+    do_oop((OopSlot*)&_original_method_info_list);
+    do_oop((OopSlot*)&_original_fields_list);
+    do_oop((OopSlot*)&_alternate_constant_pool);
   }
 #endif
 
@@ -922,13 +922,13 @@ OopDesc* ROM::raw_text_klass_of(const OopDesc* obj) {
   const int pass = text_segment_of(obj);
   juint byte_offset = (juint)(address_word)obj - _rom_text_block_segments[pass];  
 #else
-  juint byte_offset = ((juint)obj) - ((juint)&_rom_text_block[0]);
+  juint byte_offset = (juint)(((address_word)obj) - ((address_word)&_rom_text_block[0]));
   GUARANTEE((byte_offset < (juint)_rom_text_block_size), "must be in TEXT");
 #endif
   juint code = byte_offset / 4;
   int index = ((int)code) % _rom_text_klass_table_size;
 
-  OopDesc**p = (OopDesc**)(_rom_text_klass_table[index]);
+  OopSlot*p = (OopSlot*)(_rom_text_klass_table[index]);
   while (p[0] != NULL) {
     if (p[0] == obj) {
       return p[1];
@@ -958,9 +958,10 @@ ReturnOop ROM::string_from_table(String *string, juint hash_value) {
   // the ROM symbol table.
   ROM_DETAILED_PERFORMANCE_COUNTER_START();
   juint i = hash_value % _rom_string_table_num_buckets;
-  OopDesc ***rom_table = (OopDesc ***)_rom_string_table;
-  OopDesc **p   = rom_table[i];   // start of the bucket
-  OopDesc **end = rom_table[i+1]; // end of the bucket (exclusive)
+  // Bucket boundaries are 4-byte ROM words
+  NARROW(OopSlot*)* rom_table = (NARROW(OopSlot*)*)_rom_string_table;
+  OopSlot*p   = rom_table[i];   // start of the bucket
+  OopSlot*end = rom_table[i+1]; // end of the bucket (exclusive)
   String::Raw old_string;
   while (p != end) {
     old_string = (ReturnOop)(*p);
@@ -987,7 +988,7 @@ ReturnOop ROM::string_from_table(String *string, juint hash_value) {
     ROMBundle* bun = ROMBundle::current();
 #endif //ENABLE_LIB_IMAGES    
     juint i = hash_value % bun->string_table_num_buckets();
-    rom_table = (OopDesc ***) bun->ptr_at(bun->STRING_TABLE);
+    rom_table = (NARROW(OopSlot*)*) bun->ptr_at(bun->STRING_TABLE);
     p   = rom_table[i];   // start of the bucket
     end = rom_table[i+1]; // end of the bucket (exclusive)
     while (p != end) {
@@ -1008,9 +1009,11 @@ ReturnOop ROM::symbol_for(utf8 s, juint hash_value, int len) {
   ROM_DETAILED_PERFORMANCE_COUNTER_START();
   if (_rom_symbol_table_num_buckets > 0) {
     juint i = hash_value % _rom_symbol_table_num_buckets;
-    SymbolDesc*** rom_table = (SymbolDesc ***)_rom_symbol_table;
-    SymbolDesc** p = rom_table[i];     // start of the bucket
-    SymbolDesc** end = rom_table[i+1]; // end of the bucket (exclusive)
+    // Bucket boundaries and entries are 4-byte ROM words
+    NARROW(NARROW(SymbolDesc*)*)* rom_table =
+      (NARROW(NARROW(SymbolDesc*)*)*)_rom_symbol_table;
+    NARROW(SymbolDesc*)* p = rom_table[i];     // start of the bucket
+    NARROW(SymbolDesc*)* end = rom_table[i+1]; // end of the bucket (exclusive)
     while (p != end) {
       if ((*p)->matches(s, len)) {
         ROM_DETAILED_PERFORMANCE_COUNTER_END(symbol_for_hrticks);
@@ -1028,10 +1031,10 @@ ReturnOop ROM::symbol_for(utf8 s, juint hash_value, int len) {
       ROMBundle* bundle = (ROMBundle*)bundles().obj_at(i);
       if (bundle->symbol_table_num_buckets() != 0) {
         juint i = hash_value % bundle->symbol_table_num_buckets();
-        SymbolDesc*** rom_table = (SymbolDesc ***)
+        NARROW(NARROW(SymbolDesc*)*)* rom_table = (NARROW(NARROW(SymbolDesc*)*)*)
           bundle->ptr_at( ROMBundle::SYMBOL_TABLE );
-        SymbolDesc** p   = rom_table[i];   // start of the bucket
-        SymbolDesc** end = rom_table[i+1]; // end of the bucket (exclusive)
+        NARROW(SymbolDesc*)* p   = rom_table[i];   // start of the bucket
+        NARROW(SymbolDesc*)* end = rom_table[i+1]; // end of the bucket (exclusive)
         while (p != end) {
           if ((*p)->matches(s, len)) {
             ROM_DETAILED_PERFORMANCE_COUNTER_END(symbol_for_hrticks);
@@ -1046,10 +1049,10 @@ ReturnOop ROM::symbol_for(utf8 s, juint hash_value, int len) {
   if( ROMBundle::current() != NULL &&
       ROMBundle::current()->symbol_table_num_buckets() != 0) {
     juint i = hash_value % ROMBundle::current()->symbol_table_num_buckets();
-    SymbolDesc*** rom_table = (SymbolDesc ***)
+    NARROW(NARROW(SymbolDesc*)*)* rom_table = (NARROW(NARROW(SymbolDesc*)*)*)
       ROMBundle::current()->ptr_at( ROMBundle::current()->SYMBOL_TABLE );
-    SymbolDesc** p   = rom_table[i];   // start of the bucket
-    SymbolDesc** end = rom_table[i+1]; // end of the bucket (exclusive)
+    NARROW(SymbolDesc*)* p   = rom_table[i];   // start of the bucket
+    NARROW(SymbolDesc*)* end = rom_table[i+1]; // end of the bucket (exclusive)
     while (p != end) {
       if ((*p)->matches(s, len)) {
         ROM_DETAILED_PERFORMANCE_COUNTER_END(symbol_for_hrticks);

@@ -27,10 +27,10 @@
 # include "incls/_precompiled.incl"
 # include "incls/_ExecutionStackDesc.cpp.incl"
 
-ExecutionStackDesc* ExecutionStackDesc::_stack_list;  // used only by GC;
+NARROW(ExecutionStackDesc*) ExecutionStackDesc::_stack_list;  // used only by GC;
 
 void ExecutionStackDesc::relocate_all_pointers(int delta,
-                                               void updater(OopDesc**)) {
+                                               void updater(OopSlot*)) {
   OopDesc*    thread = _thread;
   Thread*     thread_handle = (Thread*)&thread;
   this->variable_oops_do(updater); 

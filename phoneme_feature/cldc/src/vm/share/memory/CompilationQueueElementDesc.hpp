@@ -33,9 +33,9 @@ class CompilationQueueElementDesc: public MixedOopDesc {
 
  private:
   // Link to next element in queue.
-  CompilationQueueElementDesc* _next;
+  NARROW(CompilationQueueElementDesc*) _next;
   // The virtual stack frame
-  VirtualStackFrameDesc*       _frame;
+  NARROW(VirtualStackFrameDesc*) _frame;
 
   /* All oops must go before here.  If you change the number of oops, be
    * sure to change pointer_count()

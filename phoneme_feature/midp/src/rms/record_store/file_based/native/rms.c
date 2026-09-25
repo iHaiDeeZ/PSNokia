@@ -475,7 +475,24 @@ rmsdb_get_number_of_record_stores_int(const pcsl_string* root) {
 
     handle = storage_open_file_iterator(root);
     if (!handle) {
-        return OUT_OF_MEM_LEN;
+        /* Fixed 2026-09-05: this was unconditionally treated as
+         * OUT_OF_MEM_LEN, which RecordStoreFile_getNumberOfStores()
+         * (recordStoreFile.c) turns straight into a thrown Java
+         * OutOfMemoryError. Traced via a real-hardware crash (Metal
+         * Slug) that threw OOM on every launch with the Java heap
+         * barely touched (~326KB of 7MB) - root-caused all the way
+         * down through storage_open_file_iterator ->
+         * pcsl_file_openfilelist -> pcsl_util_openfileiterator
+         * (pcsl_util_filelist.c), which returns NULL here whenever
+         * pcsl_file_opendir() fails on the suite's RMS directory -
+         * the overwhelmingly common real-world reason being that the
+         * directory simply doesn't exist yet (a MIDlet that has never
+         * created a RecordStore, e.g. its very first launch), not
+         * actual memory exhaustion. Treat "can't open the directory"
+         * as "no record stores yet" (0) instead of a fabricated OOM -
+         * this is also what every other caller of this function
+         * already expects when there are legitimately zero stores. */
+        return 0;
     }
 
     for(;;) {

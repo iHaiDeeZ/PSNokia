@@ -68,10 +68,10 @@ int RefArray::add(Oop* referent, const int type JVM_TRAPS) {
   return i;
 }
 
-void RefArray::oops_do(void do_oop(OopDesc**), const int mask) {
+void RefArray::oops_do(void do_oop(OopSlot*), const int mask) {
   if( not_null() ) {
-    OopDesc** p = base();
-    for( OopDesc** const max = p + length(); p < max; p++ ) {
+    OopSlot* p = base();
+    for( OopSlot* const max = p + length(); p < max; p++ ) {
       OopDesc* obj = *p;
       if( not_null_or_dead( obj ) ) {
         const unsigned type = get_type( obj );
@@ -88,7 +88,7 @@ void RefArray::oops_do(void do_oop(OopDesc**), const int mask) {
   }
 }
 
-void RefArray::clear_non_marked( OopDesc** p ) {
+void RefArray::clear_non_marked( OopSlot* p ) {
   if( ObjectHeap::in_collection_area_unmarked( *p ) ) {
     *p = dead();  // object is not marked. It will be GC'ed
   }

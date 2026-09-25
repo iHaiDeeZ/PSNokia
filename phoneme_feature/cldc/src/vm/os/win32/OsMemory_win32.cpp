@@ -46,11 +46,33 @@ void OsMemory_free(void *p) {
 }
 
 
+#if USE_NARROW_POINTERS
+// The heap is referenced from 4-byte VM words, so reserve it at a fixed low
+// address rather than wherever Windows puts it. Staying below 2GB also keeps
+// addresses positive when read back as a signed jint.
+static address reserve_low(size_t size) {
+  const address_word step  = 16 * 1024 * 1024;
+  const address_word limit = 0x80000000;
+  for (address_word hint = 0x10000000; hint + size <= limit; hint += step) {
+    void* p = VirtualAlloc((LPVOID)hint, size, MEM_RESERVE,
+                           PAGE_EXECUTE_READWRITE);
+    if (p != NULL) {
+      return (address)p;
+    }
+  }
+  return NULL;
+}
+#endif
+
 address OsMemory_allocate_chunk(size_t initial_size,
                                 size_t max_size, size_t alignment)
 {
-  address chunk = (address)VirtualAlloc(NULL, max_size, MEM_RESERVE, 
+#if USE_NARROW_POINTERS
+  address chunk = reserve_low(max_size);
+#else
+  address chunk = (address)VirtualAlloc(NULL, max_size, MEM_RESERVE,
                                         PAGE_EXECUTE_READWRITE);
+#endif
   GUARANTEE(((int)(address_word)chunk) % alignment == 0, "must be aligned");
 
   if (chunk != NULL) {

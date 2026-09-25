@@ -96,7 +96,7 @@ public:
   void allocate ( void ) { _valid = true;   }
   void dispose  ( void ) { _valid = false;  }
 
-  void oops_do( void do_oop(OopDesc**) );
+  void oops_do( void do_oop(OopSlot*) );
 };
 
 #define COMPILER_INSTANCE_HANDLES  \
@@ -184,7 +184,7 @@ public:
 
   bool valid ( void ) const { return method()->not_null(); }
 
-  void oops_do( void do_oop(OopDesc**) );
+  void oops_do( void do_oop(OopSlot*) );
   void cleanup( void );
 
 #if USE_DEBUG_PRINTING
@@ -219,7 +219,7 @@ public:
 
   bool valid ( void ) const { return _current_compiled_method != NULL; }
 
-  void oops_do( void do_oop(OopDesc**) );
+  void oops_do( void do_oop(OopSlot*) );
   void cleanup( void );
 };
 
@@ -575,7 +575,7 @@ class Compiler: public StackObj {
     return suspended_compiler_state()->valid();
   }
 
-  static void oops_do( void do_oop(OopDesc**) );
+  static void oops_do( void do_oop(OopSlot*) );
 
 #if ENABLE_PERFORMANCE_COUNTERS && ENABLE_DETAILED_PERFORMANCE_COUNTERS
   static void print_detailed_performance_counters();

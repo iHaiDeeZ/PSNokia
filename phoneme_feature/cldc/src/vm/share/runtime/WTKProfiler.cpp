@@ -183,7 +183,7 @@ static inline juint encode_heap_method(Method* m) {
   int numMethods = methods().length();
   int i;
   OopDesc* obj = m->obj();
-  OopDesc** raw_method = (OopDesc**)methods().base_address();
+  OopSlot* raw_method = (OopSlot*)methods().base_address();
   for (i = 0; i < numMethods; i++) {
     if (obj == *raw_method) {
       break;
@@ -379,17 +379,17 @@ static inline int stack_depth(Frame* frame) {
   // Note that it uses intrinsic knowledge about frame layout.
   address fp = frame->fp();
   while (true) {    
-    address ret_addr = *(address*) (fp + JavaFrame::return_address_offset());
+    address ret_addr = *(AddressSlot*) (fp + JavaFrame::return_address_offset());
 
     if (ret_addr == (address)EntryFrame::FakeReturnAddress) {
       // This is an EntryFrame
-      fp = *(address*)(fp + EntryFrame::stored_last_fp_offset());
+      fp = *(AddressSlot*)(fp + EntryFrame::stored_last_fp_offset());
       if (fp == NULL) {
         break;
       }
     } else {
       rv++;
-      fp = *(address*)(fp + JavaFrame::caller_fp_offset());
+      fp = *(AddressSlot*)(fp + JavaFrame::caller_fp_offset());
     }
   }
   return rv;

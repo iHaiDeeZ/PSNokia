@@ -601,8 +601,9 @@ const int LongAlignmentMask  = (1 << LogBytesPerLong) - 1;// 0x00000007
 
 const int WordsPerLong       = 2;    // Number of stack entries for longs
 
-const int oopSize            = sizeof(char*);
-const int wordSize           = sizeof(char*);
+// Heap words, not host pointers: 4 bytes on 64-bit hosts too (see narrow<T>)
+const int oopSize            = BytesPerWord;
+const int wordSize           = BytesPerWord;
 const int longSize           = sizeof(jlong);
 const int jintSize         = sizeof(jint);
 
@@ -628,6 +629,92 @@ typedef uintptr_t      address_word; // unsigned integer which will hold a
                                      // function. Should never need
                                      // one of those to be placed in
                                      // this type anyway.
+
+//----------------------------------------------------------------------------
+// Narrow (32-bit) pointers
+//
+// Heap objects, the ROM image and every C++ structure that mirrors the heap
+// layout (the *Desc classes, Java stack frames) use 4-byte words. On a 64-bit
+// host the VM keeps all memory those words can point to below 4GB (below
+// 2GB in practice), so a pointer stored in a word is just its low 32 bits.
+// narrow<T> stores a T that way and converts back to T implicitly.
+//
+// Words are zero-extended when read back, so 32-bit marker values such as
+// EntryFrame::FakeReturnAddress (0xdeadbeef) compare as they do on 32-bit
+// hosts. A sentinel meant as "all ones" must be written as a 32-bit value
+// (see RefArray::dead()), since (T)-1 does not fit in a word.
+//
+// On 32-bit hosts NARROW(T) is T itself and OopSlot is OopDesc*, so the
+// 32-bit builds compile exactly as before.
+
+class OopDesc;
+
+#if defined(__LP64__) || defined(_WIN64)
+#define USE_NARROW_POINTERS 1
+
+// Reports a pointer that does not fit in a narrow slot (debug builds).
+extern "C" void narrow_pointer_overflow(const void* p);
+
+inline address_word narrow_decode(juint value) {
+  return (address_word)value;
+}
+
+inline juint narrow_encode(const void* p) {
+  const address_word value = (address_word)p;
+#ifndef PRODUCT
+  if (narrow_decode((juint)value) != value) {
+    narrow_pointer_overflow(p);
+  }
+#endif
+  return (juint)value;
+}
+
+// Types a narrow<T> may be explicitly cast to: pointers and integers.
+template <class U> struct narrow_cast_ok             { enum { value = 0 }; };
+template <class U> struct narrow_cast_ok<U*>         { enum { value = 1 }; };
+template <> struct narrow_cast_ok<int>                { enum { value = 1 }; };
+template <> struct narrow_cast_ok<unsigned int>       { enum { value = 1 }; };
+template <> struct narrow_cast_ok<long>               { enum { value = 1 }; };
+template <> struct narrow_cast_ok<unsigned long>      { enum { value = 1 }; };
+template <> struct narrow_cast_ok<long long>          { enum { value = 1 }; };
+template <> struct narrow_cast_ok<unsigned long long> { enum { value = 1 }; };
+template <bool B> struct narrow_enable_if {};
+template <> struct narrow_enable_if<true> { typedef void type; };
+
+template <class T> class narrow {
+  juint _value;
+ public:
+  // Trivial, so narrow fields can live in unions like raw pointers do
+  narrow() = default;
+  narrow(T p) : _value(narrow_encode((const void*)p)) {}
+  narrow& operator=(T p) {
+    _value = narrow_encode((const void*)p);
+    return *this;
+  }
+  operator T() const { return (T)narrow_decode(_value); }
+  T operator->() const { return (T)narrow_decode(_value); }
+  // Explicit casts to other pointer or integer types, as with a raw T
+  template <class U, class = typename
+            narrow_enable_if<narrow_cast_ok<U>::value>::type>
+  explicit operator U() const {
+    return (U)narrow_decode(_value);
+  }
+  juint raw() const { return _value; }
+};
+
+#define NARROW(T) narrow<T>
+#else
+#define USE_NARROW_POINTERS 0
+#define NARROW(T) T
+#endif
+
+// A heap word holding an object reference. Code that walks reference slots
+// (GC, handles, frames) must step through OopSlot*, never through a raw
+// pointer to an OopDesc pointer.
+typedef NARROW(OopDesc*) OopSlot;
+// A heap or Java stack word holding a non-reference address (bytecode
+// pointer, frame pointer, code entry). Like OopSlot, 4 bytes on every host.
+typedef NARROW(address) AddressSlot;
 
 //  Utility functions to "portably" (?) bit twiddle pointers
 //  Where portable means keep ANSI C++ compilers quiet
@@ -745,7 +832,7 @@ const int max_method_code_size = 64 * 1024 - 1;
 #include "incls/_GlobalDefinitions_pd.hpp.incl"
 
 inline size_t align_allocation_size(size_t size) {
-  return (size + sizeof(jobject) - 1) & ~(sizeof(jobject) - 1);
+  return (size + sizeof(OopSlot) - 1) & ~(sizeof(OopSlot) - 1);
 }
 
 // signed variants of alignment helpers
@@ -1684,7 +1771,7 @@ enum {
 };
 
 #define ForInterpretationLog( var ) \
-  OopDesc** var = _interpretation_log; for( --var; *++var; )
+  OopSlot* var = _interpretation_log; for( --var; *++var; )
 
 enum {
   method_execution_sensor_size = 512    // 2048 max, 12-bit signed negative
@@ -1717,29 +1804,29 @@ enum {
   template(x, OopDesc*,  current_thread)            \
   template(x, OopDesc*,  current_pending_exception) \
   template(x, Oop*,      last_handle)               \
-  template(x, OopDesc**, collection_area_start)     \
+  template(x, OopSlot*, collection_area_start)     \
                                                     \
-  template(x, OopDesc**, heap_start)                \
-  template(x, OopDesc**, heap_top)                  \
-  template(x, OopDesc**, inline_allocation_top)     \
-  template(x, OopDesc**, inline_allocation_end)     \
+  template(x, OopSlot*, heap_start)                \
+  template(x, OopSlot*, heap_top)                  \
+  template(x, OopSlot*, inline_allocation_top)     \
+  template(x, OopSlot*, inline_allocation_end)     \
                                                     \
-  template(x, OopDesc**, heap_limit)                \
-  template(x, OopDesc**, heap_end)                  \
+  template(x, OopSlot*, heap_limit)                \
+  template(x, OopSlot*, heap_end)                  \
   template(x, address,   bitvector_base)            \
   template(x, int,       bit_selector)              \
                                                     \
-  template(x, OopDesc**, young_generation_start)    \
-  template(x, OopDesc**, collection_area_end)       \
+  template(x, OopSlot*, young_generation_start)    \
+  template(x, OopSlot*, collection_area_end)       \
   template(x, size_t,    young_generation_target_size) \
-  template(x, OopDesc**, end_fixed_objects)         \
+  template(x, OopSlot*, end_fixed_objects)         \
                                                     \
-  template(x, OopDesc**, marking_stack_start)       \
-  template(x, OopDesc**, marking_stack_top)         \
-  template(x, OopDesc**, marking_stack_end)         \
+  template(x, OopSlot*, marking_stack_start)       \
+  template(x, OopSlot*, marking_stack_top)         \
+  template(x, OopSlot*, marking_stack_end)         \
   template(x, bool,      marking_stack_overflow)    \
                                                     \
-  template(x, OopDesc***,slices_start)              \
+  template(x, OopSlot**,slices_start)              \
   template(x, size_t,    slice_shift)               \
   template(x, size_t,    slice_offset_bits)         \
   template(x, size_t,    slice_size)                \
@@ -1747,17 +1834,17 @@ enum {
   template(x, size_t,    near_mask)                 \
   template(x, size_t,    slice_offset_mask)         \
   template(x, size_t,    nof_slices)                \
-  template(x, OopDesc**, compaction_start)          \
+  template(x, OopSlot*, compaction_start)          \
                                                     \
-  template(x, OopDesc**, compaction_top)            \
+  template(x, OopSlot*, compaction_top)            \
   template(x, int,       heap_min)                  \
   template(x, int,       heap_capacity)             \
   template(x, size_t,    heap_size)                 \
                                                     \
-  template(x, OopDesc**, compiler_area_start)       \
-  template(x, OopDesc**, compiler_area_top)         \
-  template(x, OopDesc**, large_object_area_bottom)  \
-  template(x, OopDesc**, compiler_area_temp_object_bottom) \
+  template(x, OopSlot*, compiler_area_start)       \
+  template(x, OopSlot*, compiler_area_top)         \
+  template(x, OopSlot*, large_object_area_bottom)  \
+  template(x, OopSlot*, compiler_area_temp_object_bottom) \
                                                            \
   /* frequently used values by Compiler*/                  \
   template(x, Method*,            compiler_method)         \
@@ -1836,13 +1923,13 @@ struct JVMFastGlobals {
 extern "C" {
   extern JVMFastGlobals jvm_fast_globals;
 
-  extern OopDesc**_persistent_handles_addr; // used by ARM ports only.
+  extern OopSlot*_persistent_handles_addr; // used by ARM ports only.
   extern OopDesc* _interpretation_log[];
   extern int      _interpretation_log_idx;
 
   extern unsigned char _method_execution_sensor[];
 
-  extern OopDesc* persistent_handles[];
+  extern OopSlot  persistent_handles[];
   extern int      _jvm_in_raw_pointers_block;
   extern int      _jvm_in_quick_native_method;
   extern char*    _jvm_quick_native_exception;
@@ -1882,7 +1969,7 @@ extern "C" {
                   jvm_perf_count;
 
   extern Oop*     last_raw_handle;
-  extern OopDesc**_old_generation_end;
+  extern OopSlot*_old_generation_end;
 
 #ifdef AZZERT
   extern jint AllocationDisabler__disabling_count;
@@ -2103,7 +2190,7 @@ extern "C" {
   // The following are used by ENABLE_KVM_COMPAT
   void garbageCollect(int moreMemory);
   void kvmcompat_initialize();
-  void kvmcompat_oops_do(void do_oop(OopDesc**));
+  void kvmcompat_oops_do(void do_oop(OopSlot*));
 } // extern "C"
 
 //----------------------------------------------------------------------
@@ -2206,7 +2293,7 @@ NAME_BUFFER_SIZE = 270
   (_kni_parameter_base + index * JavaStackDirection * BytesPerStackElement)
 
 #define GET_PARAMETER_AS_OOP(index) \
-  (*( (ReturnOop*) (PARAMETER_ADDRESS(index)) ))
+  ((OopDesc*)*( (OopSlot*) (PARAMETER_ADDRESS(index)) ))
 
 #if ENABLE_FLOAT
 
@@ -2478,7 +2565,7 @@ enum CIBType {
 typedef void (*oopmaps_doer)(BasicType type, void *param,
                              const char *name, size_t offset, int flags);
 
-typedef void (*oop_doer)(OopDesc**);
+typedef void (*oop_doer)(OopSlot*);
 
 #define OOPMAP_VARIABLE_OBJ 0x10000000
 #define OOPMAP_UNSIGNED     0x20000000

@@ -27,6 +27,8 @@
 # include "incls/_precompiled.incl"
 # include "incls/_StringTable.cpp.incl"
 
+extern "C" void write_marker(const char* text, int len);
+
 inline void StringTable::insert(String* string) {
   const juint mask = juint(length()-1);
   juint index = string->hash() & mask;    
@@ -113,6 +115,7 @@ ReturnOop StringTable::interned_string_for(String *string JVM_TRAPS) {
     // ADS compiler generates incorrect code.
   } while (index != start);
 
+  { char b[32]; int l=jvm_sprintf(b,"OOM_SITE_STRTAB116\n"); write_marker(b,l); }
   Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW_0);
 }
  

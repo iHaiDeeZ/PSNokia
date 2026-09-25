@@ -293,7 +293,7 @@ public:
     ROMWRITER_INT_FIELDS_DO(ROMWRITER_COUNT_FIELDS)
     _number_of_int_fields
   };
-  static OopDesc* _romwriter_oops[_number_of_oop_fields];
+  static OopSlot _romwriter_oops[_number_of_oop_fields];
 
 public:
   ROMWriter() {
@@ -315,7 +315,7 @@ public:
   static void start_work_timer();
   static bool work_timer_has_expired();
 
-  static void oops_do(void do_oop(OopDesc**));
+  static void oops_do(void do_oop(OopSlot*));
   static bool is_active() {
     return (state() >= 0);
   }
@@ -656,7 +656,7 @@ private:
   int  generate_instance_java_fieldmap(InstanceClass* klass);
   int  generate_instance_java_fieldmap(InstanceClass* klass, int start_index, 
                                        size_t &instance_size);
-  static void generate_fieldmap_by_oops_do(OopDesc**p);
+  static void generate_fieldmap_by_oops_do(OopSlot*p);
 
   // Field map related functions
   void alloc_field_map(int size JVM_TRAPS);

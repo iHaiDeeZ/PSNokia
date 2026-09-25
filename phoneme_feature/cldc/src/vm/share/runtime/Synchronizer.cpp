@@ -242,17 +242,17 @@ void Synchronizer::signal_waiters(StackLock* stack_lock) {
   }
 }
 
-void StackLock::oops_do(void do_oop(OopDesc**)) {
+void StackLock::oops_do(void do_oop(OopSlot*)) {
   if (_real_java_near != NULL) {
-    do_oop((OopDesc**) &_thread);
-    do_oop((OopDesc**) &_waiters);
+    do_oop((OopSlot*) &_thread);
+    do_oop((OopSlot*) &_waiters);
     // Visit real java near saved in StackLock
-    do_oop((OopDesc**) &_real_java_near);
+    do_oop((OopSlot*) &_real_java_near);
     // And the embedded oop
     // Can the following be done more cleanly?
-    OopDesc** embedded_near = (OopDesc**)(this + 1);
+    OopSlot* embedded_near = (OopSlot*)(this + 1);
     do_oop(embedded_near);
-    do_oop((OopDesc**)(((address)embedded_near) 
+    do_oop((OopSlot*)(((address)embedded_near) 
                             + JavaNear::class_info_offset()));
   }
 }
@@ -261,7 +261,7 @@ void StackLock::reverse_locked_header() {
   if (_real_java_near != NULL) {
     JavaNearDesc* stack_near = (JavaNearDesc*) (this+1);
     // Pointer to locked object is just below stack near.
-    OopDesc* obj = *(OopDesc**)(stack_near + 1);
+    OopDesc* obj = *(OopSlot*)(stack_near + 1);
     if (obj != NULL) {
       GUARANTEE(stack_near == obj->klass(), "check loop");
       // Locked object, set object near pointer back to the real java near.
@@ -283,7 +283,7 @@ void StackLock::restore_locked_header() {
     // Set near pointer in object back to point to stack near.
     JavaNearDesc* stack_near = (JavaNearDesc*) (this+1);
     // Pointer to locked object is just below stack near
-    OopDesc* obj = *(OopDesc**)(stack_near + 1);
+    OopDesc* obj = *(OopSlot*)(stack_near + 1);
     if (obj != NULL) {
       GUARANTEE(ObjectHeap::contains(obj) || ROM::system_contains(obj),
                 "Must be valid near");
@@ -304,7 +304,7 @@ void StackLock::relocate_internal_pointers(int delta) {
   if (_real_java_near != NULL) {
     JavaNearDesc* stack_near = (JavaNearDesc*) (this+1);
     // Pointer to locked object is just below stack near.
-    OopDesc* obj = *(OopDesc**)(stack_near + 1);
+    OopDesc* obj = *(OopSlot*)(stack_near + 1);
     if (obj != NULL) {
       GUARANTEE(stack_near == obj->klass(), "check loop");
       // Locked object, relocate pointer to stack near

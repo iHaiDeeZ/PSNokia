@@ -384,7 +384,7 @@ void JarFileParser::fix_bootstrap() {
     if (ref >= 0) {
       JarFileParser::Raw parser = ObjectHeap::get_global_ref_object(ref);
       GUARANTEE(parser.not_null(), "must not be GC'ed yet!");
-      OopDesc** desc = (OopDesc**)parser().file_descriptor();
+      OopSlot* desc = (OopSlot*)parser().file_descriptor();
       OopDesc* n = Universe::file_descriptor_class()->prototypical_near();
 
       // Make it a real FileDescriptor object.

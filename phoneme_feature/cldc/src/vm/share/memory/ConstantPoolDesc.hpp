@@ -31,14 +31,14 @@ class ConstantPoolDesc: public OopDesc {
 
   // Computes the allocation size
   static size_t allocation_size(int length) { 
-    return align_allocation_size(header_size() + length * sizeof(OopDesc*));
+    return align_allocation_size(header_size() + length * sizeof(OopSlot));
   }
 
  public:
   // Returns the object size
   size_t object_size() { return allocation_size(_length); }
   // GC support.
-  void variable_oops_do(void do_oop(OopDesc**));
+  void variable_oops_do(void do_oop(OopSlot*));
 
  private:
   // Initializes the object after allocation
@@ -49,7 +49,7 @@ class ConstantPoolDesc: public OopDesc {
 
   jushort            _length;
   jushort            _pad;         // Force 4-byte alignment of _tags.
-  TypeArrayDesc*     _tags;        // describes the constant pool's contents
+  NARROW(TypeArrayDesc*) _tags;        // describes the constant pool's contents
   friend class ConstantPool;
   friend class Universe;
   friend class MethodDesc;

@@ -27,7 +27,7 @@
 # include "incls/_precompiled.incl"
 # include "incls/_EntryActivationDesc.cpp.incl"
 
-void EntryActivationDesc::variable_oops_do(void do_oop(OopDesc**)) {
+void EntryActivationDesc::variable_oops_do(void do_oop(OopSlot*)) {
   for (int i = 0; i < _length; i++) {
     if (tag_at(i) == obj_tag) {
       do_oop(pointer_to_value_at(i));

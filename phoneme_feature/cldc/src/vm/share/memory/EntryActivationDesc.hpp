@@ -30,14 +30,14 @@ class EntryActivationDesc: public OopDesc {
 
   // Computes the allocation size
   static size_t allocation_size(int length) { 
-    return align_allocation_size(header_size() + length * 2 * sizeof(OopDesc*));
+    return align_allocation_size(header_size() + length * 2 * sizeof(OopSlot));
   }
   
   // Returns the object size
   size_t object_size() { return allocation_size(_length); }
 
   // GC support.
-  void variable_oops_do(void do_oop(OopDesc**));
+  void variable_oops_do(void do_oop(OopSlot*));
 
  private:
   // Initializes the object after allocation
@@ -48,7 +48,7 @@ class EntryActivationDesc: public OopDesc {
   static jint base_offset(jint index, jint length) {
     GUARANTEE(index >= 0 && index < length, "out of bounds");
     (void)length;
-    return header_size() + 2 * index * sizeof(OopDesc*);
+    return header_size() + 2 * index * sizeof(OopSlot);
   }
 
   // The parameter pushing code in shared_entry must be careful to 
@@ -65,13 +65,13 @@ class EntryActivationDesc: public OopDesc {
 
   // accessors used by variable oops do
   Tag       tag_at             (jint index) const { return *((Tag*)field_base(tag_offset(index)));     }
-  OopDesc** pointer_to_value_at(jint index) const { return (OopDesc**)field_base(value_offset(index)); }
+  OopSlot* pointer_to_value_at(jint index) const { return (OopSlot*)field_base(value_offset(index)); }
 
   jint                 _length;
-  MethodDesc*          _method;
-  EntryActivationDesc* _next;
+  NARROW(MethodDesc*) _method;
+  NARROW(EntryActivationDesc*) _next;
 #if ENABLE_REFLECTION || ENABLE_JAVA_DEBUGGER
-  address              _return_point;
+  NARROW(address)              _return_point;
 #endif
 
   friend class EntryActivation;

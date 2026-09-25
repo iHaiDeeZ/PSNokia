@@ -295,6 +295,15 @@ $(MIDP_CLASSES_ZIP):: $(SUBSYSTEM_M3G_JAVA_FILES)
 JTWI_NATIVE_FILES	+= $(SUBSYSTEM_M3G_NATIVE_FILES)
 
 #######################################################################
+# Vita media subsystem (real tone/tone-sequence/WAV playback)
+#######################################################################
+
+$(MIDP_CLASSES_ZIP):: $(SUBSYSTEM_MEDIA_VITA_JAVA_FILES)
+	$(appendjavafiles)
+
+JTWI_NATIVE_FILES	+= $(SUBSYSTEM_MEDIA_VITA_NATIVE_FILES)
+
+#######################################################################
 # JSRs
 #######################################################################
 # JSR 135/234/ABB Multimedia

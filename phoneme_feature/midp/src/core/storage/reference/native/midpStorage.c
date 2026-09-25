@@ -182,9 +182,18 @@ static int
 initializeConfigRoot(char* midp_home) {
     jchar fileSep = storageGetFileSeparator();
 
+#ifdef PS4
+    /* The configuration files (lib/) ship read-only in the package, while
+     * MIDP_HOME (appdb/, record stores) has to be writable under /data */
+    (void)midp_home;
+    if (PCSL_STRING_OK != pcsl_string_from_chars("/app0", &configRoot[0])) {
+        return -1;
+    }
+#else
     if (PCSL_STRING_OK != pcsl_string_from_chars(midp_home, &configRoot[0])) {
         return -1;
     }
+#endif
 
     /* performance hint: predict buffer capacity */
     pcsl_string_predict_size(&configRoot[0],

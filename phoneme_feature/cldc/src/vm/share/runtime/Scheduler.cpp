@@ -1821,7 +1821,7 @@ void Scheduler::print() {
 #endif
 
 void Scheduler::threads_do_list(do_thread_proc do_thread,
-                                void do_oop(OopDesc**),
+                                void do_oop(OopSlot*),
                                 OopDesc* list_head) {
   AllocationDisabler no_allocation;
 
@@ -1840,17 +1840,17 @@ void Scheduler::threads_do_list(do_thread_proc do_thread,
   }
 }
 
-void Scheduler::oops_doer(Thread* thread, void do_oop(OopDesc**)) {
+void Scheduler::oops_doer(Thread* thread, void do_oop(OopSlot*)) {
   thread->nonstack_oops_do(do_oop);
 }
 
-void Scheduler::oops_do(void do_oop(OopDesc**)) {
+void Scheduler::oops_do(void do_oop(OopSlot*)) {
     // GUARANTEE(ObjectHeap::is_gc_active(), "This may be called used by GC only");
-  do_oop((OopDesc**)&_current_thread);
-  do_oop((OopDesc**)&_current_pending_exception);
-  do_oop((OopDesc**)&_next_runnable_thread);
+  do_oop((OopSlot*)&_current_thread);
+  do_oop((OopSlot*)&_current_pending_exception);
+  do_oop((OopSlot*)&_next_runnable_thread);
 #if ENABLE_ISOLATES
-  do_oop((OopDesc**)&_current_task);
+  do_oop((OopSlot*)&_current_task);
 #endif
   threads_do_list(oops_doer, do_oop, _gc_global_head);
   // Oop handles chained on stack
@@ -1864,13 +1864,13 @@ void Scheduler::oops_do(void do_oop(OopDesc**)) {
     GUARANTEE(info->declared_count <= info->total_count,
               "KNI handles overflow");
     for (int i=0; i<info->declared_count; i++) {
-      do_oop((OopDesc**)&info->handles[i]);
+      do_oop((OopSlot*)&info->handles[i]);
     }
     info = info->prev;
   }
 }
 
-void Scheduler::gc_prologue(void do_oop(OopDesc**)) {
+void Scheduler::gc_prologue(void do_oop(OopSlot*)) {
   AllocationDisabler no_allocation;
   // We need to save these raw pointers during
   // ObjectHeap::update_object_pointers(). At that point

@@ -54,8 +54,8 @@ extern "C" {
 class MethodTrapDesc {
 private:
   char* _method_name;
-  MethodDesc* _trapped_method;
-  MethodDesc* _handler_method;
+  NARROW(MethodDesc*) _trapped_method;
+  NARROW(MethodDesc*) _handler_method;
   address _old_entry;
   int _call_count;
   int _action;
@@ -130,7 +130,7 @@ public:
   // Set up traps passed via JVM_ParseOneArg()
   static void activate_initial_traps();
   // GC support - needed to update pointers in _method_trap[i]
-  static void oops_do(void do_oop(OopDesc**));
+  static void oops_do(void do_oop(OopSlot*));
   // Find free MethodTrapDesc structure and return pointer to it
   static MethodTrapDesc* find_slot();
   // Convert Java String object to null-terminated array of chars

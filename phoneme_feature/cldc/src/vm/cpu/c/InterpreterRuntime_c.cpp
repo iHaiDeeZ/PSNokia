@@ -57,7 +57,7 @@ OopDesc* _anewarray(Thread *thread, OopDesc* raw_base_klass, int length
 }
 
 address setup_stack_asm(address xsp) {
-  address* sp = (address*)xsp;
+  AddressSlot* sp = (AddressSlot*)xsp;
   *--sp = NULL; // frame pointer
   *--sp = NULL; // dummy
   *--sp = NULL; // return_point

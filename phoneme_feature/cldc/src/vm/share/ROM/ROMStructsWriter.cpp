@@ -75,10 +75,20 @@ void ROMStructsWriter::write(ROMWriter *rom_writer JVM_TRAPS) {
   stream.print_cr("#ifndef JVM_LIMIT_OBJECT_FIELD_WRITES");
   stream.print_cr("#define JVM_LIMIT_OBJECT_FIELD_WRITES 0 /* IMPL_NOTE: TMP */");
   stream.print_cr("#endif");
-  stream.print_cr("#if !JVM_LIMIT_OBJECT_FIELD_WRITES");
-  stream.print_cr("#define JVM_FIELD_CONST");
+  stream.print_cr("/* Java references are 4-byte heap words on every host. On 64-bit");
+  stream.print_cr("   hosts (heap below 4GB, see narrow<T> in the VM) declare them as");
+  stream.print_cr("   32-bit pointers; clang needs -fms-extensions for __ptr32. */");
+  stream.print_cr("#ifndef JVM_REF");
+  stream.print_cr("#if defined(__LP64__) || defined(_WIN64)");
+  stream.print_cr("#define JVM_REF __ptr32 __uptr");
   stream.print_cr("#else");
-  stream.print_cr("#define JVM_FIELD_CONST const");
+  stream.print_cr("#define JVM_REF");
+  stream.print_cr("#endif");
+  stream.print_cr("#endif");
+  stream.print_cr("#if !JVM_LIMIT_OBJECT_FIELD_WRITES");
+  stream.print_cr("#define JVM_FIELD_CONST JVM_REF");
+  stream.print_cr("#else");
+  stream.print_cr("#define JVM_FIELD_CONST const JVM_REF");
   stream.print_cr("#endif");
   stream.cr();
 
@@ -127,7 +137,7 @@ void ROMStructsWriter::write_primitive_array_rom_struct(Stream *stream,
     field_type = type;
   }
   stream->print_cr("typedef struct {");
-  stream->print_cr("    void * dummy;");
+  stream->print_cr("    void * JVM_REF dummy;");
   stream->print_cr("    int length;");
   stream->print_cr("    %s elements[1];", field_type);
   stream->print_cr("} %s_array;", type);
@@ -149,7 +159,7 @@ void ROMStructsWriter::write_rom_static_struct(Stream *stream,
   TypeArray byte_array = Natives::get_jni_class_name(klass JVM_CHECK);
   stream->print_cr("struct %s_Class {", byte_array.base_address());
 
-  stream->print_cr("\tvoid * __do_not_use__;");
+  stream->print_cr("\tvoid * JVM_REF __do_not_use__;");
   write_rom_struct_static_fields(stream, klass JVM_CHECK);
 
   stream->print_cr("};");
@@ -180,7 +190,7 @@ void ROMStructsWriter::write_rom_struct_fields(Stream *stream,
 
   if (super.is_null()) {
     // This is java.lang.Object. Write the klass field
-    stream->print_cr("\tvoid * __do_not_use__;");
+    stream->print_cr("\tvoid * JVM_REF __do_not_use__;");
   }
 
   TypeArray::Fast fields = klass->original_fields();
@@ -322,7 +332,7 @@ void ROMStructsWriter::write_rom_struct_static_fields(Stream *stream,
     if (num_written == 0) {
       GUARANTEE((f.offset() % 4) == 0, "first field must be word-aligned");
       for (int j = 1; j < f.offset() / 4; j++) {
-        stream->print_cr("    /* @%d */\t void * __do_not_use__%d;", j*4, j);
+        stream->print_cr("    /* @%d */\t void * JVM_REF __do_not_use__%d;", j*4, j);
       }
     }
 

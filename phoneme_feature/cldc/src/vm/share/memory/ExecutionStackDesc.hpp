@@ -38,12 +38,12 @@ class ExecutionStackDesc: public OopDesc {
   size_t object_size() { return allocation_size(_length); }
 
   // GC support
- void relocate_all_pointers(int delta, void do_oop(OopDesc**));
+ void relocate_all_pointers(int delta, void do_oop(OopSlot*));
  void relocate_internal_pointers(int delta, Thread* thread,
                                   bool do_locks = false);
 
-  void variable_oops_do(void do_oop(OopDesc**)) {
-    Thread::Raw thread = _thread;
+  void variable_oops_do(void do_oop(OopSlot*)) {
+    Thread::Raw thread = (OopDesc*)_thread;
     if (thread.not_null()) { 
       // GC handles &_next_stack
       do_oop(&_thread);
@@ -74,10 +74,10 @@ class ExecutionStackDesc: public OopDesc {
 			  ExecutionStackDesc* new_stack);
 
   jint                _length;
-  OopDesc*            _thread;
-  ExecutionStackDesc* _next_stack;  // GC used only
+  NARROW(OopDesc*) _thread;
+  NARROW(ExecutionStackDesc*) _next_stack;  // GC used only
 
-  static  ExecutionStackDesc* _stack_list;  // used only by GC;
+  static  NARROW(ExecutionStackDesc*) _stack_list;  // used only by GC;
 
   friend class Universe;
   friend class ExecutionStack;

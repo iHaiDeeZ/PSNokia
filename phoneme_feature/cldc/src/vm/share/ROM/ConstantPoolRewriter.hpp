@@ -186,7 +186,7 @@ public:
 
 private:
   static ConstantPoolRewriter* _current_rewriter;
-  static void replace_oop_if_method(OopDesc** addr);
+  static void replace_oop_if_method(OopSlot* addr);
 
 #if ENABLE_ROM_JAVA_DEBUGGER
   void rewrite_line_number_tables(Method *old_method, 

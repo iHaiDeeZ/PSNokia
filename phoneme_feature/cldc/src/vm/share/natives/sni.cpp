@@ -32,7 +32,7 @@
 #include "incls/_sni.cpp.incl"
 
 void *SNI_GetRawArrayPointer(jarray array) {
-  Array::Raw oop = *(OopDesc**) array;
+  Array::Raw oop = (OopDesc*)*(OopSlot*) array;
   GUARANTEE(oop.not_null(), "null argument to SNI_GetRawArrayPointer()");
   return &((char*)oop.obj())[oop().base_offset()];
 }
@@ -140,7 +140,7 @@ KNIEXPORT void SNI_NewArray(jint type, jint size, jarray arrayHandle) {
     array = Universe::new_obj_array(Universe::string_class(), size JVM_NO_CHECK);
   }
 
-  *((OopDesc**)arrayHandle) = array;
+  *((OopSlot*)arrayHandle) = array;
   if (array == NULL) {
     // The caller is responsible to check for failure and throw
     // OutOfMemoryError if necessary.
@@ -154,11 +154,11 @@ KNIEXPORT void SNI_NewObjectArray(jclass elementType, jint size,
   UsingFastOops fast_oops;
   OopDesc *array;
 
-  JavaClassObj::Fast mirror = *(OopDesc**)elementType;
+  JavaClassObj::Fast mirror = (OopDesc*)*(OopSlot*)elementType;
   JavaClass::Fast klass = mirror().java_class();
 
   array = Universe::new_obj_array(&klass, size JVM_NO_CHECK);
-  *((OopDesc**)arrayHandle) = array;
+  *((OopSlot*)arrayHandle) = array;
   if (array == NULL) {
     // The caller is responsible to check for failure and throw
     // OutOfMemoryError if necessary.
@@ -167,7 +167,7 @@ KNIEXPORT void SNI_NewObjectArray(jclass elementType, jint size,
 }
 
 KNIEXPORT jint SNI_AddReference(jobject objectHandle, jboolean isStrong) {
-  Oop oop = *(OopDesc**)objectHandle;
+  Oop oop = (OopDesc*)*(OopSlot*)objectHandle;
   const ObjectHeap::ReferenceType type =
       (isStrong) ? ObjectHeap::STRONG: ObjectHeap::WEAK;
   SETUP_ERROR_CHECKER_ARG;
@@ -177,7 +177,7 @@ KNIEXPORT jint SNI_AddReference(jobject objectHandle, jboolean isStrong) {
 
 KNIEXPORT void SNI_GetReference(jint ref, jobject objectHandle) {
   OopDesc* referent = ObjectHeap::get_global_ref_object(ref);
-  *(OopDesc**)objectHandle = referent;
+  *(OopSlot*)objectHandle = referent;
 }
 
 KNIEXPORT void SNI_DeleteReference(jint ref) {

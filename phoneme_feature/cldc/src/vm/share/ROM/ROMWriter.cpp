@@ -107,13 +107,13 @@ MemCounter::MemCounter(const char *n) {
 
 // Define all static fields of ROMWriter
 ROMWRITER_INT_FIELDS_DO(ROMWRITER_DEFINE_INT)
-OopDesc*   ROMWriter::_romwriter_oops[ROMWriter::_number_of_oop_fields];
+OopSlot    ROMWriter::_romwriter_oops[ROMWriter::_number_of_oop_fields];
 int        ROMWriter::_last_oop_streaming_offset = 0;
 int        ROMWriter::_streaming_index = 0;
 OopDesc *  ROMWriter::_streaming_oop = NULL;
 TypeArray* ROMWriter::_streaming_fieldmap = NULL;
 
-void ROMWriter::oops_do(void do_oop(OopDesc**)) {
+void ROMWriter::oops_do(void do_oop(OopSlot*)) {
   if (is_active()) {
     for (int i=_number_of_oop_fields-1; i>=0; i--) {
       do_oop(&_romwriter_oops[i]);
@@ -1360,7 +1360,7 @@ int ROMWriter::stream_instance_fields(InstanceClass* /*klass*/,
                                       Oop* object,
                                       jint start_offset
                                       JVM_TRAPS) {
-  int field_count = object->object_size() / sizeof(OopDesc*);
+  int field_count = object->object_size() / sizeof(OopSlot);
   if (field_count > current_fieldmap()->length()) {
     alloc_field_map(field_count JVM_CHECK_0);
   }
@@ -1372,8 +1372,8 @@ int ROMWriter::stream_instance_fields(InstanceClass* /*klass*/,
 
   // Copy any remaining int fields at the end of the object
   int size = (int)object->object_size();
-  for (int i = _last_oop_streaming_offset + sizeof(OopDesc*); i < size;
-       i += sizeof(OopDesc*)) {
+  for (int i = _last_oop_streaming_offset + sizeof(OopSlot); i < size;
+       i += sizeof(OopSlot)) {
     current_fieldmap()->byte_at_put(_streaming_index++, T_INT);
   }
   return stream_fields_by_map(object, start_offset, 0, _streaming_index
@@ -1381,10 +1381,10 @@ int ROMWriter::stream_instance_fields(InstanceClass* /*klass*/,
 }
 #endif
 
-void ROMWriter::generate_fieldmap_by_oops_do(OopDesc**p) {
+void ROMWriter::generate_fieldmap_by_oops_do(OopSlot*p) {
   int offset = (int)((address_word)p - (address_word)_streaming_oop);
-  for (int i = _last_oop_streaming_offset + sizeof(OopDesc*); i < offset;
-       i += sizeof(OopDesc*)) {
+  for (int i = _last_oop_streaming_offset + sizeof(OopSlot); i < offset;
+       i += sizeof(OopSlot)) {
     _streaming_fieldmap->byte_at_put(_streaming_index++, T_INT);
   }
 
@@ -2445,7 +2445,7 @@ void BlockTypeFinder::do_method(Method* method, ROMWriter::BlockType &my_type,
   // This also checks if constant pool merging took place at all
   if (!ROMWriter::write_by_reference(method) && 
       ((SourceROMWriter*)writer())->may_skip_constant_pool(method)) {
-    const int objsize = sizeof(jobject);
+    const int objsize = sizeof(OopSlot);
     GUARANTEE(Method::constants_offset() ==
               (int)((sizeof(OopDesc)/BytesPerWord) * objsize), "Sanity");
     GUARANTEE(Method::exception_table_offset() ==
@@ -2504,7 +2504,7 @@ void BlockTypeFinder::do_compiled_method(CompiledMethod* cm,
   GUARANTEE(cm->size() > 0, "No half baked Compiled Methods");
   for (RelocationReader stream(cm); !stream.at_end(); stream.advance()) {
     if (stream.kind() == Relocation::oop_type) {
-      Oop value = *(OopDesc**) (cm->entry() + stream.code_offset());
+      Oop value = *(OopSlot*) (cm->entry() + stream.code_offset());
       if (value.is_method() || value.is_string()) { 
         // ignore these.  We know they're okay
       } else { 

@@ -56,5 +56,6 @@ midpCRC32Update(unsigned char *data, int length, unsigned long iv) {
 
 unsigned long
 midpCRC32Finalize(unsigned long crc) {
-    return ~crc;
+    /* CRC-32 is 32 bits; unsigned long is 64 bits on LP64 hosts (PS4) */
+    return ~crc & 0xFFFFFFFFUL;
 }

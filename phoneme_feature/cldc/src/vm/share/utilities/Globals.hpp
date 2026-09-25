@@ -313,7 +313,15 @@ private:
   product(bool, EnableLookupTableSizeHeuristic, true,                       \
           "Enable lookup table size heuristic")                             \
                                                                             \
-  develop(int, MaxCachedJarParsers, 4,                                      \
+  /* Bumped 4 -> 16 (2026-09-05): a real-hardware MIDlet (Metal Slug)
+   * that opens many jar resource streams in a row (image assets, one
+   * per PNG decoded) was hitting FileDecoder::get_jar_parser_if_needed's
+   * "JAR_PARSER_CACHE_EXHAUSTED" OutOfMemoryError with the actual Java
+   * heap barely touched - a resource-cache-size limit, not a heap-size
+   * one. See also JarFileParser.hpp's MAX_CACHED_PARSERS, the
+   * compile-time array-size cap this flag is min()'d against - both
+   * need bumping together. */                                            \
+  develop(int, MaxCachedJarParsers, 16,                                     \
           "The maximum number of JarFileParser objects that are kept "      \
           "open at any time. A higher number allows more Jar files "        \
           "to be processed efficiently at the same time")                   \

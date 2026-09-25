@@ -57,9 +57,9 @@ void Symbols::initialize(JVM_SINGLE_ARG_TRAPS) {
   }
 }
 
-void Symbols::oops_do(void do_oop(OopDesc**)) {
+void Symbols::oops_do(void do_oop(OopSlot*)) {
   for (int index = 0; index < number_of_system_symbols(); index++) {
-    do_oop((OopDesc**)(&system_symbols[index]));
+    do_oop((OopSlot*)(&system_symbols[index]));
   }
 }
 #endif

@@ -28,7 +28,7 @@ class TransportDesc : public MixedOopDesc {
 #if ENABLE_JAVA_DEBUGGER
 public:
   ReturnOop            _next;
-  address              _ops;
+  NARROW(address)              _ops;
   int                  _task_id;
   int                  _flags;
 #endif

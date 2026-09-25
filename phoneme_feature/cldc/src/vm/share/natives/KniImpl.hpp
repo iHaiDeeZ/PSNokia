@@ -68,15 +68,15 @@
         _KNI_CHECK_(0)
 
 inline OopDesc* kni_read_handle(jobject handle) {
-  return *(OopDesc**)handle;
+  return *(OopSlot*)handle;
 }
 
 inline void kni_set_handle(jobject handle, OopDesc* p) {
-  *(OopDesc**)handle = p;
+  *(OopSlot*)handle = p;
 }
 
 inline void kni_clear_handle(jobject handle) {
-  *(OopDesc**)handle = (OopDesc*)NULL;
+  *(OopSlot*)handle = (OopDesc*)NULL;
 }
 
 jfieldID _KNI_field_lookup_helper(jclass classHandle, const char* name,

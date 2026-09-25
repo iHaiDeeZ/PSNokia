@@ -122,7 +122,7 @@ class ProfilerNode {
   }
   virtual bool match(int id) { (void)id; return true; }
   virtual void print_title_on(Stream* out) JVM_PURE_VIRTUAL_1_PARAM(out);
-  virtual void oops_do(void do_oop(OopDesc**)) JVM_PURE_VIRTUAL_1_PARAM(do_oop);
+  virtual void oops_do(void do_oop(OopSlot*)) JVM_PURE_VIRTUAL_1_PARAM(do_oop);
 
   int total_ticks() {
     return ticks_in_interpeted + ticks_in_compiled;
@@ -170,8 +170,8 @@ class MethodNode : public ProfilerNode {
     name().print_symbol_on(out);
 #endif
   }
-  virtual void oops_do(void do_oop(OopDesc**)) {
-    do_oop((OopDesc**) &_method);
+  virtual void oops_do(void do_oop(OopSlot*)) {
+    do_oop((OopSlot*) &_method);
   }
   virtual bool match(MethodDesc* method, int id) {
     return method == _method && id == task_id;
@@ -291,7 +291,7 @@ public:
     return method->profile_hash() % TableSize;
   }
 
-  void oops_do(void do_oop(OopDesc**));
+  void oops_do(void do_oop(OopSlot*));
   void clear(int id);
 
   void print(Stream* out, int id);
@@ -299,7 +299,7 @@ public:
   ProfilerNode** flatten_and_sort(int id, int* size, ProfilerNode* sum_node);
 };
 
-void FlatProfiler::oops_do(void do_oop(OopDesc**)) {
+void FlatProfiler::oops_do(void do_oop(OopSlot*)) {
   for (int index = 0; index < TableSize; index++) {
     for (ProfilerNode* node = node_table[index]; 
          node != NULL; node = node->_next) {
@@ -467,7 +467,7 @@ void Profiler::print(Stream* out, int id) {
   }
 }
 
-void Profiler::oops_do(void do_oop(OopDesc**)) {
+void Profiler::oops_do(void do_oop(OopSlot*)) {
   if (profiler != NULL) {
     profiler->oops_do(do_oop);
   }

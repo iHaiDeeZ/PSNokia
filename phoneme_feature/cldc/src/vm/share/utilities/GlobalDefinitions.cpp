@@ -267,7 +267,8 @@ void power_of_2_fatal() {
 }
 
 void check_basic_types() {
-  GUARANTEE( 4 == sizeof( jobject),   "wrong size for basic type");
+  // jobject is a C pointer to a handle slot: 8 bytes on 64-bit hosts
+  GUARANTEE( USE_NARROW_POINTERS || 4 == sizeof( jobject), "wrong size for basic type");
   GUARANTEE( 1 == sizeof( jbyte),     "wrong size for basic type");
   GUARANTEE( 2 == sizeof( jchar),     "wrong size for basic type");
   GUARANTEE( 2 == sizeof( jshort),    "wrong size for basic type");

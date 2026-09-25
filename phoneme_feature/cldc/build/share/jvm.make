@@ -138,6 +138,7 @@ MakeDepsMain_win32    = WinGammaPlatform
 MakeDepsMain_wince    = WinCEGammaPlatform
 MakeDepsMain_linux    = UnixPlatform
 MakeDepsMain_vita     = UnixPlatform
+MakeDepsMain_ps4      = UnixPlatform
 ifneq ($(MakeDepsMain_$(os_family)_$(compiler)),)
 MakeDepsMain          = $(MakeDepsMain_$(os_family)_$(compiler))
 else
@@ -283,7 +284,7 @@ OBJ_SUFFIX_visCPP    = .obj
 OBJ_SUFFIX_evc       = .obj
 OBJ_SUFFIX_gcc       = .o
 ifeq ($(host_os), cygwin)
-ifneq ($(os_family), vita)
+ifeq ($(filter vita ps4,$(os_family))$(filter pc_c ps4_c,$(BUILD_DIR_NAME)),)
 OBJ_SUFFIX_gcc       = .obj
 endif
 endif
@@ -1553,7 +1554,7 @@ CPP_DEF_FLAGS_arm	 =
 CPP_DEF_FLAGS_win32      = -DWIN32 -D_WINDOWS
 CPP_DEF_FLAGS_linux      = -DLINUX
 ifeq ($(host_os), cygwin)
-ifneq ($(BUILD_DIR_NAME), vita_arm)
+ifeq ($(filter vita_arm pc_c ps4_c,$(BUILD_DIR_NAME)),)
 CPP_DEF_FLAGS            += -DCYGWIN
 endif
 ENABLE_MAP_FILE          = false
@@ -1570,7 +1571,7 @@ CC_FLAGS_EXPORT          = $(CPP_DEF_FLAGS)
 CC_OPT_FLAGS             = $(CPP_OPT_FLAGS)
 CPP_FLAGS_EXPORT         = $(CPP_DEF_FLAGS) $(CPLUSPLUS_FLAGS)
 CPP_FLAGS                = $(CPP_FLAGS_EXPORT) $(CPP_INCLUDE_DIRS)
-ifeq ($(BUILD_DIR_NAME), vita_arm)
+ifneq ($(filter vita_arm pc_c ps4_c,$(BUILD_DIR_NAME)),)
 CPP_FLAGS               += -Wno-error=parentheses -Wno-error=maybe-uninitialized -Wno-error=register -Wno-error=stringop-overflow -Wno-error=write-strings
 endif
 ifneq ($(ENABLE_COMPILATION_WARNINGS), true)
@@ -1627,7 +1628,7 @@ CPP_FLAGS              += -pg
 LINK_FLAGS             += -pg
 endif
 
-ifeq ($(BUILD_DIR_NAME), vita_arm)
+ifneq ($(filter vita_arm pc_c ps4_c,$(BUILD_DIR_NAME)),)
 # BSDSocket.cpp takes the real WINSOCK code path for vita_arm (see the
 # -DCYGWIN exclusion above), so it needs Winsock'"'"'s import library.
 ifneq ($(IsTarget), true)

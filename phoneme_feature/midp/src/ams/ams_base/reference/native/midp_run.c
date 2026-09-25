@@ -343,8 +343,18 @@ JVMSPI_DebuggerNotification(jboolean is_active) {
  *
  * @param s a string sent to a system specific output stream
  */
+#ifdef PS4
+#include <string.h>
+#include <renderlog.h>
+#endif
+
 void JVMSPI_PrintRaw(const char* s) {
+#ifdef PS4
+    /* No console on the PS4: System.out and logging go to the render log */
+    RENDERLOG_WRITE(s, (int)strlen(s));
+#else
     pcsl_print(s);
+#endif
 }
 
 /**

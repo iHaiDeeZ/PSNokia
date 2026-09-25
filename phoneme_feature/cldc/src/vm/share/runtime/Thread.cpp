@@ -43,6 +43,8 @@
 #define ENABLE_STACK_TRACE 1
 #endif
 
+extern "C" void write_marker(const char* text, int len);
+
 int Thread::_shrunk_stack_count;
 bool Thread::_real_time_has_ticked;
 
@@ -434,7 +436,7 @@ void Thread::set_thread_obj(ThreadObj* value) {
   if (value->not_null()) value->set_thread(this);
 }
 
-void Thread::stack_oops_do(void do_oop(OopDesc**)) {
+void Thread::stack_oops_do(void do_oop(OopSlot*)) {
   if (this->task_id() == Task::INVALID_TASK_ID) {
     // If we continue we'll break JVMTaskGCContext with a -1 task id
     GUARANTEE(!last_java_frame_exists(), "thread is already dead");
@@ -463,16 +465,16 @@ void Thread::stack_oops_do(void do_oop(OopDesc**)) {
   }
 }
 
-void Thread::nonstack_oops_do(void do_oop(OopDesc**)) {
+void Thread::nonstack_oops_do(void do_oop(OopSlot*)) {
   if (_debugger_active) {
-    OopDesc *step = (OopDesc *)(address_word)int_field(step_info_offset());
+    OopSlot step = (OopDesc *)(address_word)int_field(step_info_offset());
     if (step != NULL) {
       do_oop(&step);
     }
   }
 }
 
-void Thread::gc_prologue(void do_oop(OopDesc**)) {
+void Thread::gc_prologue(void do_oop(OopSlot*)) {
   // Java frames
   if (last_java_frame_exists()) {
     Frame fr(this);
@@ -530,6 +532,9 @@ void Thread::stack_overflow(Thread *thread, address stack_pointer) {
     } else {
       // Throw out of memory error and not stack overflow exception
       // since that exception is not part of CLDC 1.0
+      { char b[64]; int l=jvm_sprintf(b,
+          "OOM_SITE_THREAD533 new_stack_size=%d\n", (int)new_stack_size);
+        write_marker(b,l); }
       Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW);
     }
   }

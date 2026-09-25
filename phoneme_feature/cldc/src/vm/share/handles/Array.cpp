@@ -36,7 +36,7 @@ ReturnOop Array::shrink(int new_length) {
     scale = array_class().scale();
   } else {
     GUARANTEE(is_obj_array(), "sanity");
-    scale = sizeof(OopDesc*);
+    scale = sizeof(OopSlot);
   }
 
   Universe::shrink_object(this, ArrayDesc::allocation_size(new_length, scale));

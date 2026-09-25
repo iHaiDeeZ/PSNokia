@@ -29,11 +29,11 @@ private:
   // The following buffers are not used directly by FileDecoder
   // but they are needed by the child class Inflater.
   // According to MixedOopDesc layout pointers should come first
-  TypeArray*  _jar_file_name;
-  Buffer*     _in_buffer;
-  Buffer*     _out_buffer;
-  Buffer*     _length_buffer;
-  Buffer*     _distance_buffer;
+  NARROW(TypeArray*) _jar_file_name;
+  NARROW(Buffer*) _in_buffer;
+  NARROW(Buffer*) _out_buffer;
+  NARROW(Buffer*) _length_buffer;
+  NARROW(Buffer*) _distance_buffer;
 
   OsFile_Handle  _file_handle;
   int            _file_pos;

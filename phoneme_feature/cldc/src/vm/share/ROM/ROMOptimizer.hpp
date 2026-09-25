@@ -225,7 +225,7 @@ class ROMOptimizer {
     ROMOPTIMIZER_INT_FIELDS_DO(ROMOPTIMIZER_COUNT_FIELDS)
     _number_of_int_fields
   };
-  static OopDesc* _romoptimizer_oops[_number_of_oop_fields];
+  static OopSlot _romoptimizer_oops[_number_of_oop_fields];
 
   enum {
     // The order is important. Some optimizations depend on
@@ -293,7 +293,7 @@ public:
   }
   
   static void init_handles();
-  static void oops_do(void do_oop(OopDesc**));
+  static void oops_do(void do_oop(OopSlot*));
   void initialize(Stream *log_stream JVM_TRAPS);
   void optimize(Stream *log_stream JVM_TRAPS);
 

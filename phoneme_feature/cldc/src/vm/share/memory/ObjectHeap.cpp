@@ -30,6 +30,18 @@
  */
 
 # include "incls/_precompiled.incl"
+
+/* Diagnostic added 2026-09-05: chasing a real-hardware OutOfMemoryError
+ * (Metal Slug) that fires with only ~326KB of a 7MB heap used every
+ * time, right before FIRST_FRAME - meaning one single allocation
+ * request is asking for something close to the entire heap. Candidate
+ * call sites (class-file parsing, PNG decode) were checked directly
+ * and came back with completely sane values, so this logs the actual
+ * failing request size itself, at the one spot in
+ * ObjectHeap::allocate() where a request is given up on for good
+ * (after a full collect() pass still can't satisfy it) - see the call
+ * site below for context. */
+extern "C" void write_marker(const char* text, int len);
 # include "incls/_ObjectHeap.cpp.incl"
 
 // Static variables
@@ -49,14 +61,14 @@ address   ObjectHeap::_bitvector_start;
 bool      ObjectHeap::_is_gc_active;
 bool      ObjectHeap::_last_heap_expansion_failed;
 
-OopDesc** ObjectHeap::_permanent_generation_top;
+OopSlot* ObjectHeap::_permanent_generation_top;
 
 #ifdef AZZERT
 bool      ObjectHeap::_is_finalizing;
 #endif
 
 #if ENABLE_COMPILER
-OopDesc** ObjectHeap::_saved_compiler_area_top;
+OopSlot* ObjectHeap::_saved_compiler_area_top;
 
 OopDesc* (*ObjectHeap::code_allocator) (size_t size JVM_TRAPS)
   = &ObjectHeap::allocate;
@@ -65,7 +77,7 @@ OopDesc* (*ObjectHeap::temp_allocator) (size_t size JVM_TRAPS)
 #endif
 
 #if ENABLE_INTERNAL_CODE_OPTIMIZER
-OopDesc** ObjectHeap::_saved_compiler_area_top_quick;
+OopSlot* ObjectHeap::_saved_compiler_area_top_quick;
 void ObjectHeap::save_compiler_area_top_fast() {
   _saved_compiler_area_top_quick = _compiler_area_top;
 }
@@ -86,7 +98,7 @@ void ObjectHeap::update_compiler_area_top_fast() {
 #define WRITE_BARRIER_OOPS_LOOP_BEGIN(start, end, p) \
   /* Compute value of last_bitvector_word_ptr */ \
   /* Compute value of next_bitvector_word_ptr, next_p and bits */ \
-  OopDesc** p = align_down( start ); \
+  OopSlot* p = align_down( start ); \
   juint* bitvector_word_ptr = get_bitvectorword_for_aligned(p); \
   juint* last_bitvector_word_ptr = get_bitvectorword_for_unaligned(end); \
   AZZERT_ONLY( \
@@ -130,7 +142,7 @@ void ObjectHeap::update_compiler_area_top_fast() {
   } \
   bitword = *++bitvector_word_ptr;
 
-inline void ObjectHeap::set_task_allocation_start( OopDesc** p ) {
+inline void ObjectHeap::set_task_allocation_start( OopSlot* p ) {
 #if ENABLE_ISOLATES
   _task_allocation_start = p;
 #else
@@ -141,8 +153,8 @@ inline void ObjectHeap::set_task_allocation_start( OopDesc** p ) {
 #if ENABLE_ISOLATES
 int       ObjectHeap::_current_task_id;
 int       ObjectHeap::_previous_task_id;
-OopDesc** ObjectHeap::_real_inline_allocation_end;
-OopDesc** ObjectHeap::_task_allocation_start;
+OopSlot* ObjectHeap::_real_inline_allocation_end;
+OopSlot* ObjectHeap::_task_allocation_start;
 unsigned  ObjectHeap::_reserved_memory_deficit;
 unsigned  ObjectHeap::_current_deficit;
 bool      ObjectHeap::_some_tasks_terminated;
@@ -174,38 +186,38 @@ inline void TaskMemoryInfo::compute_max_usage( void ) {
 
 #define ForTask(task) for( int task = 0; task < MAX_TASKS; task++ )
 
-inline OopDesc** ObjectHeap::get_boundary_classes ( void ) {
-  return (OopDesc**) Universe::boundary_near_list()->obj_at(0);
+inline OopSlot* ObjectHeap::get_boundary_classes ( void ) {
+  return (OopSlot*) Universe::boundary_near_list()->obj_at(0);
 }
 
-inline BoundaryDesc** ObjectHeap::get_boundary_list ( void ) {
-  return (BoundaryDesc**) (persistent_handles + Universe::boundary_list_index);
+inline NARROW(BoundaryDesc*)* ObjectHeap::get_boundary_list ( void ) {
+  return (NARROW(BoundaryDesc*)*) (persistent_handles + Universe::boundary_list_index);
 }
 
 inline int ObjectHeap::get_current_task ( void ) { return _current_task_id; }
 
 inline int
 ObjectHeap::get_owner( const BoundaryDesc* p, const OopDesc* const classes[] ) {
-  const int n = (((OopDesc**) p->klass()) - (OopDesc**)classes)/(sizeof(NearDesc)/BytesPerWord);
+  const int n = (((OopSlot*) p->klass()) - (OopSlot*)classes)/(sizeof(NearDesc)/BytesPerWord);
   GUARANTEE( unsigned( n ) < unsigned( MAX_TASKS ), "sanity" );
   return n;
 }
 
-inline void ObjectHeap::create_boundary( OopDesc** p, const int task ) {
+inline void ObjectHeap::create_boundary( OopSlot* p, const int task ) {
   BoundaryDesc* q = (BoundaryDesc*) p;
   q->_klass = (OopDesc*) (get_boundary_classes() + (task * (sizeof(NearDesc)/BytesPerWord)));
-  BoundaryDesc** const list = ObjectHeap::get_boundary_list();
+  NARROW(BoundaryDesc*)* const list = ObjectHeap::get_boundary_list();
   q->_next = *list; *list = q;
 }
 
-void ObjectHeap::accumulate_memory_usage( OopDesc* _lwb[], OopDesc* _upb[] ) {
+void ObjectHeap::accumulate_memory_usage( OopSlot _lwb[], OopSlot _upb[] ) {
   {
     const BoundaryDesc* lwb = (const BoundaryDesc*) _lwb;
     const BoundaryDesc* upb = (const BoundaryDesc*) _upb;
-    OopDesc** const classes = get_boundary_classes();
+    OopSlot* const classes = get_boundary_classes();
 
     unsigned previous_id = _previous_task_id;
-    BoundaryDesc** root = get_boundary_list();
+    NARROW(BoundaryDesc*)* root = get_boundary_list();
     BoundaryDesc* p = *root;
 
     // Do not remove lonely boundary object on the top of the heap
@@ -263,7 +275,7 @@ void ObjectHeap::accumulate_current_task_memory_usage( void ) {
     }
   }
   {
-    OopDesc** const task_allocation_start = _inline_allocation_top;
+    OopSlot* const task_allocation_start = _inline_allocation_top;
     GUARANTEE( task_allocation_start >= _task_allocation_start, "sanity" );
     estimate += DISTANCE( _task_allocation_start, task_allocation_start );
     _task_allocation_start = task_allocation_start;
@@ -278,7 +290,7 @@ void ObjectHeap::accumulate_current_task_memory_usage( void ) {
   _reserved_memory_deficit = reserved_memory_deficit;
 }
 
-OopDesc** ObjectHeap::current_task_allocation_end ( void ) {
+OopSlot* ObjectHeap::current_task_allocation_end ( void ) {
   GUARANTEE( _inline_allocation_top == _task_allocation_start,
     "no allocations should happen here" );
   int available = free_memory() - int(_reserved_memory_deficit);
@@ -301,10 +313,10 @@ OopDesc** ObjectHeap::current_task_allocation_end ( void ) {
   }
   available = align_size_down( available, BytesPerWord );
 
-  OopDesc** allocation_end =
-    DERIVED( OopDesc**, _inline_allocation_top, available );
+  OopSlot* allocation_end =
+    DERIVED( OopSlot*, _inline_allocation_top, available );
   {
-    OopDesc** const real_inline_allocation_end = _real_inline_allocation_end;
+    OopSlot* const real_inline_allocation_end = _real_inline_allocation_end;
     if( real_inline_allocation_end < allocation_end ) {
       allocation_end = real_inline_allocation_end;
     }
@@ -314,7 +326,7 @@ OopDesc** ObjectHeap::current_task_allocation_end ( void ) {
 }
 
 int ObjectHeap::available_for_current_task() {
-  OopDesc** const allocation_end = disable_allocation_trap();
+  OopSlot* const allocation_end = disable_allocation_trap();
   accumulate_current_task_memory_usage();
 
   int available = free_memory() - (int)_reserved_memory_deficit;
@@ -430,7 +442,7 @@ void ObjectHeap::set_task_memory_quota( const int task_id,
 
     force_full_collect();
     {      
-      OopDesc** const allocation_end = disable_allocation_trap();
+      OopSlot* const allocation_end = disable_allocation_trap();
       collect( reserve JVM_NO_CHECK );
       clear_inline_allocation_area();
       set_collection_area_boundary( 0, false );
@@ -506,7 +518,7 @@ void ObjectHeap::print_max_memory_usage ( void ) {
 
 
 void ObjectHeap::safe_collect(size_t min_free_after_collection JVM_TRAPS) {
-  OopDesc** const allocation_end = disable_allocation_trap();
+  OopSlot* const allocation_end = disable_allocation_trap();
   collect( min_free_after_collection JVM_NO_CHECK );
   clear_inline_allocation_area();
   enable_allocation_trap( allocation_end );
@@ -568,35 +580,35 @@ inline bool ObjectHeap::compiler_area_in_use( void ) {
 #endif
 }
 
-FinalizerConsDesc* ObjectHeap::_finalizer_reachable [ NUM_OF_FINALIZERS ];
-FinalizerConsDesc* ObjectHeap::_finalizer_pending   [ NUM_OF_FINALIZERS ];
+NARROW(FinalizerConsDesc*) ObjectHeap::_finalizer_reachable [ NUM_OF_FINALIZERS ];
+NARROW(FinalizerConsDesc*) ObjectHeap::_finalizer_pending   [ NUM_OF_FINALIZERS ];
 
 inline void ObjectHeap::init_finalizers( void ) {
   jvm_memset( _finalizer_reachable, 0, sizeof _finalizer_reachable );
   jvm_memset( _finalizer_pending,   0, sizeof _finalizer_pending   );
 }
 
-void ObjectHeap::finalizer_oops_do( FinalizerConsDesc** list,
-                                    void do_oop(OopDesc**) ) {
+void ObjectHeap::finalizer_oops_do( NARROW(FinalizerConsDesc*)* list,
+                                    void do_oop(OopSlot*) ) {
   // Iterate over all elements in the finalization list
   for( int i = 0; i < NUM_OF_FINALIZERS; list++, i++ ) {
-    FinalizerConsDesc** pp = list;
-    do_oop((OopDesc**) pp);
+    NARROW(FinalizerConsDesc*)* pp = list;
+    do_oop((OopSlot*) pp);
     for( FinalizerConsDesc* p; (p = *pp) != NULL; ) {
       pp = p->next_addr();
-      do_oop((OopDesc**) pp );
-      do_oop((OopDesc**) p->referent_addr());
+      do_oop((OopSlot*) pp );
+      do_oop((OopSlot*) p->referent_addr());
     }
   }
 }
 
-inline void ObjectHeap::mark_finalizers( FinalizerConsDesc** list ) {
+inline void ObjectHeap::mark_finalizers( NARROW(FinalizerConsDesc*)* list ) {
   finalizer_oops_do( list, mark_root_and_stack );
 }
 
-void ObjectHeap::update_interior_pointers( FinalizerConsDesc** list ) {
+void ObjectHeap::update_interior_pointers( NARROW(FinalizerConsDesc*)* list ) {
   for( int i = 0; i < NUM_OF_FINALIZERS; list++, i++ ) {
-    update_interior_pointer((OopDesc **) list);
+    update_interior_pointer((OopSlot*) list);
   }
 }
 
@@ -624,15 +636,15 @@ void ObjectHeap::register_finalizer_reachable_object(Oop* referent JVM_TRAPS) {
 inline void ObjectHeap::discover_finalizer_reachable_objects() {
   // Iterate over finalizer reachable lists, keeping marked object on
   // the reachable list and moving unmarked objects to the pending list.
-  OopDesc** const bottom = _collection_area_start;
+  OopSlot* const bottom = _collection_area_start;
   for( int i = 0; i < NUM_OF_FINALIZERS; i++ ) {
     FinalizerConsDesc* pending = NULL;
-    FinalizerConsDesc** pp = _finalizer_reachable + i;
+    NARROW(FinalizerConsDesc*)* pp = _finalizer_reachable + i;
     for( FinalizerConsDesc* p;
          (p = *pp) != NULL && p->referent() >= (FinalizerConsDesc*) bottom; ) {
-      GUARANTEE(!test_bit_for((OopDesc**) p),
+      GUARANTEE(!test_bit_for((OopSlot*) p),
         "cons cell should not be marked yet");
-      OopDesc** referent = (OopDesc**) p->referent();
+      OopSlot* referent = (OopSlot*) p->referent();
       if( test_bit_for( referent ) ) {
         // Referent is reachable, keep on reachable list
         pp = p->next_addr();
@@ -657,12 +669,12 @@ inline void ObjectHeap::unmark_pending_finalizers( void ) {
   address bitvector_base = _bitvector_base;
   for( int i = 0; i < NUM_OF_FINALIZERS; i++ ) {
     for( FinalizerConsDesc* p = _finalizer_pending[i]; p; p = p->next() ) {
-      clear_bit_for( (OopDesc**) p->referent(), bitvector_base );
+      clear_bit_for( (OopSlot*) p->referent(), bitvector_base );
     }
   }
 }
 
-void ObjectHeap::finalize( FinalizerConsDesc** list, const int task_id ) {
+void ObjectHeap::finalize( NARROW(FinalizerConsDesc*)* list, const int task_id ) {
   list += task_id;
 
   FinalizerConsDesc* p = *list;
@@ -686,7 +698,7 @@ void ObjectHeap::finalize( FinalizerConsDesc** list, const int task_id ) {
   }
 }
 
-void ObjectHeap::finalize( FinalizerConsDesc** list ) {
+void ObjectHeap::finalize( NARROW(FinalizerConsDesc*)* list ) {
   for( int i = 0; i < NUM_OF_FINALIZERS; i++ ) {
     finalize( list, i );
   }
@@ -699,23 +711,23 @@ size_t    ObjectHeap::_young_gen_size_before;
 #endif
 
 #ifndef PRODUCT
-OopDesc** ObjectHeap::_heap_start_bitvector_verify;
+OopSlot* ObjectHeap::_heap_start_bitvector_verify;
 int       ObjectHeap::_excessive_gc_countdown;
 
 jint      AllocationDisabler__disabling_count = 0;
 bool      AllocationDisabler__suspended = false;
-OopDesc** AllocationDisabler::_current_allocation_top = NULL;
+OopSlot* AllocationDisabler::_current_allocation_top = NULL;
 jint      GCDisabler__disabling_count = 0;
 
 extern "C" {
  int       _jvm_in_raw_pointers_block       = 0;
 }
 
-bool oop_check_barrier(OopDesc** addr) {
+bool oop_check_barrier(OopSlot* addr) {
   return _heap_start <= addr && addr < _old_generation_end &&
          ObjectHeap::test_bit_for(addr);
 }
-bool oop_in_old_space(OopDesc** addr) {
+bool oop_in_old_space(OopSlot* addr) {
   return _heap_start <= addr && addr < _old_generation_end;
 }
 #endif
@@ -730,19 +742,19 @@ bool oop_in_old_space(OopDesc** addr) {
 
 class LiveRange: public StackObj {
  private:
-  OopDesc** _position;
+  OopSlot* _position;
  public:
-  LiveRange(OopDesc** position) : _position(position) {};
-  void set_next_live(OopDesc** p);
-  void set_next_dead(OopDesc** p);
-  void get_range(OopDesc** &next_live, OopDesc** &next_dead);
+  LiveRange(OopSlot* position) : _position(position) {};
+  void set_next_live(OopSlot* p);
+  void set_next_dead(OopSlot* p);
+  void get_range(OopSlot* &next_live, OopSlot* &next_dead);
 };
 
-void LiveRange::set_next_live(OopDesc** p) {
+void LiveRange::set_next_live(OopSlot* p) {
   *_position = (_position + 1 == p) ? (OopDesc*) 0x1 : (OopDesc*) p;
 }
 
-void LiveRange::set_next_dead(OopDesc** p) {
+void LiveRange::set_next_dead(OopSlot* p) {
   size_t first_word = (size_t) *_position;
   if (first_word == 0x1) {
     *_position = (OopDesc*) ((size_t) p | 0x1);
@@ -751,14 +763,14 @@ void LiveRange::set_next_dead(OopDesc** p) {
   }
 }
 
-void LiveRange::get_range(OopDesc** &next_live, OopDesc** &next_dead) {
+void LiveRange::get_range(OopSlot* &next_live, OopSlot* &next_dead) {
   size_t first_word = (size_t) *_position;
   if (first_word & 0x1) {
     next_live = _position + 1;
-    next_dead = (OopDesc**) (first_word & ~0x1);
+    next_dead = (OopSlot*) (first_word & ~0x1);
   } else {
-    next_live = (OopDesc**) first_word;
-    next_dead = (OopDesc**) *(_position+1);
+    next_live = (OopSlot*) first_word;
+    next_dead = (OopSlot*) *(_position+1);
   }
 }
 
@@ -776,7 +788,7 @@ void ObjectHeap::nuke_raw_handles() {
 }
 #endif
 
-inline void ObjectHeap::global_refs_do(void do_oop(OopDesc**), const int mask) {
+inline void ObjectHeap::global_refs_do(void do_oop(OopSlot*), const int mask) {
 #if ENABLE_ISOLATES
   ForTask( task ) {
     Task::Raw t = Task::get_task(task);
@@ -827,9 +839,9 @@ OopDesc* ObjectHeap::allocate_raw(size_t size JVM_TRAPS) {
     // in unused parts.
     return ObjectHeap::allocate(size JVM_NO_CHECK_AT_BOTTOM);
   } 
-  OopDesc** inline_top = _inline_allocation_top;
-  OopDesc** inline_end = _inline_allocation_end;
-  OopDesc** new_top = DERIVED(OopDesc**, inline_top, size);
+  OopSlot* inline_top = _inline_allocation_top;
+  OopSlot* inline_end = _inline_allocation_end;
+  OopSlot* new_top = DERIVED(OopSlot*, inline_top, size);
 
   if (new_top <= inline_end && new_top >= inline_top) {
     PERFORMANCE_COUNTER_INCREMENT(num_of_c_alloc_objs, 1);
@@ -886,7 +898,7 @@ OopDesc* ObjectHeap::allocate(size_t size JVM_TRAPS) {
     size += sizeof(BoundaryDesc);
   }
 
-  OopDesc** const saved_inline_end = _inline_allocation_end;
+  OopSlot* const saved_inline_end = _inline_allocation_end;
 #endif
 
 #ifdef AZZERT
@@ -897,15 +909,15 @@ OopDesc* ObjectHeap::allocate(size_t size JVM_TRAPS) {
     GUARANTEE(loop_check++ < 2, "No more than 2 iterations");
 
     // Prefetch the globals
-    OopDesc** inline_top = _inline_allocation_top;
-    OopDesc** new_top = DERIVED(OopDesc**, inline_top, size);
+    OopSlot* inline_top = _inline_allocation_top;
+    OopSlot* new_top = DERIVED(OopSlot*, inline_top, size);
     if( new_top < inline_top ) {
       // (new_top < _inline_allocation_top) means that we wrapped around
       // 32-bit boundary
       Throw::out_of_memory_error( JVM_SINGLE_ARG_THROW_0 );
     }
 
-    OopDesc** inline_end = _inline_allocation_end;
+    OopSlot* inline_end = _inline_allocation_end;
 #if ENABLE_ISOLATES
     // First allocation after task switching
     if( inline_end == NULL ) {
@@ -949,6 +961,12 @@ OopDesc* ObjectHeap::allocate(size_t size JVM_TRAPS) {
     _inline_allocation_end = current_task_allocation_end();
 #endif
     if( CURRENT_HAS_PENDING_EXCEPTION ) {
+      {
+        char diag_buf[64];
+        int diag_len = jvm_sprintf(diag_buf,
+            "ALLOC_GIVEUP size=%d\n", (int)size);
+        write_marker(diag_buf, diag_len);
+      }
 #if ENABLE_ISOLATES
       // If necessary, re-enable allocation trap
       if( saved_inline_end == NULL ) {
@@ -994,7 +1012,7 @@ OopDesc* ObjectHeap::compiler_area_allocate_code(size_t size JVM_TRAPS) {
   GUARANTEE(_compiler_area_temp_object_bottom == NULL, 
             "no temp objects can be alive when allocating new compiled code");
   const size_t needed = size + ArrayDesc::allocation_size(0, sizeof(int));
-  OopDesc** const end = compiler_area_end();
+  OopSlot* const end = compiler_area_end();
   const size_t free_bytes = DISTANCE(_compiler_area_top, end);
   if (free_bytes < needed) {
     const size_t slack = _heap_size / 32 + 4 * 1024;
@@ -1017,7 +1035,7 @@ OopDesc* ObjectHeap::compiler_area_allocate_code(size_t size JVM_TRAPS) {
   filler->initialize(Universe::int_array_class()->prototypical_near(),
                      filler_element_count);
 
-  _compiler_area_temp_object_bottom = (OopDesc**)filler;
+  _compiler_area_temp_object_bottom = (OopSlot*)filler;
   _compiler_area_top = end;
 
   PERFORMANCE_COUNTER_INCREMENT(num_of_c_alloc_objs, 1);
@@ -1074,7 +1092,7 @@ bool ObjectHeap::expand_current_compiled_method(int delta) {
     size_t filler_element_count = (free_bytes - delta) / sizeof(int);
     filler->initialize(Universe::int_array_class()->prototypical_near(),
                        filler_element_count);
-    _compiler_area_temp_object_bottom = (OopDesc**)filler;
+    _compiler_area_temp_object_bottom = (OopSlot*)filler;
     return true;
   } else {
     return false;
@@ -1353,8 +1371,8 @@ bool ObjectHeap::create() {
   return true;
 }
 
-void ObjectHeap::rom_init_heap_bounds(OopDesc **init_heap_bound, 
-                                      OopDesc **permanent_top) {
+void ObjectHeap::rom_init_heap_bounds(OopSlot*init_heap_bound, 
+                                      OopSlot*permanent_top) {
   _collection_area_start   = init_heap_bound;
   _old_generation_end      = init_heap_bound;
   _young_generation_start  = init_heap_bound;
@@ -1393,7 +1411,7 @@ size_t ObjectHeap::update_slices_size(size_t object_heap_size) {
   size_t slice_size_in_bytes = _slice_size * BytesPerWord;
   _nof_slices  =
       (object_heap_size + slice_size_in_bytes - 1) / slice_size_in_bytes;
-  size_t slices_size = _nof_slices * sizeof(OopDesc**);
+  size_t slices_size = _nof_slices * sizeof(OopSlot*);
 
   return slices_size;
 }
@@ -1422,7 +1440,7 @@ bool ObjectHeap::adjust_heap_size(size_t target_heap_size) {
   must_be_aligned( target_heap_size );
 
   const size_t minimum_marking_stack_size =
-      MimimumMarkingStackSize * sizeof(OopDesc *);
+      MimimumMarkingStackSize * sizeof(OopSlot);
   must_be_aligned(minimum_marking_stack_size);
 
   const size_t bitvector_size = target_heap_size/BitsPerWord;
@@ -1500,14 +1518,14 @@ bool ObjectHeap::adjust_heap_size(size_t target_heap_size) {
   must_be_aligned( unsigned(address_word(_bitv_chunk)));
 
   _heap_size       = target_heap_size;
-  _heap_start      = DERIVED(OopDesc**, _heap_chunk, extra_size);
+  _heap_start      = DERIVED(OopSlot*, _heap_chunk, extra_size);
 
-  OopDesc** const heap_top = _heap_start + _heap_size/BytesPerWord;
+  OopSlot* const heap_top = _heap_start + _heap_size/BytesPerWord;
   _heap_top         = heap_top;
   _heap_limit       = heap_top + MimimumMarkingStackSize;
   _heap_end         = _heap_limit;
   _bitvector_start  = (address) _bitv_chunk;
-  _slices_start     = (OopDesc***) (_bitvector_start + bitvector_size);
+  _slices_start     = (OopSlot**) (_bitvector_start + bitvector_size);
 
   _bitvector_base =
       _bitvector_start - (((uintptr_t)_heap_start >> 2) / BitsPerByte);
@@ -1519,7 +1537,7 @@ bool ObjectHeap::adjust_heap_size(size_t target_heap_size) {
     // set allocation area to cover entire heap while bootstrapping, see
     // set_collection_area_boundary()
     {
-      OopDesc** const inline_allocation_top = _heap_start;
+      OopSlot* const inline_allocation_top = _heap_start;
       _inline_allocation_top  = inline_allocation_top;
       set_task_allocation_start( inline_allocation_top );
       _collection_area_start  = inline_allocation_top;
@@ -1529,8 +1547,8 @@ bool ObjectHeap::adjust_heap_size(size_t target_heap_size) {
     {
       const size_t compiler_area_size =
         align_size_up(_heap_size * CompilerAreaPercentage / 100, BytesPerWord);
-      OopDesc** const inline_allocation_end =
-        DERIVED(OopDesc**, compiler_area_end(), -int(compiler_area_size));
+      OopSlot* const inline_allocation_end =
+        DERIVED(OopSlot*, compiler_area_end(), -int(compiler_area_size));
       _compiler_area_start    = inline_allocation_end;
       _compiler_area_top      = inline_allocation_end;
       set_inline_allocation_end( inline_allocation_end );
@@ -1577,9 +1595,9 @@ inline void ObjectHeap::set_collection_area_boundary_reuse(void) {
   while (this_stack) {
     if ((address)this_stack < (address)_collection_area_start) {
       int size = this_stack->object_size();
-      OopDesc** start =
-        (OopDesc**)this_stack->field_base(ExecutionStackDesc::header_size());
-      OopDesc** end  =  (OopDesc**)this_stack->field_base(size);
+      OopSlot* start =
+        (OopSlot*)this_stack->field_base(ExecutionStackDesc::header_size());
+      OopSlot* end  =  (OopSlot*)this_stack->field_base(size);
       clear_bit_range(start, end);
     }
     this_stack = this_stack->_next_stack;
@@ -1599,13 +1617,13 @@ inline void ObjectHeap::set_collection_area_boundary_no_reuse(
     target_size = available_size;
   }
   if (!YoungGenerationAtEndOfHeap) {
-    OopDesc** p = _inline_allocation_top;
-    set_inline_allocation_end( DERIVED(OopDesc**, p, target_size) );
+    OopSlot* p = _inline_allocation_top;
+    set_inline_allocation_end( DERIVED(OopSlot*, p, target_size) );
     _old_generation_end    = p;
     _collection_area_start = p;
   } else {
     _old_generation_end    = _inline_allocation_top;
-    _collection_area_start = DERIVED(OopDesc**, _compiler_area_start, 
+    _collection_area_start = DERIVED(OopSlot*, _compiler_area_start, 
                                                   -(int)target_size);
     _inline_allocation_top = _collection_area_start;
     set_task_allocation_start( _inline_allocation_top );
@@ -1660,7 +1678,7 @@ ObjectHeap::set_collection_area_boundary(size_t min_free_after_collection,
   verify_layout();
 }
 
-void ObjectHeap::mark_and_stack_root_and_interior_pointers(OopDesc** p) {
+void ObjectHeap::mark_and_stack_root_and_interior_pointers(OopSlot* p) {
   // This function is used when we have a marking stack overflow.
   // We must mark both the object and all the interior pointers of the object
   OopDesc* obj = (OopDesc*) p;
@@ -1676,13 +1694,13 @@ inline void ObjectHeap::cleanup_compiled_method_cache( void ) {
 }
 #endif
 
-juint ObjectHeap::mark_and_stack_pointers(OopDesc** p, juint bitword) {
+juint ObjectHeap::mark_and_stack_pointers(OopSlot* p, juint bitword) {
   GUARANTEE( bitword != 0, "Should not be called for zero bitwords" );
 
-  OopDesc** const collection_area_start = _collection_area_start;
-  OopDesc** const heap_top              = compiler_area_end();
+  OopSlot* const collection_area_start = _collection_area_start;
+  OopSlot* const heap_top              = compiler_area_end();
   address   const bitvector_base        = _bitvector_base;
-  OopDesc**       marking_stack_top     = _marking_stack_top;  
+  OopSlot*       marking_stack_top     = _marking_stack_top;  
 
   juint valid = 0;
   int i = 0;
@@ -1696,7 +1714,7 @@ juint ObjectHeap::mark_and_stack_pointers(OopDesc** p, juint bitword) {
     if( TraceGC ) {
       TTY_TRACE_CR(("TraceGC: 0x%x write barrier entry", p+i));
     }
-    OopDesc** const obj = (OopDesc**) p[i];
+    OopSlot* const obj = (OopSlot*) p[i];
     if( collection_area_start <= obj && obj < heap_top ) {
       // Is object already marked?
       if( !test_and_set_bit_for(obj, bitvector_base) ) {
@@ -1725,9 +1743,9 @@ juint ObjectHeap::mark_and_stack_pointers(OopDesc** p, juint bitword) {
 }
 
 inline void ObjectHeap::mark_remembered_set(void) {
-  OopDesc** p = align_down( _heap_start );
+  OopSlot* p = align_down( _heap_start );
   juint* bitp = get_bitvectorword_for_aligned(p);
-  OopDesc** const end = _old_generation_end - BitsPerWord;
+  OopSlot* const end = _old_generation_end - BitsPerWord;
   for( ; p <= end; bitp++, p += BitsPerWord ) {
     const juint bitword = *bitp;
     if( bitword ) {
@@ -1749,7 +1767,7 @@ inline void ObjectHeap::mark_remembered_set(void) {
   }
 }
 
-void ObjectHeap::roots_do_to( void do_oop(OopDesc**), const bool young_only,
+void ObjectHeap::roots_do_to( void do_oop(OopSlot*), const bool young_only,
                                                       const int upb ) {
 #if ENABLE_PROFILER
   Profiler::oops_do( do_oop );
@@ -1869,8 +1887,8 @@ inline void ObjectHeap::mark_objects( const bool is_full_collect ) {
   // at this point all live objects should be marked.  Now we traverse the
   // debugger objectID hash maps and if an object in the map is unmarked we
   // delete it from the table.
-  //  mark_root_and_stack((OopDesc **)Universe::objects_by_ref_map());
-  //  mark_root_and_stack((OopDesc **)Universe::objects_by_id_map());
+  //  mark_root_and_stack((OopSlot*)Universe::objects_by_ref_map());
+  //  mark_root_and_stack((OopSlot*)Universe::objects_by_id_map());
   JavaDebugger::flush_refnodes();
 #endif
 
@@ -1892,12 +1910,12 @@ inline void ObjectHeap::mark_objects( const bool is_full_collect ) {
     cleanup_compiled_method_cache();
 #endif
 #if USE_IMAGE_MAPPING || USE_LARGE_OBJECT_AREA
-    GUARANTEE( !( _collection_area_start <= ((OopDesc**)binary_images) &&
-                  ((OopDesc**)binary_images) < mark_area_end() &&
-                  test_bit_for( (OopDesc**)binary_images ) ),
+    GUARANTEE( !( _collection_area_start <= ((OopSlot*)binary_images) &&
+                  ((OopSlot*)binary_images) < mark_area_end() &&
+                  test_bit_for( (OopSlot*)binary_images ) ),
       "Universe::binary_images must be unreachable" );
 
-    GUARANTEE(dead_task && !test_bit_for((OopDesc**)dead_task),
+    GUARANTEE(dead_task && !test_bit_for((OopSlot*)dead_task),
               "Dead task must be unreachable");
     Universe::global_binary_images()->set_obj(binary_images); 
 #if !ENABLE_LIB_IMAGES
@@ -1932,10 +1950,10 @@ void ObjectHeap::check_marking_stack_overflow() {
   }
 }
 
-void ObjectHeap::mark_forward_pointer(OopDesc** p) {
+void ObjectHeap::mark_forward_pointer(OopSlot* p) {
   OopDesc* obj = *p;
   GUARANTEE(p >= _collection_area_start && p < _inline_allocation_top,"Sanity");
-  if ((OopDesc**)obj > p && (OopDesc**)obj < _inline_allocation_top) {
+  if ((OopSlot*)obj > p && (OopSlot*)obj < _inline_allocation_top) {
     set_bit_for(p);
     if (TraceGC) {
        TTY_TRACE_CR(("   0x%x => 0x%x forward marked", p, obj));
@@ -1943,9 +1961,9 @@ void ObjectHeap::mark_forward_pointer(OopDesc** p) {
   }
 }
 
-inline OopDesc** ObjectHeap::mark_forward_pointers() {
-  OopDesc** p = _collection_area_start;
-  OopDesc** end_scan = _inline_allocation_top;
+inline OopSlot* ObjectHeap::mark_forward_pointers() {
+  OopSlot* p = _collection_area_start;
+  OopSlot* end_scan = _inline_allocation_top;
   address bitvector_base = _bitvector_base;
   while (p < end_scan && test_bit_for(p, bitvector_base)) {
     // By marking the pointers in the fixed part of young space, we can
@@ -1958,15 +1976,15 @@ inline OopDesc** ObjectHeap::mark_forward_pointers() {
       // This is a common case: (non-array) Java object instance. In-line
       // OopDesc::oops_do_for() to make it run faster.
       jbyte* map = (jbyte*)blueprint->embedded_oop_map();
-      OopDesc** base = p;
-      OopDesc** inline_allocation_top = _inline_allocation_top;
+      OopSlot* base = p;
+      OopSlot* inline_allocation_top = _inline_allocation_top;
       while (true) {
         jint entry = (jint)(*map++);
         if (entry > 0) {
           base += entry;
           OopDesc* obj = *base;
-          if ((OopDesc**)obj > base && 
-              (OopDesc**)obj < inline_allocation_top) {
+          if ((OopSlot*)obj > base && 
+              (OopSlot*)obj < inline_allocation_top) {
             set_bit_for(base, bitvector_base);
             if (TraceGC) {
               TTY_TRACE_CR(("   0x%x => 0x%x forward marked", base, obj));
@@ -1979,16 +1997,16 @@ inline OopDesc** ObjectHeap::mark_forward_pointers() {
           base += (OopMapEscape - 1);
         }
       }
-      p = DERIVED(OopDesc**, p, instance_size);
+      p = DERIVED(OopSlot*, p, instance_size);
     } else {
       ((OopDesc*)p)->oops_do_for(blueprint, mark_forward_pointer);
       size_t size = ((OopDesc*)p)->object_size();
 
       if (TraceGC) {
         TTY_TRACE_CR(("TraceGC: 0x%x - 0x%x (size %d) fixed",
-                      p, DERIVED(OopDesc**, p, size), size));
+                      p, DERIVED(OopSlot*, p, size), size));
       }
-      p = DERIVED(OopDesc**, p, size);
+      p = DERIVED(OopSlot*, p, size);
     }
   }
   return p;
@@ -2030,32 +2048,32 @@ inline OopDesc* ObjectHeap::rom_oop_from_offset(size_t offset) {
 }
 #endif // !ENABLE_HEAP_NEARS_IN_HEAP 
 inline void ObjectHeap::compute_new_object_locations() {
-  OopDesc** this_slice = NULL;
-  OopDesc** this_slice_destination = NULL;
-  OopDesc** next_slice = _heap_start;
-  OopDesc** last_dead = NULL;
-  OopDesc** prev_last_dead = NULL;
-  OopDesc** first_dead = NULL;
+  OopSlot* this_slice = NULL;
+  OopSlot* this_slice_destination = NULL;
+  OopSlot* next_slice = _heap_start;
+  OopSlot* last_dead = NULL;
+  OopSlot* prev_last_dead = NULL;
+  OopSlot* first_dead = NULL;
 
   // Cache some unchanging global variables into locals
-  OopDesc**  heap_start             = _heap_start;
-  OopDesc**  inline_allocation_top  = _inline_allocation_top;
-  OopDesc**  old_generation_end     = _old_generation_end;
-  OopDesc**  young_generation_start = _young_generation_start;
-  OopDesc*** slices_start           = _slices_start;
+  OopSlot*  heap_start             = _heap_start;
+  OopSlot*  inline_allocation_top  = _inline_allocation_top;
+  OopSlot*  old_generation_end     = _old_generation_end;
+  OopSlot*  young_generation_start = _young_generation_start;
+  OopSlot** slices_start           = _slices_start;
   const int  slice_size             = _slice_size;
   const int  slice_shift            = _slice_shift;
   address bitvector_base            = _bitvector_base;
 
   bool split_space = (old_generation_end != young_generation_start);
   bool compaction_started = false;
-  OopDesc** compaction_top;
+  OopSlot* compaction_top;
 
   // Iterate over live objects, installing forwarding pointers in high
   // bits of near pointer if object moves.
   // Insert live range information in first word(s) of dead ranges, but
   // don't scan dead objects, rather, scan bitmap for next live object.
-  OopDesc** p;
+  OopSlot* p;
 
   if (_collection_area_start == _heap_start || !split_space) {
     p = mark_forward_pointers();
@@ -2096,11 +2114,11 @@ inline void ObjectHeap::compute_new_object_locations() {
 #if ENABLE_HEAP_NEARS_IN_HEAP 
       GUARANTEE(contains(obj_near), "check");
       // Compute near pointer relative to heap start
-      near_offset = ((OopDesc**)(obj_near) - heap_start);
+      near_offset = ((OopSlot*)(obj_near) - heap_start);
 #else
       if (contains(obj_near)) {
         // Compute near pointer relative to heap start
-        near_offset = ((OopDesc**)(obj_near) - heap_start);
+        near_offset = ((OopSlot*)(obj_near) - heap_start);
       } else {
         GUARANTEE(ROM::system_contains(obj_near), "must be valid ROM near");
         size_t offset = rom_offset_of(obj_near);
@@ -2122,21 +2140,21 @@ inline void ObjectHeap::compute_new_object_locations() {
       if (TraceGC) {
         if (split_space && _collection_area_start != _heap_start) {
           int alt_delta = DISTANCE(old_generation_end, young_generation_start);
-          OopDesc** alt_destination =
-              DERIVED(OopDesc**, compaction_top, alt_delta);
+          OopSlot* alt_destination =
+              DERIVED(OopSlot*, compaction_top, alt_delta);
           TTY_TRACE_CR(("TraceGC: 0x%x - 0x%x (size %d) => 0x%x [alt 0x%x]",
-                        p, DERIVED(OopDesc**, p, size), size,
+                        p, DERIVED(OopSlot*, p, size), size,
                         compaction_top,  alt_destination));
         } else {
           TTY_TRACE_CR(("TraceGC: 0x%x - 0x%x (size %d) => 0x%x",
-                        p, DERIVED(OopDesc**, p, size), size,
+                        p, DERIVED(OopSlot*, p, size), size,
                         compaction_top));
         }
       }
 #endif
       // size is in bytes rather than words
-      compaction_top = DERIVED(OopDesc**, compaction_top, size);
-      p              = DERIVED(OopDesc**, p, size);
+      compaction_top = DERIVED(OopSlot*, compaction_top, size);
+      p              = DERIVED(OopSlot*, p, size);
     } else {
       // Current object is first dead object in dead range
       GUARANTEE(last_dead == NULL, "sanity check");
@@ -2206,7 +2224,8 @@ inline void ObjectHeap::compute_new_object_locations() {
     } else {
       // The first object in young space is dead.
       GUARANTEE(!test_bit_for(young_generation_start), "Must be dead");
-      OopDesc **next_live, **next_dead;
+      OopSlot* next_live;
+      OopSlot* next_dead;
       LiveRange lrx(young_generation_start);
       lrx.get_range(next_live, next_dead);
       lr.set_next_live(next_live);
@@ -2217,13 +2236,13 @@ inline void ObjectHeap::compute_new_object_locations() {
   _compaction_top = compaction_top;
 }
 
-void ObjectHeap::update_interior_pointer(OopDesc** p) {
+void ObjectHeap::update_interior_pointer(OopSlot* p) {
   OopDesc* obj = *p;
   const QuickVars& qv = _quick_vars;
 
   // Is object pointed to moving? This does null check as well.
-  if ((OopDesc**)obj >= qv.compaction_start &&
-      (OopDesc**)obj <  qv.collection_area_end) {
+  if ((OopSlot*)obj >= qv.compaction_start &&
+      (OopSlot*)obj <  qv.collection_area_end) {
     // Decode destination encoded in object's near pointer
     *p = decode_destination(obj, qv);
     GUARANTEE(contains(*p), "sanity");
@@ -2233,8 +2252,8 @@ void ObjectHeap::update_interior_pointer(OopDesc** p) {
   }
 }
 
-void ObjectHeap::write_barrier_oops_update_interior_pointers(OopDesc** start,
-                                                             OopDesc** end) {
+void ObjectHeap::write_barrier_oops_update_interior_pointers(OopSlot* start,
+                                                             OopSlot* end) {
   OopDesc* lower_limit = (OopDesc*)_compaction_start;
   OopDesc* upper_limit = (OopDesc*)_collection_area_end;
   const QuickVars& qv = _quick_vars;
@@ -2277,7 +2296,7 @@ ObjectHeap::update_other_interior_pointers( const bool is_full_collect ) {
 
 // Update interior pointers in execution stacks
 inline void ObjectHeap::update_execution_stack_interior_pointers() {
-  ExecutionStackDesc **previous_stack_addr = &ExecutionStackDesc::_stack_list;
+  NARROW(ExecutionStackDesc*)* previous_stack_addr = &ExecutionStackDesc::_stack_list;
   ExecutionStackDesc *this_stack = ExecutionStackDesc::_stack_list;
 
   while (this_stack != NULL) {
@@ -2287,7 +2306,7 @@ inline void ObjectHeap::update_execution_stack_interior_pointers() {
     // Grab the next stack field
     GUARANTEE(contains(this_stack), "All execution stacks are in heap");
 
-    if ((OopDesc**)this_stack < _end_fixed_objects) {
+    if ((OopSlot*)this_stack < _end_fixed_objects) {
       // We are not subject to GC.  Our pointers have mark bits.
       if (TraceGC) {
         TTY_TRACE_CR(("TraceGC: Stack 0x%x not being collected", this_stack));
@@ -2295,14 +2314,14 @@ inline void ObjectHeap::update_execution_stack_interior_pointers() {
       GUARANTEE(*previous_stack_addr == this_stack, "No update needed");
 
       previous_stack_addr = &this_stack->_next_stack;
-    } else if (!test_bit_for((OopDesc**)this_stack)) {
+    } else if (!test_bit_for((OopSlot*)this_stack)) {
       // This stack is being deleted.  Remove it from the linked list
       if (TraceGC) {
         TTY_TRACE_CR(("TraceGC: Stack 0x%x deleted", this_stack));
       }
       *previous_stack_addr = next_stack;
     } else {
-      GUARANTEE((OopDesc**)this_stack >= _compaction_start, "Must be moving");
+      GUARANTEE((OopSlot*)this_stack >= _compaction_start, "Must be moving");
       // This execution stack is being relocated
 #ifdef AZZERT
       FarClassDesc* far_class =
@@ -2336,24 +2355,24 @@ inline void ObjectHeap::update_object_pointers() {
   // (1) Update execution stacks, before anything else moves
   update_execution_stack_interior_pointers();
 
-  OopDesc** const compaction_start      = _compaction_start;
-  OopDesc** const old_generation_end    = _old_generation_end;
-  OopDesc** const end_fixed_objects     = _end_fixed_objects;
+  OopSlot* const compaction_start      = _compaction_start;
+  OopSlot* const old_generation_end    = _old_generation_end;
+  OopSlot* const end_fixed_objects     = _end_fixed_objects;
 
   const bool is_full_collect = compaction_start <= old_generation_end;
 
   // (2) Update random pointers;
   update_other_interior_pointers( is_full_collect );
 
-  OopDesc** const young_generation_start= _young_generation_start;
-  OopDesc** const inline_allocation_top = _inline_allocation_top;
+  OopSlot* const young_generation_start= _young_generation_start;
+  OopSlot* const inline_allocation_top = _inline_allocation_top;
   
   // (3) Update interior object pointers (near pointers unchanged yet)
   // Execution stacks in compaction space have already been handled.
   if( is_full_collect ) {
     write_barrier_oops_update_moving_object_interior_pointers(
                           compaction_start, old_generation_end);
-    OopDesc** start = young_generation_start;
+    OopSlot* start = young_generation_start;
     if (start < end_fixed_objects) {
       start = end_fixed_objects;
     }
@@ -2401,7 +2420,7 @@ inline void ObjectHeap::update_object_pointers() {
 }
 
 void ObjectHeap::write_barrier_oops_update_moving_object_interior_pointers(
-                               OopDesc** start, OopDesc** end) {
+                               OopSlot* start, OopSlot* end) {
   const QuickVars& qv = _quick_vars;
   WRITE_BARRIER_OOPS_LOOP_BEGIN(start, end, p);
   {
@@ -2419,16 +2438,16 @@ void ObjectHeap::write_barrier_oops_update_moving_object_interior_pointers(
       }
 #endif
       jbyte* map = (jbyte*)far_class->embedded_oop_map();
-      OopDesc** interiorp = p;
-      OopDesc** lower_limit = qv.compaction_start;
-      OopDesc** upper_limit = qv.collection_area_end;
+      OopSlot* interiorp = p;
+      OopSlot* lower_limit = qv.compaction_start;
+      OopSlot* upper_limit = qv.collection_area_end;
       while (true) {
         jint entry = (jint)(*map++);
         if (entry > 0) {
           interiorp += entry;
           OopDesc* obj = *interiorp;
           // Here's a hand-lined version of update_interior_pointer().
-          if ((OopDesc**)obj >= lower_limit && (OopDesc**)obj < upper_limit) {
+          if ((OopSlot*)obj >= lower_limit && (OopSlot*)obj < upper_limit) {
             *interiorp = decode_destination(obj, qv);
             GUARANTEE(contains(*interiorp), "sanity");
             if (TraceGC) {
@@ -2472,11 +2491,11 @@ void ObjectHeap::write_barrier_oops_update_moving_object_interior_pointers(
 }
 
 void ObjectHeap::write_barrier_oops_update_moving_object_near_pointer(
-                               OopDesc** start, OopDesc** end) {
+                               OopSlot* start, OopSlot* end) {
   const QuickVars& qv = _quick_vars;
-  OopDesc ** compaction_start    = _compaction_start;
-  OopDesc ** collection_area_end = _collection_area_end;
-  OopDesc **heap_start           = _heap_start;
+  OopSlot* compaction_start    = _compaction_start;
+  OopSlot* collection_area_end = _collection_area_end;
+  OopSlot*heap_start           = _heap_start;
   size_t    near_mask            = _near_mask;
   size_t    slice_offset_mask    = _slice_offset_mask;
 
@@ -2487,14 +2506,14 @@ void ObjectHeap::write_barrier_oops_update_moving_object_near_pointer(
     // this near pointer is encoded
     OopDesc* n = decode_near(obj, heap_start, near_mask);
     // Is near object moving?
-    if ((OopDesc**)n >= compaction_start &&
-        (OopDesc**)n <  collection_area_end) {
+    if ((OopSlot*)n >= compaction_start &&
+        (OopSlot*)n <  collection_area_end) {
       // Decode destination encoded in near's near pointer
       OopDesc* new_near = decode_destination(n, qv);
       // Set new destination in lower bits, but leave the destination for this
       // object (encoded in the upper bits) in place, since it might be
       // needed later.
-      const size_t new_near_offset = (OopDesc**)new_near - heap_start;
+      const size_t new_near_offset = (OopSlot*)new_near - heap_start;
       const size_t encoded_dest = ((size_t)*p) & slice_offset_mask;
       if (TraceGC) {
         TTY_TRACE_CR(("  near: 0x%x -> 0x%x now 0x%x (encoded 0x%x => 0x%x)",
@@ -2507,8 +2526,8 @@ void ObjectHeap::write_barrier_oops_update_moving_object_near_pointer(
 }
 
 void ObjectHeap::write_barrier_oops_unencode_moving_object_near_pointer(
-                               OopDesc** start, OopDesc** end) {
-  OopDesc **heap_start = _heap_start;
+                               OopSlot* start, OopSlot* end) {
+  OopSlot*heap_start = _heap_start;
   size_t near_mask = _near_mask;
   WRITE_BARRIER_OOPS_LOOP_BEGIN(start, end, p);
   {
@@ -2524,14 +2543,14 @@ void ObjectHeap::write_barrier_oops_unencode_moving_object_near_pointer(
 inline void ObjectHeap::compact_objects(bool reuse_young_generation) {
   bool split = _young_generation_start != _old_generation_end;
   if (_compaction_start != _collection_area_end) {
-    GUARANTEE(_end_fixed_objects < (OopDesc**) _compaction_start,
+    GUARANTEE(_end_fixed_objects < (OopSlot*) _compaction_start,
               "sanity check");
-    OopDesc** next_live = NULL;
-    OopDesc** current_dead = _end_fixed_objects;
-    OopDesc** next_dead = NULL;
-    OopDesc** destination = (split && reuse_young_generation)
+    OopSlot* next_live = NULL;
+    OopSlot* current_dead = _end_fixed_objects;
+    OopSlot* next_dead = NULL;
+    OopSlot* destination = (split && reuse_young_generation)
                                 ? _young_generation_start : _end_fixed_objects;
-    OopDesc** first_destination = destination;
+    OopSlot* first_destination = destination;
     // Iterate over all live ranges
     while (true) {
       LiveRange lr(current_dead);
@@ -2539,8 +2558,8 @@ inline void ObjectHeap::compact_objects(bool reuse_young_generation) {
       if (next_live == _inline_allocation_top) {
         break;
       }
-      GUARANTEE(next_live >= (OopDesc**) _compaction_start
-                   && (OopDesc**)next_live < _collection_area_end,
+      GUARANTEE(next_live >= (OopSlot*) _compaction_start
+                   && (OopSlot*)next_live < _collection_area_end,
                 "range should be moving");
       GUARANTEE(current_dead < next_live && next_live < next_dead,
                 "sanity check");
@@ -2557,7 +2576,7 @@ inline void ObjectHeap::compact_objects(bool reuse_young_generation) {
                       next_live, destination, live_size));
       }
       current_dead = next_dead;
-      destination = DERIVED(OopDesc**, destination, live_size);
+      destination = DERIVED(OopSlot*, destination, live_size);
       if (current_dead == _inline_allocation_top) {
         break;
       }
@@ -2739,7 +2758,7 @@ void ObjectHeap::try_to_grow(int requested_free_memory,
     TTY_TRACE(("growing heap from %d KB to %d KB\n",
                _heap_size / 1024, new_heap_size / 1024));
   }
-  OopDesc** const old_heap_top = _heap_top;
+  OopSlot* const old_heap_top = _heap_top;
   if (adjust_heap_size(new_heap_size)) {
     const int delta = DISTANCE(old_heap_top, _heap_top);
     LargeObject::move( delta, old_heap_top );
@@ -2747,15 +2766,15 @@ void ObjectHeap::try_to_grow(int requested_free_memory,
 
     // Since there is extra space available now,
     // we can make sure here that the next GC is not a full one:
-    OopDesc** const allocation_top = _inline_allocation_top;
+    OopSlot* const allocation_top = _inline_allocation_top;
     _collection_area_start  = allocation_top;
     _old_generation_end     = allocation_top;
     _young_generation_start = allocation_top;
 
     // Expand the young generation to its normal size
     // (but not beyond the heap)
-    OopDesc** allocation_end =
-      DERIVED(OopDesc**, allocation_top, requested_free_memory);
+    OopSlot* allocation_end =
+      DERIVED(OopSlot*, allocation_top, requested_free_memory);
     if( allocation_end > _compiler_area_start ) {
       allocation_end = _compiler_area_start;
     }
@@ -2828,6 +2847,22 @@ size_t ObjectHeap::reduce_compiler_usage(size_t requested) {
 void ObjectHeap::collect(size_t min_free_after_collection JVM_TRAPS) {
   min_free_after_collection = align_allocation_size(min_free_after_collection);
 
+  if ((int)min_free_after_collection > 65536) {
+    /* Diagnostic added 2026-09-05: the earlier ALLOC_GIVEUP marker in
+     * ObjectHeap::allocate()'s own retry loop never fired despite
+     * OOM_THROWN firing every test - meaning collect() is being
+     * called from one of its OTHER callers (ObjectHeap.cpp lines 446,
+     * 522, 4083, 4528, or kvmcompat.cpp:397), not through the normal
+     * small-object allocation path. Logging any unusually large
+     * requested free-space target here, at the single choke point
+     * every caller goes through, instead of instrumenting each caller
+     * separately. */
+    char diag_buf[64];
+    int diag_len = jvm_sprintf(diag_buf,
+        "COLLECT_LARGE_REQUEST min_free=%d\n", (int)min_free_after_collection);
+    write_marker(diag_buf, diag_len);
+  }
+
   allocation_trap_must_be_disabled();
   accumulate_current_task_memory_usage();
 
@@ -2835,13 +2870,13 @@ void ObjectHeap::collect(size_t min_free_after_collection JVM_TRAPS) {
   if( Universe::before_main() ) {
 #if ENABLE_COMPILER
     // Shrink and relocate empty compiler area without real GC
-    OopDesc** p = _compiler_area_start;
+    OopSlot* p = _compiler_area_start;
     if( p == _compiler_area_top ) {
 #if ENABLE_ISOLATES
       min_free_after_collection +=
         align_allocation_size(_reserved_memory_deficit);
 #endif
-      p = DERIVED( OopDesc**, p, min_free_after_collection );
+      p = DERIVED( OopSlot*, p, min_free_after_collection );
       if( p < _large_object_area_bottom ) {
         _compiler_area_start = p;
         _compiler_area_top = p;
@@ -2877,6 +2912,7 @@ void ObjectHeap::collect(size_t min_free_after_collection JVM_TRAPS) {
     DETECT_QUOTA_VIOLATIONS
     if( !(violations & OverLimit) ) break;
     if( is_full_collect ) {
+      { char b[32]; int l=jvm_sprintf(b,"OOM_SITE_2898\n"); write_marker(b,l); }
       Throw::out_of_memory_error( JVM_SINGLE_ARG_THROW );
     }
   }
@@ -2950,6 +2986,7 @@ void ObjectHeap::collect(size_t min_free_after_collection JVM_TRAPS) {
       if (VerboseGC) {
         TTY_TRACE_CR(("nope"));
       }
+      { char b[32]; int l=jvm_sprintf(b,"OOM_SITE_2971\n"); write_marker(b,l); }
       Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW);
     } else {
       if (VerboseGC) {
@@ -2963,11 +3000,15 @@ void ObjectHeap::collect(size_t min_free_after_collection JVM_TRAPS) {
 #if ENABLE_ISOLATES
   DETECT_QUOTA_VIOLATIONS
   if( violations ) {
+    { char b[32]; int l=jvm_sprintf(b,"OOM_SITE_2984\n"); write_marker(b,l); }
     Throw::out_of_memory_error( JVM_SINGLE_ARG_THROW );
   }
 #endif
 
   if( free_memory() < min_free_after_collection ) {
+    { char b[64]; int l=jvm_sprintf(b,"OOM_SITE_2990 min_free=%d free=%d\n",
+        (int)min_free_after_collection, (int)free_memory());
+      write_marker(b,l); }
     set_collection_area_boundary(0, false);
     Throw::out_of_memory_error( JVM_SINGLE_ARG_THROW );
   }
@@ -2997,13 +3038,13 @@ inline void ObjectHeap::internal_collect_prologue(size_t min_free_after_collecti
   CACHE_QUICK_VAR(slice_offset_mask);
 
 #if ENABLE_SEGMENTED_ROM_TEXT_BLOCK
-  _quick_vars.rom_text_start = (OopDesc**)(address_word)ROM::min_text_seg_addr();
+  _quick_vars.rom_text_start = (OopSlot*)(address_word)ROM::min_text_seg_addr();
   _quick_vars.rom_text_size  = ROM::text_total_size();
 #else
-  _quick_vars.rom_text_start = (OopDesc**)&_rom_text_block[0];
+  _quick_vars.rom_text_start = (OopSlot*)&_rom_text_block[0];
   _quick_vars.rom_text_size  = _rom_text_block_size_fast;
 #endif
-  _quick_vars.rom_data_start = (OopDesc**)&_rom_data_block[0];
+  _quick_vars.rom_data_start = (OopSlot*)&_rom_data_block[0];
 
   if( TraceCompiledMethodCache ) {
     (void)min_free_after_collection;
@@ -3055,19 +3096,19 @@ inline void ObjectHeap::internal_collect_prologue(size_t min_free_after_collecti
 
 inline void ObjectHeap::setup_marking_stack(void) {
 #if ENABLE_COMPILER || USE_LARGE_OBJECT_AREA
-  OopDesc** marking_stack_start = _inline_allocation_top;
-  OopDesc** marking_stack_end   = _compiler_area_start;
+  OopSlot* marking_stack_start = _inline_allocation_top;
+  OopSlot* marking_stack_end   = _compiler_area_start;
   const int size = DISTANCE( marking_stack_start, marking_stack_end );
 
-  OopDesc** const heap_top      = (OopDesc**) LargeObject::end();
-  OopDesc** const heap_limit    = _heap_limit;
+  OopSlot* const heap_top      = (OopSlot*) LargeObject::end();
+  OopSlot* const heap_limit    = _heap_limit;
   if( DISTANCE( heap_top, heap_limit ) > size ) {
     marking_stack_start = heap_top;
     marking_stack_end = heap_limit;
   }
 #else
-  OopDesc** const marking_stack_start = _inline_allocation_top;
-  OopDesc** const marking_stack_end   = _heap_limit;
+  OopSlot* const marking_stack_start = _inline_allocation_top;
+  OopSlot* const marking_stack_end   = _heap_limit;
 #endif
 
   _marking_stack_start = marking_stack_start;
@@ -3220,7 +3261,7 @@ bool ObjectHeap::internal_collect(size_t min_free_after_collection JVM_TRAPS) {
   }
   compute_new_object_locations();
 
-  OopDesc** const old_generation_end = _old_generation_end;
+  OopSlot* const old_generation_end = _old_generation_end;
 
   bool reuse_young_generation = false;
   if (_heap_start != _collection_area_start) {
@@ -3238,13 +3279,13 @@ bool ObjectHeap::internal_collect(size_t min_free_after_collection JVM_TRAPS) {
     if ( old_generation_end != _young_generation_start) {
       if (reuse_young_generation) {
         // Change the target location of all the slices.
-        OopDesc*** this_slice = _slices_start;
-        OopDesc*** end_slice = _slices_start + _nof_slices;
+        OopSlot** this_slice = _slices_start;
+        OopSlot** end_slice = _slices_start + _nof_slices;
         int delta = (DISTANCE( old_generation_end, _young_generation_start));
         for ( ; this_slice < end_slice; this_slice++) {
-          *this_slice = DERIVED(OopDesc**, *this_slice, delta);
+          *this_slice = DERIVED(OopSlot*, *this_slice, delta);
         }
-        _compaction_top = DERIVED(OopDesc**, _compaction_top, delta);
+        _compaction_top = DERIVED(OopSlot*, _compaction_top, delta);
       }
     }
   }
@@ -3370,24 +3411,24 @@ bool ObjectHeap::internal_collect(size_t min_free_after_collection JVM_TRAPS) {
 inline
 OopDesc* ObjectHeap::decode_near(OopDesc* obj, const QuickVars& qv ) {
   GUARANTEE(contains(obj)
-               && (OopDesc**)obj >= _compaction_start
-               && (OopDesc**)obj <  _collection_area_end,
+               && (OopSlot*)obj >= _compaction_start
+               && (OopSlot*)obj <  _collection_area_end,
             "near should be encoded");
-  GUARANTEE(test_bit_for((OopDesc**)obj),
+  GUARANTEE(test_bit_for((OopSlot*)obj),
             "object must be marked before encoded");
   const OopDesc* klass = obj->klass();
   const size_t near_offset = (size_t) klass & qv.near_mask;
   OopDesc* n;
 #if ENABLE_HEAP_NEARS_IN_HEAP 
     GUARANTEE((int)(address_word) klass >= 0, "optimization check");
-    n = (OopDesc*)((OopDesc**) qv.heap_start + near_offset);
+    n = (OopDesc*)((OopSlot*) qv.heap_start + near_offset);
     GUARANTEE(contains(n), "must be in heap");
 #else
   if (((int)(address_word) klass) >= 0) {
     // bit 31 is not set -- this means we're in heap
 
     // Lower bits contains relative offset to heap start
-    n = (OopDesc*)((OopDesc**) qv.heap_start + near_offset);
+    n = (OopDesc*)((OopSlot*) qv.heap_start + near_offset);
     GUARANTEE(contains(n), "must be in heap");
   } else {
     // Lower bits contains relative offset to ROM
@@ -3398,27 +3439,27 @@ OopDesc* ObjectHeap::decode_near(OopDesc* obj, const QuickVars& qv ) {
   return n;
 }
 
-inline OopDesc* ObjectHeap::decode_near(OopDesc* obj, OopDesc **heap_start, 
+inline OopDesc* ObjectHeap::decode_near(OopDesc* obj, OopSlot*heap_start, 
                                         size_t near_mask) {
   GUARANTEE(contains(obj)
-               && (OopDesc**)obj >= _compaction_start
-               && (OopDesc**)obj <  _collection_area_end,
+               && (OopSlot*)obj >= _compaction_start
+               && (OopSlot*)obj <  _collection_area_end,
             "near should be encoded");
-  GUARANTEE(test_bit_for((OopDesc**)obj),
+  GUARANTEE(test_bit_for((OopSlot*)obj),
             "object must be marked before encoded");
   const OopDesc* klass = obj->klass();
   const size_t near_offset = (size_t) klass & near_mask;
   OopDesc* n;
 #if ENABLE_HEAP_NEARS_IN_HEAP 
     GUARANTEE((int)(address_word) klass >= 0, "optimization check");
-    n = (OopDesc*)((OopDesc**) heap_start + near_offset);
+    n = (OopDesc*)((OopSlot*) heap_start + near_offset);
     GUARANTEE(contains(n), "must be in heap");
 #else
   if (((int)(address_word) klass) >= 0) {
     // bit 31 is not set -- this means we're in heap
 
     // Lower bits contains relative offset to heap start
-    n = (OopDesc*)((OopDesc**)heap_start + near_offset);
+    n = (OopDesc*)((OopSlot*)heap_start + near_offset);
     GUARANTEE(contains(n), "must be in heap");
   } else {
     // Lower bits contains relative offset to ROM
@@ -3439,7 +3480,7 @@ inline FarClassDesc* ObjectHeap::decode_far_class_with_real_near(OopDesc* obj)
   GUARANTEE(contains(n) || ROM::system_contains(n), "must be valid near");
   // Near's near pointer 'f' is encoded if near 'n' >= compaction_start
   // but < current scanning location
-  OopDesc* f = ((OopDesc**)n >= _compaction_start && n < obj)
+  OopDesc* f = ((OopSlot*)n >= _compaction_start && n < obj)
              ? decode_near(n)
              : n->klass();
   GUARANTEE(contains(f) || ROM::system_contains(f), "must be in valid near");
@@ -3451,13 +3492,13 @@ ObjectHeap::decode_far_class_with_encoded_near(OopDesc* obj,
                                                const QuickVars& qv) {
   GUARANTEE(contains(obj), "must be in heap");
   // Near pointer is encoded if obj is gte compaction_start
-  OopDesc* n = ((OopDesc**)obj >= qv.compaction_start &&
-                (OopDesc**)obj <  qv.collection_area_end)
+  OopDesc* n = ((OopSlot*)obj >= qv.compaction_start &&
+                (OopSlot*)obj <  qv.collection_area_end)
                ? decode_near(obj, qv) : obj->klass();
   GUARANTEE(contains(n) || ROM::system_contains(n), "must be valid near");
   // Near's near pointer is encoded if near is gte compaction_start
-  n = ((OopDesc**)n >= qv.compaction_start &&
-       (OopDesc**)n <  qv.collection_area_end)
+  n = ((OopSlot*)n >= qv.compaction_start &&
+       (OopSlot*)n <  qv.collection_area_end)
     ? decode_near(n, qv) : n->klass();
   GUARANTEE(contains(n) || ROM::system_contains(n), "must be valid near");
   return (FarClassDesc*) n;
@@ -3465,15 +3506,15 @@ ObjectHeap::decode_far_class_with_encoded_near(OopDesc* obj,
 
 inline OopDesc* ObjectHeap::decode_destination(OopDesc* obj, 
                                                const QuickVars& qv) {
-  GUARANTEE((OopDesc**)obj >= _compaction_start &&
-            (OopDesc**)obj <  _collection_area_end,
+  GUARANTEE((OopSlot*)obj >= _compaction_start &&
+            (OopSlot*)obj <  _collection_area_end,
             "obj should be moving");
   // Figure out which slice obj is in
   size_t slice_index = 
-      ((OopDesc**) obj - qv.heap_start) >> qv.slice_offset_bits;
+      ((OopSlot*) obj - qv.heap_start) >> qv.slice_offset_bits;
   GUARANTEE(slice_index < _nof_slices, "invalid slice index");
   // Where does the base of this slice move to?
-  OopDesc** slice_start = qv.slices_start[slice_index];
+  OopSlot* slice_start = qv.slices_start[slice_index];
   // Where does obj move relative to base? Relative offset in high bits of
   // near pointer.
   const size_t slice_offset =
@@ -3485,9 +3526,9 @@ inline OopDesc* ObjectHeap::decode_destination(OopDesc* obj,
   return destination;
 }
 
-void ObjectHeap::clear_bit_range(OopDesc** start, OopDesc** end) {
-  OopDesc** aligned_start = align_up( start );
-  OopDesc** aligned_end   = align_down( end );
+void ObjectHeap::clear_bit_range(OopSlot* start, OopSlot* end) {
+  OopSlot* aligned_start = align_up( start );
+  OopSlot* aligned_end   = align_down( end );
   address bitvector_base  = _bitvector_base;
 
   if (aligned_start >= aligned_end) {
@@ -3513,8 +3554,8 @@ void ObjectHeap::clear_bit_range(OopDesc** start, OopDesc** end) {
   jvm_memset(s, 0, DISTANCE(s, e));
 }
 
-void ObjectHeap::write_barrier_oops_do(void do_oop(OopDesc**),
-                                       OopDesc** start, OopDesc** end) {
+void ObjectHeap::write_barrier_oops_do(void do_oop(OopSlot*),
+                                       OopSlot* start, OopSlot* end) {
   WRITE_BARRIER_OOPS_LOOP_BEGIN(start, end, p);
   {
     do_oop(p);
@@ -3529,8 +3570,8 @@ void ObjectHeap::expand_young_generation() {
 
 void ObjectHeap::expand_young_generation ( const int size ) {
   GUARANTEE( size >= 0 && (size & 3) == 0, "Sanity check" );
-  OopDesc** p = DERIVED( OopDesc**, _inline_allocation_end, size );
-  OopDesc** top = _compiler_area_start;
+  OopSlot* p = DERIVED( OopSlot*, _inline_allocation_end, size );
+  OopSlot* top = _compiler_area_start;
   if( p > top ) {
     p = top;
   }
@@ -3589,7 +3630,7 @@ size_t ObjectHeap::compiler_area_soft_collect(size_t min_free_after_collection){
     return free_bytes;
   }
 
-  OopDesc** allocation_end = disable_allocation_trap();
+  OopSlot* allocation_end = disable_allocation_trap();
   // (1) See if we have room to expand the compiler_area
   increase_compiler_usage(min_free_after_collection);
 
@@ -3777,11 +3818,11 @@ inline void ObjectHeap::compiler_area_update_pointers( void ) {
     TTY_TRACE_CR(("TraceGC: update references to the compiled methods"));
   }
 
-  OopDesc** const compiler_area_start = _compiler_area_start;
-  OopDesc** const compiler_area_top   = _compiler_area_top;
+  OopSlot* const compiler_area_start = _compiler_area_start;
+  OopSlot* const compiler_area_top   = _compiler_area_top;
 
   #define compiler_area_contains( p ) \
-    compiler_area_start <= ((OopDesc**)p) && ((OopDesc**)p) < compiler_area_top
+    compiler_area_start <= ((OopSlot*)p) && ((OopSlot*)p) < compiler_area_top
 
   // (1) Pointers in CompiledMethodCache are updated during compaction phase
   // (2) Update pointers in handles
@@ -3958,8 +3999,8 @@ void ObjectHeap::compact_and_move_compiler_area(const int compiler_area_shift) {
 
   _is_gc_active = true;
   {
-    OopDesc** const compiler_area_start =
-      DERIVED( OopDesc**, _compiler_area_start, compiler_area_shift );
+    OopSlot* const compiler_area_start =
+      DERIVED( OopSlot*, _compiler_area_start, compiler_area_shift );
     if( _compiler_area_start != _compiler_area_top ) {
       const int last_moving_up = compiler_area_compute_new_locations(
         (CompiledMethodDesc*) compiler_area_start );
@@ -3968,7 +4009,7 @@ void ObjectHeap::compact_and_move_compiler_area(const int compiler_area_shift) {
     }
     _compiler_area_start = compiler_area_start;
     _compiler_area_top =
-      DERIVED( OopDesc**, compiler_area_start, CompiledMethodCache::size );
+      DERIVED( OopSlot*, compiler_area_start, CompiledMethodCache::size );
 
     if( _inline_allocation_end > compiler_area_start ) {
       set_inline_allocation_end( compiler_area_start );
@@ -4022,8 +4063,8 @@ void ObjectHeap::compact_and_move_compiler_area(const int compiler_area_shift) {
   }
 #else
   // !ENABLE_COMPILER: make _compiler_area_start == _compiler_area_top 
-  OopDesc** const compiler_area_start =
-    DERIVED( OopDesc**, _compiler_area_start, compiler_area_shift );
+  OopSlot* const compiler_area_start =
+    DERIVED( OopSlot*, _compiler_area_start, compiler_area_shift );
   _compiler_area_start = compiler_area_start;
   _compiler_area_top = compiler_area_start;
 
@@ -4044,11 +4085,11 @@ void ObjectHeap::shrink_with_compiler_area( const int size ) {
   Compiler::abort_suspended_compilation();
 #endif
   accumulate_current_task_memory_usage();
-  OopDesc** const saved_allocation_end = ObjectHeap::disable_allocation_trap();
+  OopSlot* const saved_allocation_end = ObjectHeap::disable_allocation_trap();
 
   int deficit = align_up( size - LargeObject::available() );
   if( deficit > 0 ) {
-    OopDesc** allocation_end =
+    OopSlot* allocation_end =
       YoungGenerationAtEndOfHeap ? _old_generation_end : _inline_allocation_top;
     int gap = DISTANCE( allocation_end, _compiler_area_top );
 #if ENABLE_COMPILER
@@ -4083,16 +4124,16 @@ void ObjectHeap::shrink_with_compiler_area( const int size ) {
 
 #if !defined(PRODUCT) || USE_PRODUCT_BINARY_IMAGE_GENERATOR
 void
-ObjectHeap::iterate(ObjectHeapVisitor* visitor, OopDesc** p, OopDesc** to) {
+ObjectHeap::iterate(ObjectHeapVisitor* visitor, OopSlot* p, OopSlot* to) {
 #if !defined(PRODUCT) && !defined(UNDER_ADS)
-  OopDesc** previous = NULL;            // Useful for debugging
+  OopSlot* previous = NULL;            // Useful for debugging
 #endif
   while( p < to ) {
     visitor->do_obj((Oop*)&p);
 #if !defined(PRODUCT) && !defined(UNDER_ADS)
     previous = p;
 #endif
-    p = DERIVED( OopDesc**, p, ((Oop*)&p)->object_size() );
+    p = DERIVED( OopSlot*, p, ((Oop*)&p)->object_size() );
   }
 }
 
@@ -4109,7 +4150,7 @@ void ObjectHeap::iterate(ObjectHeapVisitor* visitor) {
     }
   }
 
-  OopDesc** p = (OopDesc**) Compiler::current_compiled_method()->obj();
+  OopSlot* p = (OopSlot*) Compiler::current_compiled_method()->obj();
   if( p ) {
     iterate( visitor, p, _compiler_area_top );
   }
@@ -4124,7 +4165,7 @@ void ObjectHeap::verify_layout() {
   GUARANTEE_R(_heap_start            <= _collection_area_start, "sanity");
   GUARANTEE_R(_collection_area_start <= _inline_allocation_top, "sanity");
   {
-    OopDesc** p = _inline_allocation_end;
+    OopSlot* p = _inline_allocation_end;
 #if ENABLE_ISOLATES
     if( !p ) p = _real_inline_allocation_end;
 #endif
@@ -4141,12 +4182,12 @@ void ObjectHeap::verify_layout() {
   GUARANTEE_R(_bitvector_start       <  (address)_slices_start, "sanity");
 
   GUARANTEE_R(DISTANCE(_heap_top, _heap_limit)
-              == (int)(MimimumMarkingStackSize * sizeof(OopDesc*)),
+              == (int)(MimimumMarkingStackSize * sizeof(OopSlot)),
               "Inconsistent minimum marking stack size");
 }
 
 
-bool ObjectHeap::contains_live(OopDesc** target) {
+bool ObjectHeap::contains_live(OopSlot* target) {
   if (_heap_start <= target && target < _inline_allocation_top) {
     return true;
   }
@@ -4161,13 +4202,13 @@ bool ObjectHeap::contains_live(OopDesc** target) {
   return false;
 }
 
-OopDesc* ObjectHeap::slow_object_start(OopDesc** target) {
+OopDesc* ObjectHeap::slow_object_start(OopSlot* target) {
   // We do not use ObjectHeap::iterate here in since that
   // will iterate over the entire heap.
   {
-    OopDesc** p = _heap_start;
+    OopSlot* p = _heap_start;
     while (p < _inline_allocation_top) {
-      OopDesc** next_p = (OopDesc**)((address)p + ((OopDesc*) p)->object_size());
+      OopSlot* next_p = (OopSlot*)((address)p + ((OopDesc*) p)->object_size());
       if (target >= p && target < next_p) {
         return (OopDesc*) p;
       }
@@ -4180,9 +4221,9 @@ OopDesc* ObjectHeap::slow_object_start(OopDesc** target) {
 
     while (p < end) {
       size_t object_size = p->object_size();
-      OopDesc** next_p = DERIVED(OopDesc**, p, object_size);
+      OopSlot* next_p = DERIVED(OopSlot*, p, object_size);
 
-      if (target >= (OopDesc**)p && target < next_p) {
+      if (target >= (OopSlot*)p && target < next_p) {
         return (OopDesc*) p;
       }
 
@@ -4192,16 +4233,16 @@ OopDesc* ObjectHeap::slow_object_start(OopDesc** target) {
   return NULL;
 }
 
-void ObjectHeap::verify_bitvector_alignment(OopDesc** p) {
+void ObjectHeap::verify_bitvector_alignment(OopSlot* p) {
   GUARANTEE_R((size_t) p % (BitsPerByte * BytesPerWord) == 0,
             "Bit for p should be on word boundary");
 }
 
 // Using static variables here is not too nice
-OopDesc** _verify_barrier_start = NULL;
+OopSlot* _verify_barrier_start = NULL;
 
-void verify_barrier_oop(OopDesc** p) {
-  OopDesc** obj = (OopDesc**) *p;
+void verify_barrier_oop(OopSlot* p) {
+  OopSlot* obj = (OopSlot*) *p;
   if (_verify_barrier_start <= obj && obj < ObjectHeap::compiler_area_end() ) {
     if (_heap_start <= p && p < _verify_barrier_start) {
 #ifdef PRODUCT // IMPL_NOTE: consider whether it should be fixed. 
@@ -4219,7 +4260,7 @@ class VerifyOopWriteBarrier : public ObjectHeapVisitor {
   }
 };
 
-void ObjectHeap::verify_bitvector_range(OopDesc** verify_start) {
+void ObjectHeap::verify_bitvector_range(OopSlot* verify_start) {
   _verify_barrier_start = verify_start;
   VerifyOopWriteBarrier closure;
   ObjectHeap::iterate(&closure);
@@ -4285,7 +4326,7 @@ void ObjectHeap::dump_histogram_data() {
 }
 #endif
 
-void ObjectHeap::verify_near_oop(OopDesc** p) {
+void ObjectHeap::verify_near_oop(OopSlot* p) {
   GUARANTEE_R(contains_live(p) || ROM::in_any_loaded_bundle((OopDesc*)p),
               "must be in object space");
 
@@ -4311,7 +4352,7 @@ void ObjectHeap::verify_near_oop(OopDesc** p) {
     // We could potentially verify that obj is inside a valid Java stack area
     GUARANTEE_R(!contains(obj), "should not point to dead heap area");
     JavaNearDesc* stack_near = (JavaNearDesc*) obj;
-    OopDesc* locked_obj_on_stack = *(OopDesc**)(stack_near + 1);
+    OopDesc* locked_obj_on_stack = *(OopSlot*)(stack_near + 1);
     GUARANTEE_R((OopDesc*)p == locked_obj_on_stack,
               "pointer to locked object should be just below stack near");
     StackLock* lock = (StackLock*) stack_near - 1;
@@ -4320,7 +4361,7 @@ void ObjectHeap::verify_near_oop(OopDesc** p) {
   }
   // Jump through farclass->near->farclassclass->near->metaclass pointers
   for (int i = 0; i < 5; i++) {
-    obj = *(OopDesc**)obj;
+    obj = *(OopSlot*)obj;
     GUARANTEE_R(contains_live(obj) || ROM::system_contains(obj),
               "invalid near obj or far class");
   }
@@ -4332,10 +4373,10 @@ void ObjectHeap::verify_near_oop(OopDesc** p) {
 #endif
 }
 
-void ObjectHeap::verify_other_oop(OopDesc** p) {
+void ObjectHeap::verify_other_oop(OopSlot* p) {
   OopDesc* obj = *p;
   if (obj != NULL) {
-    verify_near_oop((OopDesc**) obj);
+    verify_near_oop((OopSlot*) obj);
   }
 }
 
@@ -4347,9 +4388,9 @@ class VerifyObjects : public ObjectHeapVisitor {
   }
 };
 
-void ObjectHeap::verify_only_permanent_pointers(OopDesc** p) {
+void ObjectHeap::verify_only_permanent_pointers(OopSlot* p) {
   OopDesc* obj = *p;
-  GUARANTEE_R(!contains(obj) || permanent_contains((OopDesc**)obj),
+  GUARANTEE_R(!contains(obj) || permanent_contains((OopSlot*)obj),
               "unscanned DATA block must not contain moveable pointers");
 }
 
@@ -4366,10 +4407,10 @@ void ObjectHeap::verify() {
   while (this_stack) {
     if ((address)this_stack < (address)_collection_area_start) {
       int size = this_stack->object_size();
-      OopDesc** start =
-          (OopDesc**)this_stack->field_base(ExecutionStackDesc::header_size());
-      OopDesc** end  =  (OopDesc**)this_stack->field_base(size);
-      for (OopDesc** p = start; p < end; p++) {
+      OopSlot* start =
+          (OopSlot*)this_stack->field_base(ExecutionStackDesc::header_size());
+      OopSlot* end  =  (OopSlot*)this_stack->field_base(size);
+      for (OopSlot* p = start; p < end; p++) {
         GUARANTEE_R(!test_bit_for(p), "No bits set in Execution stack");
       }
     }
@@ -4487,7 +4528,7 @@ int ObjectHeap::count_objects() {
   return closure.result();
 }
 
-bool ObjectHeap::permanent_contains(OopDesc** obj) {
+bool ObjectHeap::permanent_contains(OopSlot* obj) {
   return _heap_start <= obj && obj < _permanent_generation_top;
 }
 #endif
@@ -4495,7 +4536,7 @@ bool ObjectHeap::permanent_contains(OopDesc** obj) {
 // This function implements JVM_GarbageCollect, which is an external
 // interface for MIDP to invoke GC.
 int ObjectHeap::jvm_garbage_collect(int flags, int requested_free_bytes) {
-  OopDesc** const allocation_end = disable_allocation_trap();
+  OopSlot* const allocation_end = disable_allocation_trap();
 
   SETUP_ERROR_CHECKER_ARG;
 
@@ -4538,7 +4579,7 @@ inline void* ObjectHeap::set_heap_limit( void* new_heap_limit ) {
 #ifdef AZZERT
     const size_t minimum_marking_stack_size = DISTANCE(_heap_top, _heap_limit);
     GUARANTEE(minimum_marking_stack_size
-                    == MimimumMarkingStackSize * sizeof(OopDesc *),
+                    == MimimumMarkingStackSize * sizeof(OopSlot),
               "Inconsistent minimum marking stack size");
     GUARANTEE(!YoungGenerationAtEndOfHeap, 
               "not supported with user-administered space");
@@ -4554,15 +4595,15 @@ inline void* ObjectHeap::set_heap_limit( void* new_heap_limit ) {
       }
 #if !ENABLE_COMPILER
       else {
-        OopDesc** const compiler_area_start =
-          DERIVED( OopDesc**, _compiler_area_start, -reduction );
+        OopSlot* const compiler_area_start =
+          DERIVED( OopSlot*, _compiler_area_start, -reduction );
         _compiler_area_start = compiler_area_start;
         _compiler_area_top = compiler_area_start;
       }
 #endif
 
-      OopDesc** const old_heap_top = _heap_top;
-      OopDesc** const heap_top = DERIVED( OopDesc**, old_heap_top, -reduction );
+      OopSlot* const old_heap_top = _heap_top;
+      OopSlot* const heap_top = DERIVED( OopSlot*, old_heap_top, -reduction );
       LargeObject::move( -reduction, old_heap_top );
       _heap_top = heap_top;
       _heap_limit = heap_top + MimimumMarkingStackSize;
@@ -4591,7 +4632,7 @@ void ObjectHeap::get_heap_info(void **heap_start, void **heap_limit,
    * *and* user-administered space.
    */
 
-  OopDesc** const allocation_end = disable_allocation_trap();
+  OopSlot* const allocation_end = disable_allocation_trap();
   accumulate_current_task_memory_usage();
   if (_heap_min != _heap_capacity) {
     const size_t requested_bytes = free_memory() + 
@@ -4644,7 +4685,7 @@ void ObjectHeap::print(Stream* st) {
   st->print_cr("Slices start      0x%x",        _slices_start);
   st->print_cr("Slice size        %d",          _slice_size);
   st->print_cr("Number of slices  %d (=%d bytes)", _nof_slices,
-                                               _nof_slices * sizeof(OopDesc*));
+                                               _nof_slices * sizeof(OopSlot*));
   if (Verbose) {
     for (size_t i = 0; i < _nof_slices; i++) {
       st->print_cr("- Slice[%4d] 0x%x", i, _slices_start[i]);
@@ -4719,7 +4760,7 @@ void ObjectHeap::print_all_classes() {
 
 // Find all pointers in the heap that points to the given object.
 void ObjectHeap::find(OopDesc *target, bool verbose_owner) {
-  for (OopDesc** ptr = _heap_start; ptr < _inline_allocation_top; ptr++) {
+  for (OopSlot* ptr = _heap_start; ptr < _inline_allocation_top; ptr++) {
     if (*ptr == target) {
       OopDesc *owner = ObjectHeap::slow_object_start(ptr);
       int offset = DISTANCE(owner, ptr);
@@ -4813,7 +4854,7 @@ void ObjectHeap::reach(OopDesc *target) {
     int loop_end = endstack;
     for (int i=current; i<=loop_end; i++) {
       OopDesc *n = stack[i].node;
-      for (OopDesc**ptr = _heap_start; ptr < _inline_allocation_top; ptr++) {
+      for (OopSlot*ptr = _heap_start; ptr < _inline_allocation_top; ptr++) {
         if (*ptr == n) {
           OopDesc *owner = ObjectHeap::slow_object_start(ptr);
           if (!reach_seen(owner, stack, endstack)) {

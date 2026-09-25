@@ -27,7 +27,9 @@
 # include "incls/_precompiled.incl"
 # include "incls/_Universe.cpp.incl"
 
-OopDesc* persistent_handles[Universe::__number_of_persistent_handles];
+extern "C" void write_marker(const char* text, int len);
+
+OopSlot persistent_handles[Universe::__number_of_persistent_handles];
 
 bool Universe::_is_compilation_allowed = true;
 int  Universe::_compilation_abstinence_ticks = 0;
@@ -379,7 +381,7 @@ inline void Universe::create_meta(JVM_SINGLE_ARG_TRAPS) {
 
   // Allocate empty singleton arrays.
   *empty_obj_array()   = allocate_array(object_array_class(), 0,
-                                        sizeof(OopDesc*) JVM_NO_CHECK);
+                                        sizeof(OopSlot) JVM_NO_CHECK);
   *empty_short_array() = allocate_array(short_array_class(), 0,
                                         sizeof(jshort) JVM_NO_CHECK);
 
@@ -489,7 +491,7 @@ inline void Universe::setup_mirrors(JVM_SINGLE_ARG_TRAPS) {
 void Universe::setup_thread(Thread *thread) {
   GUARANTEE(before_main(), "call this only to initialize the first thread");
   OopDesc * proto_near = Universe::mixed_oop_class()->prototypical_near();
-  (*(ThreadDesc**)thread)->reinitialize(proto_near,
+  (*(NARROW(ThreadDesc*)*)thread)->reinitialize(proto_near,
                                         MixedOopDesc::Type_Thread,
                                         ThreadDesc::allocation_size(),
                                         ThreadDesc::pointer_count());
@@ -645,7 +647,7 @@ bool Universe::bootstrap_with_rom(const JvmPathChar* classpath) {
   }
 
   // Allocate sleep queue in system area
-  *(OopDesc**)scheduler_waiting() =
+  *(OopSlot*)scheduler_waiting() =
     ObjectHeap::allocate(ThreadDesc::allocation_size() JVM_MUST_SUCCEED);
   GUARANTEE(*scheduler_waiting() != NULL, "can't fail here");
   Thread *waiting = scheduler_waiting();
@@ -756,7 +758,7 @@ bool Universe::bootstrap_with_rom(const JvmPathChar* classpath) {
       JavaClass::Raw klass = class_from_id(i);
       OopDesc *klassobj = klass;
       GUARANTEE_R(ROM::system_data_contains(klassobj) || 
-                  ObjectHeap::permanent_contains((OopDesc**)klassobj),
+                  ObjectHeap::permanent_contains((OopSlot*)klassobj),
                   "system JavaClasses must be non-moveable");
     }
   }
@@ -926,7 +928,7 @@ bool Universe::bootstrap_without_rom(const JvmPathChar* classpath) {
 #if ENABLE_CLDC_11
   WeakReference::verify_fields();
 #endif
-  *(OopDesc**)scheduler_waiting() = ObjectHeap::allocate(ThreadDesc::allocation_size()
+  *(OopSlot*)scheduler_waiting() = ObjectHeap::allocate(ThreadDesc::allocation_size()
                                          JVM_MUST_SUCCEED);  
   GUARANTEE(*scheduler_waiting() != NULL, "can't fail here");
   Thread *waiting = scheduler_waiting();
@@ -1358,12 +1360,14 @@ ReturnOop Universe::new_instance_class(int vtable_length,
       (((juint)static_field_size) & 0xffff0000) != 0 ||
       (((juint)oop_map_size)      & 0xffff0000) != 0) {
     // All these must be <= 16 bit to fit in jushort
+    { char b[32]; int l=jvm_sprintf(b,"OOM_SITE_UNIV1361\n"); write_marker(b,l); }
     Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW_0);
   }
 
   if ((((juint)instance_size)     & 0xffff8000) != 0) {
     // This must be <= 15 bits, to fit in the positive range of a jshort.
     // See FarClassDesc::_instance_size.
+    { char b[32]; int l=jvm_sprintf(b,"OOM_SITE_UNIV1367\n"); write_marker(b,l); }
     Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW_0);
   }
 
@@ -1443,6 +1447,7 @@ void Universe::check_class_list_size(JVM_SINGLE_ARG_TRAPS) {
   if (number_of_java_classes() >= 0x3fff) {
     // Our signature scheme allows no more than 16384 classes (represented
     // by 14 bits
+    { char b[32]; int l=jvm_sprintf(b,"OOM_SITE_UNIV1446\n"); write_marker(b,l); }
     Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW);
   }
   if (!is_bootstrapping()) {
@@ -1534,14 +1539,14 @@ ReturnOop Universe::new_obj_array(int length JVM_TRAPS) {
   if (length == 0) {
     return *Universe::empty_obj_array();
   }
-  return allocate_array(object_array_class(), length, sizeof(OopDesc*)
+  return allocate_array(object_array_class(), length, sizeof(OopSlot)
                         JVM_NO_CHECK_AT_BOTTOM);
 }
 
 ReturnOop Universe::new_obj_array(JavaClass* klass, int length JVM_TRAPS) {
   UsingFastOops fast_oops;
   FarClass::Fast f = klass->get_array_class(1 JVM_OZCHECK(f));
-  return allocate_array(&f, length, sizeof(OopDesc*) JVM_NO_CHECK_AT_BOTTOM_0);
+  return allocate_array(&f, length, sizeof(OopSlot) JVM_NO_CHECK_AT_BOTTOM_0);
 }
 
 ReturnOop Universe::interned_string_from_utf8(Oop *oop JVM_TRAPS) {
@@ -1934,6 +1939,9 @@ ReturnOop Universe::generic_allocate_array(Allocator* allocate,
       // Make sure the (length * scale) operation won't overflow 32-bit values.
       // In reality we're never going to allocate such big arrays
       // anyway because our heap is small.
+      { char b[64]; int l=jvm_sprintf(b,
+          "OOM_SITE_UNIV1942 length=%d scale=%d\n", length, scale);
+        write_marker(b,l); }
       Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW_0);
     }
   } else {
@@ -2116,7 +2124,7 @@ void Universe::fill_heap_gap(address ptr, size_t size_to_fill) {
   GUARANTEE(size_to_fill >= 0, "sanity");
   GUARANTEE(!(size_to_fill & 0x3), "alignment");
   OopDesc* filler = (OopDesc*)ptr;
-  if (size_to_fill == sizeof(OopDesc*)) {
+  if (size_to_fill == sizeof(OopSlot)) {
     // Shrink by one word only, allocate dummy java.lang.Object
     filler->reinitialize(object_class()->prototypical_near());
   } else {
@@ -2153,7 +2161,7 @@ ReturnOop Universe::shrink_object(Oop* m, size_t new_size, bool down) {
   return result;
 }
 
-void Universe::oops_do( void do_oop(OopDesc**), const bool young_only) {
+void Universe::oops_do( void do_oop(OopSlot*), const bool young_only) {
   (void)young_only;
   {
     for( int index = 0; index < __number_of_persistent_handles; index++) {
@@ -2351,7 +2359,7 @@ bool Universe::is_persistent_handle(Oop* obj) {
 
 void Universe::allocate_gc_dummies(JVM_SINGLE_ARG_TRAPS) {
   for (int i = 0; i < GCDummies; i++) {
-    ObjArray temp = allocate_array(object_array_class(), 1, sizeof(OopDesc*)
+    ObjArray temp = allocate_array(object_array_class(), 1, sizeof(OopSlot)
                                    JVM_CHECK);
     temp.obj_at_put(0, gc_dummies());
     *gc_dummies() = temp;
@@ -2369,7 +2377,7 @@ void Universe::release_gc_dummy() {
 void Universe::print_values_on(Stream* st) {
   st->print_cr("Universe");
   for (int index = 0; index < __number_of_persistent_handles; index++) {
-    Oop value = persistent_handles[index];
+    Oop value = (OopDesc*)persistent_handles[index];
     st->print("  [%d] ", index);
     value.print_value_on(st);
     st->print_cr("");

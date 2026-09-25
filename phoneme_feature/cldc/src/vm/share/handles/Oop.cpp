@@ -841,12 +841,16 @@ bool LinkedBasicOop::is_persistent() const {
 
 void LinkedBasicOop::verify_basic_properties() {
 #if !ENABLE_OOP_TAG
-  GUARANTEE(sizeof(OopDesc) == sizeof(OopDesc*),
+  GUARANTEE(sizeof(OopDesc) == sizeof(OopSlot),
     "OopDesc should only contain near class pointer (no C++ virtuals)");
 #endif
-  GUARANTEE(sizeof(LinkedBasicOop) == sizeof(OopDesc*) + sizeof(Oop*),
+  // On 64-bit hosts the 8-byte _previous link is aligned after the 4-byte
+  // object slot.
+  const size_t previous_offset =
+    align_size_up(sizeof(OopSlot), sizeof(Oop*));
+  GUARANTEE(sizeof(LinkedBasicOop) == previous_offset + sizeof(Oop*),
     "Oop should only contain object pointer and previous link (no C++ virtuals)");
-  GUARANTEE(FIELD_OFFSET(LinkedBasicOop, _previous) == sizeof(OopDesc*),
+  GUARANTEE(FIELD_OFFSET(LinkedBasicOop, _previous) == previous_offset,
     "Object pointer field must be first in handle (meaning previous must be last)");
 }
 
@@ -1068,48 +1072,48 @@ int BasicOop::generate_fieldmap(TypeArray* field_map) {
   FarClass fc =  blueprint();
   switch(fc.instance_size_as_jint()) {
   case InstanceSize::size_obj_array:
-    { ObjArray it = _obj; return it.generate_fieldmap(field_map);}
+    { ObjArray it = (OopDesc*)_obj; return it.generate_fieldmap(field_map);}
   case InstanceSize::size_type_array_1:
   case InstanceSize::size_type_array_2:
   case InstanceSize::size_type_array_4:
   case InstanceSize::size_type_array_8:
-    { TypeArray it = _obj; return it.generate_fieldmap(field_map);}
+    { TypeArray it = (OopDesc*)_obj; return it.generate_fieldmap(field_map);}
 
   case InstanceSize::size_method:
-    { Method it = _obj; return it.generate_fieldmap(field_map); }
+    { Method it = (OopDesc*)_obj; return it.generate_fieldmap(field_map); }
 
     case InstanceSize::size_constant_pool:
-    { ConstantPool it = _obj; return it.generate_fieldmap(field_map); }
+    { ConstantPool it = (OopDesc*)_obj; return it.generate_fieldmap(field_map); }
 
   case InstanceSize::size_symbol:
-    { Symbol it = _obj; return it.generate_fieldmap(field_map); }
+    { Symbol it = (OopDesc*)_obj; return it.generate_fieldmap(field_map); }
 
   case InstanceSize::size_class_info:
-    { ClassInfo it = _obj; return it.generate_fieldmap(field_map); }
+    { ClassInfo it = (OopDesc*)_obj; return it.generate_fieldmap(field_map); }
 
   case InstanceSize::size_stackmap_list:
-    {StackmapList it = _obj; return it.generate_fieldmap(field_map);}
+    {StackmapList it = (OopDesc*)_obj; return it.generate_fieldmap(field_map);}
 
   case InstanceSize::size_type_array_class:
   case InstanceSize::size_obj_array_class:
   case InstanceSize::size_instance_class:
-    { JavaClass it = _obj; return it.generate_fieldmap(field_map); }
+    { JavaClass it = (OopDesc*)_obj; return it.generate_fieldmap(field_map); }
 
   case InstanceSize::size_generic_near:
-    { Near it = _obj; return it.generate_fieldmap(field_map); }
+    { Near it = (OopDesc*)_obj; return it.generate_fieldmap(field_map); }
 
   case InstanceSize::size_java_near:
-    { JavaNear it = _obj; return it.generate_fieldmap(field_map); }
+    { JavaNear it = (OopDesc*)_obj; return it.generate_fieldmap(field_map); }
 
   case InstanceSize::size_obj_near:
-    { ObjNear it = _obj; return it.generate_fieldmap(field_map); }
+    { ObjNear it = (OopDesc*)_obj; return it.generate_fieldmap(field_map); }
 
   case InstanceSize::size_far_class:
-    { FarClass it = _obj; return it.generate_fieldmap(field_map); }
+    { FarClass it = (OopDesc*)_obj; return it.generate_fieldmap(field_map); }
 
 #if ENABLE_COMPILER
   case InstanceSize::size_compiled_method:
-    { CompiledMethod it = _obj; return it.generate_fieldmap(field_map); }
+    { CompiledMethod it = (OopDesc*)_obj; return it.generate_fieldmap(field_map); }
 #endif
 
 #if ENABLE_ISOLATES

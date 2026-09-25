@@ -30,7 +30,7 @@ class ObjArray: public Array {
  private:
   int offset_from_index(int index) const { 
     GUARANTEE(is_within_bounds(index), "Array index out of bounds");
-    return base_offset() + (index * sizeof(jobject));
+    return base_offset() + (index * sizeof(OopSlot));
   }
 
  public:

@@ -38,11 +38,11 @@ Jvm_read_jar_entry(const JvmPathChar* jar_file_name, const char* entry_name,
    if (parser.not_null()) {
      bool found = parser().find_entry(entry_name JVM_MUST_SUCCEED);
      if (found) {
-       *(ReturnOop*)entry = parser().load_entry(JVM_SINGLE_ARG_NO_CHECK);
+       *(OopSlot*)entry = parser().load_entry(JVM_SINGLE_ARG_NO_CHECK);
      }
    }
    if (CURRENT_HAS_PENDING_EXCEPTION) {
-     *(ReturnOop*)entry = NULL;
+     *(OopSlot*)entry = NULL;
      Thread::clear_current_pending_exception();
    }
 

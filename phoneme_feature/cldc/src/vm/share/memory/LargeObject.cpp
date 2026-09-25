@@ -57,14 +57,14 @@ inline int LargeObject::delta( const OopDesc* p ) {
 #endif
 }
 
-void LargeObject::update_pointer( OopDesc** p ) {
+void LargeObject::update_pointer( OopSlot* p ) {
   const OopDesc* const obj = *p;
   if( is_moving( obj ) ) {
     *p = DERIVED( OopDesc*, obj, delta( obj ) );
   }
 }
 
-void LargeObject::update_pointer_in_instance_class( OopDesc** p ) {
+void LargeObject::update_pointer_in_instance_class( OopSlot* p ) {
   const OopDesc* const obj = *p;
   if( is_moving( obj ) && !obj->is_class_info() ) {
     *p = DERIVED( OopDesc*, obj, delta( obj ) );
@@ -93,7 +93,7 @@ inline void LargeObject::update_classinfo_pointers( void ) {
       for( int len = class_list().length(); --len >= 0; ) {
         OopDesc* jc = class_list().obj_at(len);
         if( jc ) {
-          OopDesc** p = jc->obj_field_addr(InstanceClass::class_info_offset());
+          OopSlot* p = jc->obj_field_addr(InstanceClass::class_info_offset());
           update_pointer( p );
           GUARANTEE((*p)->is_class_info(), "not class info");
         }
@@ -105,7 +105,7 @@ inline void LargeObject::update_classinfo_pointers( void ) {
 }
 
 #if 0
-void VerifyReferencesToLargeObjectArea::check ( OopDesc** p ) {
+void VerifyReferencesToLargeObjectArea::check ( OopSlot* p ) {
   LargeObject* const obj = (LargeObject*) *p;
 #if 0
   GUARANTEE( !LargeObject::contains(obj),
@@ -139,11 +139,11 @@ inline void LargeObject::move( LargeObject dst[],
 
   { // Relocate interior pointers
     // There cannot be any pointers from fixed to moving large objects
-    OopDesc** p = (OopDesc**)beg->body();
+    OopSlot* p = (OopSlot*)beg->body();
     for( juint* bitp = bit_beg; bitp < bit_end; p += BitsPerWord, bitp++ ) {
       juint bitword = *bitp;
       if( bitword ) {
-        OopDesc** pp = p;
+        OopSlot* pp = p;
         do {
 #define SHIFT_ZEROS(n) if((bitword & ((1 << n)-1)) == 0) { bitword >>= n; pp += n; }
           SHIFT_ZEROS(16)
@@ -214,7 +214,7 @@ void LargeObject::compact( LargeObject* table_beg[], LargeObject* table_end[] ){
   ObjectHeap::roots_do( update_pointer );
 
 #if USE_LARGE_OBJECT_DUMMY
-  update_pointer( (OopDesc**) &LargeObjectDummy::object );
+  update_pointer( (OopSlot*) &LargeObjectDummy::object );
 #endif
 
 // This should not be necessary anymore because all pointers to LargeObjects
@@ -279,8 +279,8 @@ void LargeObject::compact( void ) {
   LargeObject** table_beg = (LargeObject**) _inline_allocation_top;
   LargeObject** table_end = (LargeObject**) _compiler_area_start;
   {
-    OopDesc** const heap_top   = _heap_top;
-    OopDesc** const heap_limit = _heap_limit;
+    OopSlot* const heap_top   = _heap_top;
+    OopSlot* const heap_limit = _heap_limit;
     if( DISTANCE( heap_top, heap_limit ) > DISTANCE( table_beg, table_end ) ) {
       table_beg = (LargeObject**) heap_top;
       table_end = (LargeObject**) heap_limit;
@@ -395,7 +395,7 @@ void LargeObject::move ( const int delta, const LargeObject limit[] ) {
   ObjectHeap::roots_do( update_pointer );
 
 #if USE_LARGE_OBJECT_DUMMY
-  update_pointer( (OopDesc**) &LargeObjectDummy::object );
+  update_pointer( (OopSlot*) &LargeObjectDummy::object );
 #endif
 
 // This should not be necessary anymore because all pointers to LargeObjects
@@ -411,11 +411,11 @@ void LargeObject::move ( const int delta, const LargeObject limit[] ) {
 
   { // Relocate interior pointers
     // There cannot be any pointers from fixed to moving large objects
-    OopDesc** p = (OopDesc**)src->body();
+    OopSlot* p = (OopSlot*)src->body();
     for( juint* bitp = bit_beg; bitp < bit_end; p += BitsPerWord, bitp++ ) {
       juint bitword = *bitp;
       if( bitword ) {
-        OopDesc** pp = p;
+        OopSlot* pp = p;
         do {
 #define SHIFT_ZEROS(n) if((bitword & ((1 << n)-1)) == 0) { bitword >>= n; pp += n; }
           SHIFT_ZEROS(16)

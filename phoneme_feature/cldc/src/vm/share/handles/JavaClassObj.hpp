@@ -36,15 +36,15 @@ class JavaClassObj : public Instance {
     return header_size() + 0;
   } 
   static int status_offset() {
-    return header_size() + sizeof(jobject);
+    return header_size() + sizeof(OopSlot);
   }
   static int thread_offset() {
-    return header_size() + 2* sizeof(jobject);
+    return header_size() + 2* sizeof(OopSlot);
   }
 
 #if ENABLE_REFLECTION
   static int type_symbol_offset() {
-    return header_size() + 3* sizeof(jobject);
+    return header_size() + 3* sizeof(OopSlot);
   }
 
   jchar type_symbol() const {

@@ -18,7 +18,7 @@
 #include <string.h>
 #include <float.h>
 #include <math.h>
-#include <psp2/io/fcntl.h>
+#include <renderlog.h>
 #include <stdio.h>
 
 /*
@@ -39,11 +39,7 @@ static int m3g_diag_everWrotePixel = 0;
 static void m3g_diag_log(const char *msg) {
     char buf[160];
     int len = sprintf(buf, "%s\n", msg);
-    int fd = sceIoOpen("ux0:data/renderlog.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
-    if (fd >= 0) {
-        sceIoWrite(fd, buf, len);
-        sceIoClose(fd);
-    }
+    RENDERLOG_WRITE(buf, len);
 }
 
 #define JavaFloatArray(__handle) \

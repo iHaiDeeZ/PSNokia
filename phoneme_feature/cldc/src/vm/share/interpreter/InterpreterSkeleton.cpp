@@ -220,13 +220,13 @@ address   _compiler_stack_limit;
 int       _rt_timer_ticks;
 address   _primordial_sp;
 
-OopDesc** _persistent_handles_addr;
+OopSlot* _persistent_handles_addr;
 OopDesc*  _interpretation_log[1];
 int       _interpretation_log_idx;
 
 unsigned char _method_execution_sensor[1];
 
-OopDesc** _old_generation_end;
+OopSlot* _old_generation_end;
 OopDesc*  _interned_string_near_addr;
 OopDesc*  _task_class_init_marker;
 OopDesc*  _current_task;

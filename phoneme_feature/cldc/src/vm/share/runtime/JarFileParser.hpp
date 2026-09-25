@@ -34,7 +34,7 @@ public:
     return header_size() + 0;
   } 
   static int valid_offset() {
-    return header_size() + sizeof(jobject);
+    return header_size() + sizeof(OopSlot);
   }
 
 public:
@@ -60,16 +60,16 @@ class JarFileParserDesc : public MixedOopDesc {
   * is an instance of com.sun.cldchi.jvm.FileDescriptor class, so that we
   * can use a finalizer to close the handle during GC.
   */
-  OopDesc *          _file_descriptor;
+  NARROW(OopDesc*) _file_descriptor;
 
  /*
   * The Jar file being handled by this JarFileParser object. This
   * information is used in JarFileParser::get() to cache the last Jar
   * processed file. It's a byte array.
   */
-  TypeArrayDesc *    _pathname;
+  NARROW(TypeArrayDesc*) _pathname;
 
-  BufferedFileDesc*  _buffered_file;
+  NARROW(BufferedFileDesc*) _buffered_file;
 
 #if ENABLE_JAR_ENTRY_CACHE
   /**
@@ -82,7 +82,7 @@ class JarFileParserDesc : public MixedOopDesc {
    * This ObjArray is grown automatically, up to the size specified in
    * the global MaxJarCacheEntryCount.
    */
-  OopDesc *         _entry_cache;
+  NARROW(OopDesc*) _entry_cache;
 
 
   //
@@ -353,7 +353,9 @@ private:
     //
     // See the global MaxCachedJarParsers. The number of actual parsers
     // cached are min(MaxCachedJarParsers, MAX_CACHED_PARSERS)
-    MAX_CACHED_PARSERS = 4
+    // Bumped 4 -> 16 (2026-09-05) alongside MaxCachedJarParsers - see
+    // that flag's comment in Globals.hpp for why.
+    MAX_CACHED_PARSERS = 16
   };
 
   static int _cached_parsers [MAX_CACHED_PARSERS];

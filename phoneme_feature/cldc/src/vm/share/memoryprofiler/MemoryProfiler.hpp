@@ -34,7 +34,7 @@ class MemoryProfiler {
     void dummy_method();
 
   private:
-    static OopDesc** _current_object;
+    static OopSlot* _current_object;
     static PacketOutputStream* _current_out;
 
     //these varaibles are used for thread enumeration 
@@ -52,13 +52,13 @@ class MemoryProfiler {
     static void get_stack_trace(PacketInputStream *in, PacketOutputStream *out);
     static void print_stack_trace(PacketOutputStream *out, OopDesc* backtrace);
     static ReturnOop create_stack_trace(Frame frame);
-    static void strace_ptr_address_searcher(OopDesc**);
+    static void strace_ptr_address_searcher(OopSlot*);
     //heap dump functions 
     static int get_mp_class_id(JavaClass* clazz);
     static void dump_object(Oop*);
-    static void link_counter(OopDesc**);
-    static void link_dumper(OopDesc**);
-    static void stack_link_dumper(OopDesc**);
+    static void link_counter(OopSlot*);
+    static void link_dumper(OopSlot*);
+    static void stack_link_dumper(OopSlot*);
     static int link_count;
 
 };

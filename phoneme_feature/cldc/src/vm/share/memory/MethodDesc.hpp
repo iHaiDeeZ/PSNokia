@@ -53,7 +53,7 @@ public:
 #endif
 
 private:
-  address       _execution_entry;
+  NARROW(address)       _execution_entry;
 
 friend class MethodDesc;
 friend class Method;
@@ -136,7 +136,7 @@ class MethodDesc: public OopDesc {
     } else {
       cp = (address)_constants;
     }
-    OopDesc **cpbase = (OopDesc**)(cp + ConstantPoolDesc::header_size());
+    OopSlot*cpbase = (OopSlot*)(cp + ConstantPoolDesc::header_size());
 
     OopDesc *my_name = cpbase[_name_index];
     if (my_name != name) {
@@ -180,18 +180,18 @@ class MethodDesc: public OopDesc {
    * order yields the max ROMImage footprint saving. Do not the order
    * change without consider footprint impact!
    */
-  ConstantPoolDesc* _constants;    // Constant pool
-  OopDesc * _exception_table;      // Exception table (a short TypeArrayDesc*)
+  NARROW(ConstantPoolDesc*) _constants;    // Constant pool
+  NARROW(OopDesc*) _exception_table;      // Exception table (a short TypeArrayDesc*)
                                    // or GC stackmaps (a StackmapListDesc*)
-  OopDesc * _stackmaps;            // Verifier stackmaps (an ObjArrayDesc*)
+  NARROW(OopDesc*) _stackmaps;            // Verifier stackmaps (an ObjArrayDesc*)
                                    // or GC stackmaps (a StackmapListDesc*)
   MethodVariablePart  _heap_execution_entry;
 #if ENABLE_ROM_JAVA_DEBUGGER
- OopDesc * _line_var_table;
+ NARROW(OopDesc*) _line_var_table;
 #endif
-  MethodVariablePart *_variable_part;  
+  NARROW(MethodVariablePart*) _variable_part;  
 #if ENABLE_REFLECTION
-  TypeArrayDesc* _thrown_exceptions;
+  NARROW(TypeArrayDesc*) _thrown_exceptions;
 #endif
 
   jushort     _access_flags;       // Access flags
@@ -211,7 +211,7 @@ class MethodDesc: public OopDesc {
                                  // method
   };
   struct _y {
-    address _quick_native_code;
+    NARROW(address) _quick_native_code;
   };
 
 #if defined(UNDER_ADS) && (__ARMCC_VERSION < 200000)

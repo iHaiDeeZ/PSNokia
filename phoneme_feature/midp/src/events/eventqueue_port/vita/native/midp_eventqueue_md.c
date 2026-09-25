@@ -28,7 +28,11 @@
 
 #include <midp_logging.h>
 
+#ifdef PS4
+#include <pthread.h>
+#else
 #include <psp2/kernel/threadmgr.h>
+#endif
 
 /**
  * @file
@@ -45,6 +49,31 @@
  * these were previously safe no-ops in practice. Given a real, cheap
  * implementation is available, use one anyway rather than relying on
  * that architectural assumption never changing. */
+#ifdef PS4
+static pthread_mutex_t event_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/** Create the event queue lock. */
+void
+midp_createEventQueueLock(void) {
+}
+
+/** Destroy the event queue lock. */
+void
+midp_destroyEventQueueLock(void) {
+}
+
+/** Wait to get the event queue lock and then lock it. */
+void
+midp_waitAndLockEventQueue(void) {
+    pthread_mutex_lock(&event_queue_mutex);
+}
+
+/** Unlock the event queue. */
+void
+midp_unlockEventQueue(void) {
+    pthread_mutex_unlock(&event_queue_mutex);
+}
+#else
 static SceUID event_queue_mutex = -1;
 
 /** Create the event queue lock. */
@@ -80,3 +109,4 @@ midp_unlockEventQueue(void) {
         sceKernelUnlockMutex(event_queue_mutex, 1);
     }
 }
+#endif

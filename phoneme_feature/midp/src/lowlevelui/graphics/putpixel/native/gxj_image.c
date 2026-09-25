@@ -117,6 +117,34 @@ draw_image(gxj_screen_buffer *imageSBuf,
     } else {
       clipped_blit(destSBuf, x_dest, y_dest, imageSBuf, clip);
     }
+    /* Neither blit above touches destSBuf->alphaData at all - fine when
+     * the destination has no alpha channel of its own (the overwhelming
+     * common case), but when it DOES (e.g. an Image.createTransparentImage-
+     * backed canvas), a fully-opaque source draw (imageSBuf->alphaData ==
+     * NULL means every source pixel is fully opaque) must mark the
+     * blitted region opaque in the destination's alpha channel too, or a
+     * later readback / composite of THAT image still sees those pixels as
+     * whatever they were before (e.g. still fully transparent on a freshly
+     * created canvas) even though their color was written correctly -
+     * confirmed via a dedicated test MIDlet this exact gap silently drops
+     * real drawn content from ever being visible again once composited
+     * further. */
+    if (destSBuf->alphaData != NULL) {
+      int ax1 = (x_dest > clipX1) ? x_dest : clipX1;
+      int ay1 = (y_dest > clipY1) ? y_dest : clipY1;
+      int ax2 = (x_dest + imageSBuf->width < clipX2) ? (x_dest + imageSBuf->width) : clipX2;
+      int ay2 = (y_dest + imageSBuf->height < clipY2) ? (y_dest + imageSBuf->height) : clipY2;
+      int ay;
+      if (ax1 < 0) ax1 = 0;
+      if (ay1 < 0) ay1 = 0;
+      if (ax2 > destSBuf->width) ax2 = destSBuf->width;
+      if (ay2 > destSBuf->height) ay2 = destSBuf->height;
+      for (ay = ay1; ay < ay2; ay++) {
+        if (ax2 > ax1) {
+          memset(&destSBuf->alphaData[ay * destSBuf->width + ax1], 0xFF, ax2 - ax1);
+        }
+      }
+    }
   } else {
     copy_imageregion(imageSBuf, destSBuf,
 		     clip, x_dest, y_dest,
@@ -822,6 +850,19 @@ copy_imageregion(gxj_screen_buffer* src, gxj_screen_buffer* dest, const jshort *
 
         if (src->alphaData != NULL) {
             unsigned char *pSrcAlpha = src->alphaData + (y_src * src->width) + x_src;
+            /* NULL when the destination has no alpha channel of its own
+             * (the common case - drawing onto the main screen or a plain
+             * Image.createImage(w,h) canvas) - in which case dest alpha
+             * is simply never touched, same as before this fix. When the
+             * destination DOES have one (e.g. Image.createTransparentImage),
+             * it must be updated alongside dest->pixelData below, or a
+             * later readback/composite of this image sees stale (often
+             * still fully transparent) alpha despite genuinely-drawn
+             * color - confirmed via a dedicated test MIDlet this exact
+             * gap silently discarded real drawn content. */
+            unsigned char *pDestAlpha = (dest->alphaData != NULL)
+                ? dest->alphaData + (y_dest * dest->width) + x_dest : NULL;
+            int destAlphaWidthDiff = dest->width - width;
 
             /* copy the source to the destination */
             for (rowsCopied = 0; rowsCopied < height; rowsCopied++) {
@@ -829,6 +870,9 @@ copy_imageregion(gxj_screen_buffer* src, gxj_screen_buffer* dest, const jshort *
                     if ((*pSrcAlpha) == 0xFF) {
                         CHECK_PTR_CLIP(dest, pDest);
                         *pDest = *pSrc;
+                        if (pDestAlpha != NULL) {
+                            *pDestAlpha = 0xFF;
+                        }
                     }
                     else if (*pSrcAlpha > 0x3) {
                         r1 = (*pSrc >> 11);
@@ -847,19 +891,46 @@ copy_imageregion(gxj_screen_buffer* src, gxj_screen_buffer* dest, const jshort *
                         b1 = (b1 * a3 + b2 * (31 - a3)) >> 5;
 
                         *pDest = (gxj_pixel_type)((r1 << 11) | (g1 << 5) | (b1));
+
+                        if (pDestAlpha != NULL) {
+                            /* standard "over" alpha compositing so opacity
+                             * accumulates correctly across repeated
+                             * partial-alpha draws onto the same pixel. */
+                            int srcA = *pSrcAlpha;
+                            int newA = srcA + ((*pDestAlpha) * (255 - srcA)) / 255;
+                            *pDestAlpha = (unsigned char)(newA > 255 ? 255 : newA);
+                        }
+                    }
+                    if (pDestAlpha != NULL) {
+                        pDestAlpha++;
                     }
                 }
 
                 pDest += destWidthDiff;
                 pSrc += srcWidthDiff;
                 pSrcAlpha += srcWidthDiff;
+                if (pDestAlpha != NULL) {
+                    pDestAlpha += destAlphaWidthDiff;
+                }
             }
         } else {
+            /* No source alpha at all - every pixel is fully opaque. If the
+             * destination has its own alpha channel, mark this whole
+             * region opaque there too (same reasoning as the alphaData!=
+             * NULL branch above and draw_image()'s fast blit path). */
+            unsigned char *pDestAlpha = (dest->alphaData != NULL)
+                ? dest->alphaData + (y_dest * dest->width) + x_dest : NULL;
+            int destAlphaWidthDiff = dest->width - width;
+
             /* copy the source to the destination */
             for (rowsCopied = 0; rowsCopied < height; rowsCopied++) {
                 for (limit = pDest + width; pDest < limit; pDest++, pSrc++) {
                     CHECK_PTR_CLIP(dest, pDest);
                     *pDest = *pSrc;
+                }
+                if (pDestAlpha != NULL) {
+                    memset(pDestAlpha, 0xFF, width);
+                    pDestAlpha += width + destAlphaWidthDiff;
                 }
 
                 pDest += destWidthDiff;

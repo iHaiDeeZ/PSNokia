@@ -44,7 +44,7 @@ void *MemoryProfiler::memory_profiler_cmds[] = {
   (void *)MemoryProfiler::get_stack_trace
 };
 
-OopDesc**           MemoryProfiler::_current_object = NULL;
+OopSlot*           MemoryProfiler::_current_object = NULL;
 PacketOutputStream* MemoryProfiler::_current_out = NULL;
 OopDesc*            MemoryProfiler::_current_stack = NULL;
 int                 MemoryProfiler::_stack_count = 0;
@@ -148,7 +148,7 @@ void MemoryProfiler::get_roots(PacketInputStream *in, PacketOutputStream *out) {
   out->send_packet();
 }
 
-static void do_nothing(OopDesc** /*p*/) {}
+static void do_nothing(OopSlot* /*p*/) {}
 int MemoryProfiler::link_count;
 void MemoryProfiler::retrieve_all_data(PacketInputStream *in,
                                        PacketOutputStream *out) {  
@@ -210,7 +210,7 @@ void MemoryProfiler::retrieve_all_data(PacketInputStream *in,
     }    
     currently_written_words += 4 + link_factor*link_count;
     dump_object(&obj);
-    _current_object = DERIVED( OopDesc**, _current_object, obj.object_size() );
+    _current_object = DERIVED( OopSlot*, _current_object, obj.object_size() );
   }
   if (_current_object >= _inline_allocation_top) {
     _current_object = NULL;// we finished memory dumping
@@ -286,18 +286,18 @@ void MemoryProfiler::dump_object(Oop* p) {
   }
 }
 
-void MemoryProfiler::link_counter(OopDesc** p) {
+void MemoryProfiler::link_counter(OopSlot* p) {
   if (ObjectHeap::contains(p))
     link_count++;
 }
 
-void MemoryProfiler::link_dumper(OopDesc** p) {
+void MemoryProfiler::link_dumper(OopSlot* p) {
   if (ObjectHeap::contains(p)) {
     MemoryProfiler::_current_out->write_int((int)*p);
   }
 }
 
-void MemoryProfiler::stack_link_dumper(OopDesc** p) {
+void MemoryProfiler::stack_link_dumper(OopSlot* p) {
   if (ObjectHeap::contains(p)) {
     MemoryProfiler::_current_out->write_int((int)*p);
     MemoryProfiler::_current_out->write_int((OopDesc*)p-_current_stack);
@@ -323,7 +323,7 @@ void MemoryProfiler::get_stack_trace(PacketInputStream *in, PacketOutputStream *
   int stack_id = in->read_int();
   OopDesc* stack_address = Universe::mp_stack_list()->obj_at(stack_id);
   int offset = in->read_int();
-  OopDesc** ptr_address = (OopDesc**)(stack_address + offset);
+  OopSlot* ptr_address = (OopSlot*)(stack_address + offset);
   if (stack_address->is_execution_stack()) {
     ExecutionStack::Raw stack = stack_address;
     Thread::Raw thrd = stack().thread();

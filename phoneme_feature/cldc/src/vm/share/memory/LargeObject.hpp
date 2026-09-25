@@ -110,7 +110,7 @@ protected:
   static unsigned bitvector_size  ( const unsigned size );
 
   static void set_bottom( LargeObject new_bottom[] ) {
-    _large_object_area_bottom = (OopDesc**) new_bottom;
+    _large_object_area_bottom = (OopSlot*) new_bottom;
   }
 
   static void move ( const int delta, const LargeObject limit[] );
@@ -119,9 +119,9 @@ protected:
 
   static const LargeObject* current_limit;
   static int                current_delta;
-  static void update_pointer                  ( OopDesc** p );
+  static void update_pointer                  ( OopSlot* p );
   static void update_classinfo_pointers       ( void );
-  static void update_pointer_in_instance_class( OopDesc** p );
+  static void update_pointer_in_instance_class( OopSlot* p );
   static void update_pointers ( OopDesc* beg, OopDesc exclusive_end[] );
 public:
   static LargeObject* start ( void ) {
@@ -158,7 +158,7 @@ public:
   }
   static void terminate ( void ) {}
 
-  static void move ( const int delta, OopDesc* end[] ) {
+  static void move ( const int delta, OopSlot end[] ) {
 #if USE_LARGE_OBJECT_AREA
     move( delta, ((LargeObject*) end)-1 );
 #else
@@ -189,7 +189,7 @@ public:
 #endif  // USE_LARGE_OBJECT_AREA
 
   static juint* bitvector( const void* p ) {
-    return ObjectHeap::get_bitvectorword_for_aligned( (OopDesc**) p );
+    return ObjectHeap::get_bitvectorword_for_aligned( (OopSlot*) p );
   }
   juint* next_bitvector( void ) { return next()->bitvector(); }
 

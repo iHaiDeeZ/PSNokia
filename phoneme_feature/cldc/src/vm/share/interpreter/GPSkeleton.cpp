@@ -94,14 +94,14 @@ extern "C" {
   int             _interpretation_log_idx;
 #endif
 
-  OopDesc**       _old_generation_end;
+  OopSlot*       _old_generation_end;
   address         _current_stack_limit       = NULL;
   address         _compiler_stack_limit      = NULL;
   int             _rt_timer_ticks            = 0;
 
   address         _primordial_sp             = NULL;
   OopDesc*        _interned_string_near_addr = NULL;
-  OopDesc**       _persistent_handles_addr   = NULL;
+  OopSlot*       _persistent_handles_addr   = NULL;
 
 #if ENABLE_ISOLATES
   OopDesc*        _current_task;

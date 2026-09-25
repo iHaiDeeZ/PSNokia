@@ -85,7 +85,7 @@ static int _cnt[MAX_CHUNKS] = {0, 0};
 static void mark_unused_chunk_space(int i) {
   _cnt[i] ++;
 
-  unsigned int base = (int)chunks[i];
+  address_word base = (address_word)chunks[i];
   int *start = (int *)((base + cur_chunk_size[i]) + 0x03 & (~0x03));
   int *end   = (int *)((base + max_chunk_size[i])        & (~0x03));
   int *p;
@@ -97,7 +97,7 @@ static void mark_unused_chunk_space(int i) {
 }
 
 static void check_unused_chunk_space(int i) {
-  unsigned int base = (unsigned int)chunks[i];
+  address_word base = (address_word)chunks[i];
   int *start = (int *)((base + cur_chunk_size[i]) + 0x03 & (~0x03));
   int *end   = (int *)((base + max_chunk_size[i])        & (~0x03));
   int *p;

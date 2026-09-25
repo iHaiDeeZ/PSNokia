@@ -46,7 +46,15 @@
  * Converts the given <code>jobject</code> to a pointer of the given
  * type.
  */
+#if defined(__LP64__) || defined(_WIN64)
+/* A handle slot holds a 4-byte object reference on 64-bit hosts (see
+ * KNI_IsNullHandle in kni.h): access it as a 32-bit pointer, which also
+ * keeps unhand() assignable. */
+#define unhand(__type, __ptr) \
+    (*((__type * __ptr32 __uptr *)(void*)(__ptr)))
+#else
 #define unhand(__type, __ptr)  (*((__type**)(void*)(__ptr)))
+#endif
 
 /**
  * Converts the given pointer to a <code>jobject</code>.

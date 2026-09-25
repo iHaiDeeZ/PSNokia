@@ -386,16 +386,16 @@ void JavaDebugger::flush_refnodes()
     (ObjArrayDesc*)(Universe::objects_by_ref_map()->obj());
 
   RefNodeDesc *node;
-  OopDesc **p;
+  OopSlot*p;
   int i;
   int len;
 
-  OopDesc ** refnodes = (OopDesc **)((address)refMap + sizeof(ArrayDesc));
+  OopSlot* refnodes = (OopSlot*)((address)refMap + sizeof(ArrayDesc));
   len = refMap->_length;
   for (i = 0; i < len; i++) {
     node = (RefNodeDesc *)(refnodes[i]);
     while (node != NULL && node->_ref_obj != NULL) {
-      p = (OopDesc **)(node->_ref_obj);
+      p = (OopSlot*)(node->_ref_obj);
       if (ObjectHeap::in_collection_area(p) && !ObjectHeap::test_bit_for(p)) {
         node->_ref_obj = NULL;
       }
@@ -404,12 +404,12 @@ void JavaDebugger::flush_refnodes()
   }
   ObjArrayDesc *IDMap =
     (ObjArrayDesc*)(Universe::objects_by_id_map()->obj());
-  OopDesc ** IDnodes = (OopDesc **)((address)(IDMap) + sizeof(ArrayDesc));
+  OopSlot* IDnodes = (OopSlot*)((address)(IDMap) + sizeof(ArrayDesc));
   len = IDMap->_length;
   for (i = 0; i < len; i++) {
     node = (RefNodeDesc *)(IDnodes[i]);
     while (node != NULL && node->_ref_obj != NULL) {
-      p = (OopDesc **)(node->_ref_obj);
+      p = (OopSlot*)(node->_ref_obj);
       if (ObjectHeap::in_collection_area(p) && !ObjectHeap::test_bit_for(p)) {
         node->_ref_obj = NULL;
       }

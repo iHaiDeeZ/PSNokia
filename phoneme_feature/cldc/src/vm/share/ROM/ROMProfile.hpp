@@ -33,22 +33,22 @@ private:
   /**
    * The list of hidden classes for the specified profile.
    */
-  OopDesc * _hidden_classes;
+  NARROW(OopDesc*) _hidden_classes;
 
   /**
    * Specified profile name.
    */
-  OopDesc * _profile_name;
+  NARROW(OopDesc*) _profile_name;
 
   /**
    * The list of hidden packages.
    */
-  OopDesc * _hidden_packages;
+  NARROW(OopDesc*) _hidden_packages;
 
   /**
    * The list of restricted packages.
    */
-  OopDesc * _restricted_packages;
+  NARROW(OopDesc*) _restricted_packages;
 
   static size_t allocation_size() { 
     return align_allocation_size(sizeof(ROMProfileDesc));

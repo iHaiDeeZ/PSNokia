@@ -64,6 +64,38 @@ extern "C" {
 
 #if !ENABLE_PCSL
 
+#if USE_NARROW_POINTERS
+// File handles are kept in 4-byte VM words (e.g. the int handle field of
+// com.sun.cldchi.jvm.FileDescriptor), but a FILE* can live above 4GB. Hand
+// out small table indices instead and keep the FILE* here.
+enum { MAX_OPEN_FILES = 256 };
+static FILE* open_files[MAX_OPEN_FILES];
+
+static OsFile_Handle handle_of(FILE* file) {
+  if (file == NULL) {
+    return NULL;
+  }
+  for (int i = 0; i < MAX_OPEN_FILES; i++) {
+    if (open_files[i] == NULL) {
+      open_files[i] = file;
+      return (OsFile_Handle)(address_word)(i + 1);
+    }
+  }
+  fclose(file);
+  return NULL;
+}
+
+static void release_handle(OsFile_Handle handle) {
+  open_files[(address_word)handle - 1] = NULL;
+}
+
+#define FILE_OF(handle) (open_files[(address_word)(handle) - 1])
+#else
+#define handle_of(file) (file)
+#define release_handle(handle)
+#define FILE_OF(handle) (handle)
+#endif
+
 OsFile_Handle OsFile_open(const PathChar *fn_filename, const char *mode) {
 #ifdef _MSC_VER
   // The VM just opens files for reading
@@ -89,33 +121,36 @@ OsFile_Handle OsFile_open(const PathChar *fn_filename, const char *mode) {
   return result;
 #else
   PATHCHAR_TO_ASCII(fn_filename, filename);
-  return fopen(filename, mode);
+  return handle_of(fopen(filename, mode));
 #endif
 }
 
 int OsFile_close(OsFile_Handle handle) {
   //tty->print_cr("Close: 0x%x", handle);
-  return fclose(handle);
+  int result = fclose(FILE_OF(handle));
+  release_handle(handle);
+  return result;
 }
 
 int OsFile_flush(OsFile_Handle handle) {
-  return fflush(handle);
+  return fflush(FILE_OF(handle));
 }
 
 size_t OsFile_read(OsFile_Handle handle,
                    void *buffer, size_t size, size_t count) {
-  return fread(buffer, size, count, handle);
+  return fread(buffer, size, count, FILE_OF(handle));
 }
 
 size_t OsFile_write(OsFile_Handle handle,
                     const void *buffer, size_t size, size_t count) {
-  return fwrite(buffer, size, count, handle);
+  return fwrite(buffer, size, count, FILE_OF(handle));
 }
 
 long OsFile_length(OsFile_Handle handle) {
-  fseek(handle, 0, SEEK_END);
-  long res = ftell(handle);
-  fseek(handle, 0, SEEK_SET);// reset file
+  FILE* file = FILE_OF(handle);
+  fseek(file, 0, SEEK_END);
+  long res = ftell(file);
+  fseek(file, 0, SEEK_SET);// reset file
   return res;
 }
 
@@ -141,15 +176,15 @@ bool OsFile_exists(const PathChar *fn_filename) {
 }
 
 long OsFile_seek(OsFile_Handle handle, long offset, int origin) {
-  return fseek(handle, offset, origin);
+  return fseek(FILE_OF(handle), offset, origin);
 }
 
 int OsFile_error(OsFile_Handle handle) {
-  return ferror(handle);
+  return ferror(FILE_OF(handle));
 }
 
 int OsFile_eof(OsFile_Handle handle) {
-  return feof(handle);
+  return feof(FILE_OF(handle));
 }
 
 bool OsFile_rename(const JvmPathChar *fn_from, const JvmPathChar *fn_to) {

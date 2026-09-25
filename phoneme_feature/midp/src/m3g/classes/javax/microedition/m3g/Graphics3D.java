@@ -57,93 +57,29 @@ public class Graphics3D {
     private static int renderLogCount = 0;
     private static int smallMeshLogCount = 0;
 
-    /*
-     * Tracks every DISTINCT top-level Node ever passed to render() (by
-     * identity, not equality - CLDC's Object has no real hashCode()/equals()
-     * override machinery worth relying on here), printing once the first
-     * time each one is seen. Bounded to a small fixed array so this is safe
-     * regardless of how many total render() calls happen (unlike the
-     * per-frame-capped `log` flag above, which exhausted its budget on
-     * background/menu content alone before any real gameplay was reached).
-     * Used to answer, directly, whether the actively-falling/held game
-     * piece (rendered via a small per-instance wrapper class in the game's
-     * own bytecode - decompiled as `e`/`f`/`g`, each holding one Mesh +
-     * Transform, calling straight into this render() method) EVER actually
-     * reaches this renderer at all, as opposed to some upstream game-logic
-     * condition simply never calling it during whatever's been tested.
-     */
-    private static final Object[] seenNodes = new Object[150];
-    private static int seenNodeCount = 0;
-
     public void render(Node node, Transform transform) {
         boolean log = renderLogCount < 6;
         if (log) {
             renderLogCount++;
         }
-        if (seenNodeCount < seenNodes.length) {
-            boolean isNew = true;
-            for (int i = 0; i < seenNodeCount; i++) {
-                if (seenNodes[i] == node) {
-                    isNew = false;
-                    break;
-                }
-            }
-            if (isNew) {
-                seenNodes[seenNodeCount++] = node;
-                String kind = (node instanceof Mesh) ? "Mesh" : (node instanceof Group) ? "Group" : "Node";
-                float tx = transform.m[3], ty = transform.m[7], tz = transform.m[11];
-                System.out.println("M3G_NEW_TOPLEVEL_NODE #" + seenNodeCount + " kind=" + kind
-                        + " transformPos=" + tx + "," + ty + "," + tz);
-                if (node instanceof Mesh) {
-                    Mesh mesh = (Mesh) node;
-                    VertexBuffer vb0 = mesh.getVertexBuffer();
-                    if (vb0 != null && vb0.positions != null) {
-                        Transform w = new Transform();
-                        w.set(transform);
-                        w.postMultiply(node.transform);
-                        Transform mv2 = new Transform();
-                        mv2.set(viewMatrix);
-                        mv2.postMultiply(w);
-                        float[] mv2f = new float[16];
-                        mv2.get(mv2f);
-                        float[] pf = new float[16];
-                        projMatrix.get(pf);
-                        float[] pos = vb0.positions.data;
-                        float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE;
-                        float minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
-                        int behind = 0, vcount = pos.length / 3;
-                        for (int i = 0; i < vcount; i++) {
-                            float vx = pos[i*3], vy = pos[i*3+1], vz = pos[i*3+2];
-                            float ex = mv2f[0]*vx+mv2f[1]*vy+mv2f[2]*vz+mv2f[3];
-                            float ey = mv2f[4]*vx+mv2f[5]*vy+mv2f[6]*vz+mv2f[7];
-                            float ez = mv2f[8]*vx+mv2f[9]*vy+mv2f[10]*vz+mv2f[11];
-                            float cx = pf[0]*ex+pf[1]*ey+pf[2]*ez+pf[3];
-                            float cy = pf[4]*ex+pf[5]*ey+pf[6]*ez+pf[7];
-                            float cw = pf[12]*ex+pf[13]*ey+pf[14]*ez+pf[15];
-                            if (cw <= 0) { behind++; continue; }
-                            float nx = cx/cw, ny = cy/cw;
-                            if (nx < minX) minX = nx; if (nx > maxX) maxX = nx;
-                            if (ny < minY) minY = ny; if (ny > maxY) maxY = ny;
-                        }
-                        System.out.println("M3G_NEW_TOPLEVEL_NDC verts=" + vcount + " behind=" + behind
-                                + "/" + vcount + " minX=" + minX + " maxX=" + maxX + " minY=" + minY + " maxY=" + maxY
-                                + " eyePos=" + mv2f[3] + "," + mv2f[7] + "," + mv2f[11]);
-                    }
-                }
-            }
-        }
+        // Per the spec, the node's own transformation (and its ancestors')
+        // is ignored here: transform alone maps the node to world space.
+        // Games load template meshes laid out side by side in the file and
+        // position them themselves.
         Transform world = new Transform();
         world.set(transform);
-        renderNode(node, world);
+        renderNode(node, world, false);
         if (log) {
             System.out.println("M3G_RENDER_EXIT");
         }
     }
 
-    private void renderNode(Node node, Transform parentWorld) {
+    private void renderNode(Node node, Transform parentWorld, boolean applyOwnTransform) {
         Transform world = new Transform();
         world.set(parentWorld);
-        world.postMultiply(node.transform);
+        if (applyOwnTransform) {
+            world.postMultiply(node.transform);
+        }
 
         if (node instanceof Mesh) {
             drawMesh((Mesh) node, world);
@@ -151,7 +87,7 @@ public class Graphics3D {
             Group g = (Group) node;
             int n = g.getChildCount();
             for (int i = 0; i < n; i++) {
-                renderNode(g.getChild(i), world);
+                renderNode(g.getChild(i), world, true);
             }
         }
     }

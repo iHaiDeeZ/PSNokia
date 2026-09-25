@@ -278,12 +278,12 @@ private:
 
   // Returns the base address of the CP, for accessing constants
   // like raw_constants_base()[i]
-  OopDesc** raw_constants_base() const {
+  OopSlot* raw_constants_base() const {
     OopDesc *c = constants();
 #ifdef AZZERT
     ConstantPool::Raw checkit = c;
 #endif
-    return DERIVED(OopDesc**, c, ConstantPool::base_offset());
+    return DERIVED(OopSlot*, c, ConstantPool::base_offset());
   }
 
 public:
@@ -402,10 +402,10 @@ public:
     GUARANTEE(GenerateROMImage || (code != NULL), "Sanity check"); 
     // The native code is guaranteed to be BytesPerWord aligned
     GUARANTEE(native_code_offset() % BytesPerWord == 0, "bad native alignment");
-    *(address *)field_base(native_code_offset()) = code;
+    *(AddressSlot*)field_base(native_code_offset()) = code;
   }
   address get_native_code() const { 
-    return *(address *)field_base(native_code_offset());
+    return *(AddressSlot*)field_base(native_code_offset());
   }
 
   void set_quick_native_code(address code) { 
@@ -413,12 +413,12 @@ public:
     GUARANTEE(GenerateROMImage || (code != NULL), "Sanity check"); 
     GUARANTEE(GenerateROMImage || is_quick_native(),
                   "misuse of overloaded field");
-    *(address *)field_base(quick_native_code_offset()) = code;
+    *(AddressSlot*)field_base(quick_native_code_offset()) = code;
   }
   address get_quick_native_code() const { 
     GUARANTEE(GenerateROMImage || is_quick_native(),
               "misuse of overloaded field");
-    return *(address *)field_base(quick_native_code_offset());
+    return *(AddressSlot*)field_base(quick_native_code_offset());
   }
 
   void bytecode_at_put_raw(jint bci, Bytecodes::Code bc) {

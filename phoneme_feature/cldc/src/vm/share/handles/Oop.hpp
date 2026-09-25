@@ -42,7 +42,7 @@ enum {
  * NOTE: No virtuals are allowed.
  */
 class BasicOop {
-  OopDesc* _obj;
+  OopSlot _obj;
 public:
   /// <OopDesc> access operations.
   ReturnOop obj() const { return _obj;}
@@ -624,7 +624,7 @@ public:
   }                                              \
   class Raw : public BasicOop {                  \
   private:                                       \
-    AZZERT_ONLY(OopDesc** _current_allocation_top;) \
+    AZZERT_ONLY(OopSlot* _current_allocation_top;) \
     AZZERT_ONLY(jint _current_check_count;)      \
     AZZERT_ONLY(Raw* _previous;)                      \
     void push_handle() {                              \

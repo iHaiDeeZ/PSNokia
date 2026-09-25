@@ -73,8 +73,10 @@ int pcsl_file_finalize() {
  * file is at the beginning of the file.
  * 
  */
-#if __has_include(<psp2/io/fcntl.h>)
-/* PCSL_FILE_O_* (pcsl_file.h) use Linux glibc's O_CREAT/O_TRUNC/O_APPEND
+/* Also needed on the PS4, whose FreeBSD O_CREAT is 0x200 too; the
+ * translation is harmless where the values already match.
+ *
+ * PCSL_FILE_O_* (pcsl_file.h) use Linux glibc's O_CREAT/O_TRUNC/O_APPEND
  * bit values (0x40/0x200/0x400) - this file passes `flags` straight
  * through to open() with no translation, which is correct for glibc but
  * wrong for vitasdk's newlib, whose real O_CREAT/O_TRUNC/O_APPEND are
@@ -92,9 +94,6 @@ static int pcsl_to_os_flags(int flags) {
     if (flags & PCSL_FILE_O_APPEND) osFlags |= O_APPEND;
     return osFlags;
 }
-#else
-static int pcsl_to_os_flags(int flags) { return flags; }
-#endif
 
 int pcsl_file_open(const pcsl_string * fileName, int flags, void **handle)
 {

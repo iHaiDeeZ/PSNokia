@@ -239,7 +239,7 @@ private:
   static bool is_persistent_handle(Oop* /*obj*/) PRODUCT_RETURN0;
 
   // Support for GC of persistent handles
-  static void oops_do(void do_oop(OopDesc**), const bool young_only = false);
+  static void oops_do(void do_oop(OopSlot*), const bool young_only = false);
   static void update_relative_pointers();
 
   // GC testing support
@@ -634,18 +634,18 @@ private:
       &persistent_handles[index + ((int)bool_array_class_index - (int)T_BOOLEAN)];
   }
   static ReturnOop class_from_id(jint class_id) {
-    ReturnOop cls = ((ReturnOop*)_class_list_base)[class_id];
+    ReturnOop cls = ((OopSlot*)_class_list_base)[class_id];
     GUARANTEE(cls != NULL, "sanity");
     GUARANTEE(TaskContext::number_of_java_classes() > class_id, "sanity");
     return cls;
   }
 #if ENABLE_ISOLATES
   static ReturnOop class_from_id_or_null(jint class_id) {
-    return ((ReturnOop*)_class_list_base)[class_id];
+    return ((OopSlot*)_class_list_base)[class_id];
   }
 
   static ReturnOop task_mirror_from_id(jint class_id) {
-    return ((ReturnOop*)_mirror_list_base)[class_id];
+    return ((OopSlot*)_mirror_list_base)[class_id];
   }
 #endif
   // Factory member functions.
@@ -732,7 +732,7 @@ private:
   static ReturnOop new_obj_array_in_compiler_area(int length JVM_TRAPS) {
     return allocate_array_in_compiler_area(
                           (FarClass*)((void*)object_array_class()),
-                          length, sizeof(OopDesc*) JVM_NO_CHECK_AT_BOTTOM);
+                          length, sizeof(OopSlot) JVM_NO_CHECK_AT_BOTTOM);
   }
 #endif
 #if ENABLE_ISOLATES

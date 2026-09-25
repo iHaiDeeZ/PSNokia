@@ -226,7 +226,7 @@ int BranchTable::_item_index;
 
 #endif
 
-void CompiledMethodDesc::variable_oops_do(void do_oop(OopDesc**)) {
+void CompiledMethodDesc::variable_oops_do(void do_oop(OopSlot*)) {
 #if ENABLE_COMPILER
   // Create a fake handle (only used during GC).
   // Note that this temporary handle will not be visited by GC.
@@ -241,7 +241,7 @@ void CompiledMethodDesc::variable_oops_do(void do_oop(OopDesc**)) {
     for (RelocationReader stream(&cm); !stream.at_end(); stream.advance()) {
       const Relocation::Kind kind = stream.kind();
       if (kind == Relocation::oop_type) {
-        OopDesc** p = (OopDesc**) (cm().entry() + stream.code_offset());
+        OopSlot* p = (OopSlot*) (cm().entry() + stream.code_offset());
         do_oop(p);
       } else if (kind != Relocation::comment_type) {
         break;

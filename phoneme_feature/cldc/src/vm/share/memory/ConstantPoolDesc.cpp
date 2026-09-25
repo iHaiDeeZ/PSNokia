@@ -27,7 +27,7 @@
 # include "incls/_precompiled.incl"
 # include "incls/_ConstantPoolDesc.cpp.incl"
 
-void ConstantPoolDesc::variable_oops_do(void do_oop(OopDesc**)) {
+void ConstantPoolDesc::variable_oops_do(void do_oop(OopSlot*)) {
   // Returns if the tags array has not yet been allocated.
   // This happens if garbage collection kicks in when allocating the
   // tags array.
@@ -35,7 +35,7 @@ void ConstantPoolDesc::variable_oops_do(void do_oop(OopDesc**)) {
     return;
   }
 
-  OopDesc** base = (OopDesc**)((jubyte*)this + header_size());
+  OopSlot* base = (OopSlot*)((jubyte*)this + header_size());
   jubyte* tags = (jubyte*)_tags + sizeof(ArrayDesc);
 
   // Note: index 0 may be used during romization to rename non-public symbols.

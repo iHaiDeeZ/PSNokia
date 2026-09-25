@@ -86,7 +86,7 @@ class StackLock {
   }
 
   // GC support
-  void oops_do(void do_oop(OopDesc**));
+  void oops_do(void do_oop(OopSlot*));
   void reverse_locked_header();
   void restore_locked_header();
   void relocate_internal_pointers(int);
@@ -98,9 +98,9 @@ class StackLock {
   void print_value_on(Stream*)    PRODUCT_RETURN;
 
  private:
-  OopDesc*      _thread;
-  JavaNearDesc* _real_java_near;
-  OopDesc*      _waiters;        // Condition variable the waiters are waiting for.
+  NARROW(OopDesc*) _thread;
+  NARROW(JavaNearDesc*) _real_java_near;
+  NARROW(OopDesc*) _waiters;        // Condition variable the waiters are waiting for.
 
  public:
   static int thread_offset() { 
@@ -116,7 +116,7 @@ class StackLock {
     return sizeof(StackLock);
   }
 
-  OopDesc** owner_address()    { return (OopDesc**) (((char*) this) + size()); }
+  OopSlot* owner_address()    { return (OopSlot*) (((char*) this) + size()); }
   ReturnOop owner()            { return *owner_address(); }
   void set_owner(JavaOop* value) { *owner_address() = value->obj(); }
   void clear_owner() { *owner_address() = (OopDesc*)0; }

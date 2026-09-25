@@ -196,7 +196,7 @@ private:
 
   // GC support
 public:
-  static void clear_and_release_map_entry(OopDesc**, RefNodeDesc *, int);
+  static void clear_and_release_map_entry(OopSlot*, RefNodeDesc *, int);
   static void flush_refnodes();
   static void rehash();
 

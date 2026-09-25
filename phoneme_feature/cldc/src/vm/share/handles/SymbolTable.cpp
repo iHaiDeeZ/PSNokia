@@ -27,6 +27,8 @@
 # include "incls/_precompiled.incl"
 # include "incls/_SymbolTable.cpp.incl"
 
+extern "C" void write_marker(const char* text, int len);
+
 juint SymbolTable::hash(utf8 s, int length) {
   juint value = 0;
   utf8 end = s + length;
@@ -56,6 +58,18 @@ SymbolTable::symbol_for(TypeArray *byte_array, utf8 s, int len,
   }
 
   if (unsigned(len) > 0xfff0) {
+    /* Diagnostic added 2026-09-05: chasing a real-hardware OOM (Metal
+     * Slug), see FileDecoder.cpp's now-refuted JAR_PARSER_CACHE_EXHAUSTED
+     * check for the fuller story - this is the next candidate, found
+     * via the caller-address capture in Throw::out_of_memory_error
+     * resolving into SymbolTable::Raw::pop_handle() this time (part of
+     * this exact class, unlike the unrelated dis() false lead before).
+     * Symbol's string length is a 16-bit field - logging the real
+     * (corrupted?) len value directly. */
+    char diag_buf[64];
+    int diag_len = jvm_sprintf(diag_buf,
+        "SYMTAB_LEN_OVERFLOW len=%d\n", len);
+    write_marker(diag_buf, diag_len);
     // Symbol's string length is a unsigned 16-bit number
     Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW_0);
   }
@@ -113,7 +127,7 @@ SymbolTable::symbol_for(TypeArray *byte_array, utf8 s, int len,
 
   const juint start = index;
 
-  SymbolDesc**base = (SymbolDesc**)base_address();
+  NARROW(SymbolDesc*)*base = (NARROW(SymbolDesc*)*)base_address();
   SymbolDesc* old;
 
   if (0 < len && len <= 6) {
@@ -179,6 +193,14 @@ SymbolTable::symbol_for(TypeArray *byte_array, utf8 s, int len,
     return NULL;
   } else {
     if( old ) {
+      /* Diagnostic added 2026-09-05, see the SYMTAB_LEN_OVERFLOW
+       * marker above for the fuller story - this is the OTHER
+       * candidate in this file: the symbol table's hash-probe wrapped
+       * all the way around without finding an empty slot, meaning the
+       * table is genuinely completely full. */
+      char diag_buf[48];
+      int diag_len = jvm_sprintf(diag_buf, "SYMTAB_FULL\n");
+      write_marker(diag_buf, diag_len);
       // We'd come to here if we're really out of memory
       Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW_0);
     }

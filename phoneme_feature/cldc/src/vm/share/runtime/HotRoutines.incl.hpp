@@ -88,10 +88,10 @@ int RegisterAllocator::_register_references[Assembler::number_of_registers]
 
 #if USE_HOT_ROUTINES
 // Write barrier for individual pointer store.
-void oop_write_barrier(OopDesc** addr, OopDesc* value) {
+void oop_write_barrier(OopSlot* addr, OopDesc* value) {
   // prefetch _heap_start and _heap_top to avoid stalls on ARM
-  OopDesc ** heap_start = _heap_start;
-  OopDesc ** old_generation_end = _old_generation_end;
+  OopSlot* heap_start = _heap_start;
+  OopSlot* old_generation_end = _old_generation_end;
   *addr = value;
 
   // Note the order of the comparison. In most cases the first comparison 
@@ -233,7 +233,7 @@ juint Inflater::crc32(unsigned char *data, juint length) {
 #if USE_HOT_ROUTINES
 int VerifierFrame::get_stackmap_index_for_offset(int target_bci) {
   int len = stackmaps()->length();
-  address *p = (address*)stackmaps()->base_address();
+  AddressSlot*p = (AddressSlot*)stackmaps()->base_address();
   int stackmap_index = 0;
 
   // WAS: for (stackmap_index = 0; stackmap_index < len; stackmap_index+=2)
@@ -278,8 +278,8 @@ int Field::find_field_index(InstanceClass* ic, Symbol* name, Symbol* signature)
     int name_index      = ((jushort*)field_base)[NAME_OFFSET];
     int signature_index = ((jushort*)field_base)[SIGNATURE_OFFSET];
 
-    OopDesc *n = ((OopDesc**)cp_base)[name_index];
-    OopDesc *s = ((OopDesc**)cp_base)[signature_index];
+    OopDesc *n = ((OopSlot*)cp_base)[name_index];
+    OopDesc *s = ((OopSlot*)cp_base)[signature_index];
 
     if (n == name_obj && s == sig_obj) {
       return index;
@@ -302,14 +302,14 @@ ConstantTag ConstantPool::tag_at(int index) const  {
 #endif
 
 #if USE_HOT_ROUTINES
-void ObjectHeap::do_nothing(OopDesc**) {
+void ObjectHeap::do_nothing(OopSlot*) {
 }
 #endif
 
 #if USE_HOT_ROUTINES
-void ObjectHeap::mark_pointer_to_young_generation(OopDesc** p) {
+void ObjectHeap::mark_pointer_to_young_generation(OopSlot* p) {
   if( p < _collection_area_start ) {
-    OopDesc** const obj = (OopDesc**)*p;
+    OopSlot* const obj = (OopSlot*)*p;
     if( _collection_area_start <= obj && obj < _inline_allocation_top ) {
       set_bit_for( p );
     }
@@ -318,14 +318,14 @@ void ObjectHeap::mark_pointer_to_young_generation(OopDesc** p) {
 #endif
 
 #if USE_HOT_ROUTINES
-void ObjectHeap::mark_and_push(OopDesc** p) {
+void ObjectHeap::mark_and_push(OopSlot* p) {
   OopDesc* obj = *p;
   // Is object pointed to in collection target area? This does null check as
   // well. 
-  if (_collection_area_start <= (OopDesc**)obj &&
-      (OopDesc**)obj < mark_area_end() ) { // _heap_top for separate compiler area
+  if (_collection_area_start <= (OopSlot*)obj &&
+      (OopSlot*)obj < mark_area_end() ) { // _heap_top for separate compiler area
     // Is object already marked?
-    if (!test_and_set_bit_for((OopDesc**) obj)) {
+    if (!test_and_set_bit_for((OopSlot*) obj)) {
 #if ENABLE_REMOTE_TRACER
       if (RemoteTracePort > 0) {
         RemoteTracer::update_stats(obj);
@@ -357,15 +357,15 @@ void ObjectHeap::mark_and_push(OopDesc** p) {
 #if USE_HOT_ROUTINES
 void ObjectHeap::continue_marking(void) {
   // Cache in local registers
-  OopDesc** const collection_area_start = _collection_area_start;
-  OopDesc** const heap_top              = mark_area_end();
-  OopDesc** const marking_stack_end     = _marking_stack_end;
+  OopSlot* const collection_area_start = _collection_area_start;
+  OopSlot* const heap_top              = mark_area_end();
+  OopSlot* const marking_stack_end     = _marking_stack_end;
   address   const bitvector_base        = _bitvector_base;
 
   while (_marking_stack_top > _marking_stack_start) {
     // Pop top marking stack element
     OopDesc* obj = *--_marking_stack_top;
-    GUARANTEE(test_bit_for((OopDesc**) obj), "Pushed objects should be marked");
+    GUARANTEE(test_bit_for((OopSlot*) obj), "Pushed objects should be marked");
     // Follow near pointer
     mark_and_push(&(obj->_klass));
 
@@ -374,12 +374,12 @@ void ObjectHeap::continue_marking(void) {
       // This is a common case: (non-array) Java object instance. In-line
       // OopDesc::oops_do_for() to make it run faster.
       const jbyte* map = (jbyte*)blueprint->embedded_oop_map();
-      OopDesc** p = (OopDesc**)obj;
+      OopSlot* p = (OopSlot*)obj;
       for (;;) {
         const jint entry = (jint)(*map++);
         if (entry > 0) {
           p += entry;
-          OopDesc** const o = (OopDesc**)*p;
+          OopSlot* const o = (OopSlot*)*p;
           // Is object pointed to in collection target area? This
           // does null check as well. 
           if (collection_area_start <= o && o < heap_top) {
@@ -433,8 +433,8 @@ void ObjectHeap::continue_marking(void) {
 
 
 #if USE_HOT_ROUTINES
-void ObjectHeap::mark_root_and_stack(OopDesc** p) {
-  OopDesc** const obj = (OopDesc**) *p;
+void ObjectHeap::mark_root_and_stack(OopSlot* p) {
+  OopSlot* const obj = (OopSlot*) *p;
   if( _collection_area_start <= obj && obj < mark_area_end()
       && !test_and_set_bit_for(obj) ) {
 #if ENABLE_REMOTE_TRACER
@@ -460,7 +460,7 @@ void ObjectHeap::mark_root_and_stack(OopDesc** p) {
 
 #if USE_HOT_ROUTINES
 void
-OopDesc::oops_do_for(const FarClassDesc* blueprint, void do_oop(OopDesc**)) {
+OopDesc::oops_do_for(const FarClassDesc* blueprint, void do_oop(OopSlot*)) {
   jint instance_size = blueprint->instance_size_as_jint();
   switch(instance_size) {
   default:

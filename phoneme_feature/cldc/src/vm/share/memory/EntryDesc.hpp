@@ -32,7 +32,7 @@ private:
   static int pointer_count() { return 1; }
 
 private:
-  VirtualStackFrameDesc* _frame;
+  NARROW(VirtualStackFrameDesc*) _frame;
 
   /* All oops must go before here.  If you change the number of oops, be
    * sure to change pointer_count()

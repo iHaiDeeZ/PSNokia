@@ -1,0 +1,2 @@
+#!/bin/bash
+exec "${PS4_LLVM:?source ps4/env.sh first}/bin/clang" --target=x86_64-pc-freebsd12-elf -c -x assembler "$@"

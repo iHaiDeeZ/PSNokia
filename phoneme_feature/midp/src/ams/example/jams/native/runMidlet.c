@@ -37,6 +37,20 @@
 #include <commandLineUtil.h>
 #include <commandLineUtil_md.h>
 
+#ifdef PS4
+#include <stdio.h>
+#include <renderlog.h>
+/* No console on the PS4: record where runMidlet gives up */
+#define PS4_RUNMIDLET_MARK(what, value) do { \
+    char ps4_buf_[96]; \
+    int ps4_len_ = snprintf(ps4_buf_, sizeof(ps4_buf_), "runMidlet: %s %d (line %d)\n", \
+                            (what), (int)(value), __LINE__); \
+    RENDERLOG_WRITE(ps4_buf_, ps4_len_); \
+  } while (0)
+#else
+#define PS4_RUNMIDLET_MARK(what, value) do { } while (0)
+#endif
+
 #if ENABLE_MULTIPLE_ISOLATES
 #define MIDP_HEAP_REQUIREMENT (MAX_ISOLATES * 1024 * 1024)
 #elif __has_include(<psp2/kernel/threadmgr.h>)
@@ -47,13 +61,41 @@
  * the exact point a game's asset-loading sequence started failing.
  * The Vita has 512MB RAM; this is still a tiny, conservative slice of
  * it. Guarded to this platform only - other ports keep the original
- * conservative default. 4MB is CONFIRMED SAFE (multiple games tested).
- * 8MB was tried (to fix Sonic 2 Dash's missing background visuals) and
- * caused a real boot hang for that game after running for a while - so
- * the safe ceiling is somewhere in (4MB, 8MB), narrower than previously
- * assumed from the old 16MB-hangs finding alone. Do not bump past 4MB
- * without re-testing carefully. See project memory for the full story. */
-#define MIDP_HEAP_REQUIREMENT (4 * 1024 * 1024)
+ * conservative default. 4MB was CONFIRMED SAFE on Vita3K (multiple
+ * games tested) but NOT on real hardware - session 6, 2026-09-04: a
+ * real-hardware renderlog.txt showed a game reaching FIRST_FRAME and
+ * real extended gameplay (lots of touch input) before dying with no
+ * further log output at all - consistent with the JVM running out of
+ * heap so completely that even the error-reporting path couldn't
+ * allocate what it needed to log anything. That test also happened
+ * AFTER fixing the separate real-hardware-only SDL_MULTIGESTURE
+ * logging flood (see midp_msgQueue_md.c) and the param.sfo system
+ * memory budget (256MB -> 365MB via ATTRIBUTE2=12) - so this is
+ * apparently the NEXT real ceiling once those two are out of the way.
+ * 8MB was tried once before (session 4, to fix Sonic 2 Dash's missing
+ * background visuals, on VITA3K only) and caused a real boot hang for
+ * that game after running for a while, so bumping straight to 8MB
+ * again is not assumed safe.
+ * UPDATE (2026-09-05): 6MB was re-tested on REAL HARDWARE with Metal
+ * Slug (the exact VPK with all 3 stacked fixes - this heap bump, the
+ * MULTIGESTURE logging fix, and the ATTRIBUTE2 SFO budget fix). The
+ * MULTIGESTURE fix is confirmed working (renderlog.txt's two latest
+ * launches show zero raw=2050 spam, vs. heavy flooding in older,
+ * uncleared log entries from before that fix). But the OOM crash
+ * itself is NOT fixed at 6MB: renderlog.txt reaches FIRST_FRAME then
+ * goes completely silent after only a handful of SAMPLE lines - same
+ * "too OOM to even log an error" signature as before, now happening
+ * almost immediately after first frame rather than after extended
+ * play. Moved to 7MB as the next cautious step (not jumping to 8MB,
+ * which is a known-bad value for a different game/scenario). Re-test
+ * on REAL HARDWARE specifically (Vita3K alone is not sufficient - see
+ * project memory), with renderlog.txt/vmmarker.txt deleted from the
+ * SD card first for a clean read. See project memory for full story. */
+#define MIDP_HEAP_REQUIREMENT (7 * 1024 * 1024)
+#elif defined(PS4)
+/* The PS4 has plenty of memory; the Java heap comes from the low heap
+ * arena (256MB, see ps4/common/lowheap_malloc.c). */
+#define MIDP_HEAP_REQUIREMENT (16 * 1024 * 1024)
 #else
 #define MIDP_HEAP_REQUIREMENT (1280 * 1024)
 #endif
@@ -149,6 +191,7 @@ runMidlet(int argc, char** commandlineArgs) {
     if (argc > RUNMIDLET_MAX_ARGS) {
         REPORT_ERROR(LC_AMS, "Number of arguments exceeds supported limit");
         fprintf(stderr, "Number of arguments exceeds supported limit\n");
+        PS4_RUNMIDLET_MARK("early return", -1);
         return -1;
     }
 
@@ -171,7 +214,8 @@ runMidlet(int argc, char** commandlineArgs) {
         if (sscanf(chSuiteNum, "%d", &ordinalSuiteNumber) != 1) {
             REPORT_ERROR(LC_AMS, "Invalid suite number format");
             fprintf(stderr, "Invalid suite number format: %s\n", chSuiteNum);
-            return -1;
+            PS4_RUNMIDLET_MARK("early return", -1);
+        return -1;
         }
     }
 
@@ -181,18 +225,21 @@ runMidlet(int argc, char** commandlineArgs) {
     if (argc == 1 && ordinalSuiteNumber == -1) {
         REPORT_ERROR(LC_AMS, "Too few arguments given.");
         fprintf(stderr, runUsageText);
+        PS4_RUNMIDLET_MARK("early return", -1);
         return -1;
     }
 
     if (argc > 6) {
         REPORT_ERROR(LC_AMS, "Too many arguments given\n");
         fprintf(stderr, "Too many arguments given\n%s", runUsageText);
+        PS4_RUNMIDLET_MARK("early return", -1);
         return -1;
     }
 
     /* get midp home directory, set it */
     midpHome = midpFixMidpHome(argv[0]);
     if (midpHome == NULL) {
+        PS4_RUNMIDLET_MARK("early return", -1);
         return -1;
     }
     
@@ -202,6 +249,7 @@ runMidlet(int argc, char** commandlineArgs) {
     if (midpInitialize() != 0) {
         REPORT_ERROR(LC_AMS, "Not enough memory");
         fprintf(stderr, "Not enough memory\n");
+        PS4_RUNMIDLET_MARK("early return", -1);
         return -1;
     }
 
@@ -329,6 +377,7 @@ runMidlet(int argc, char** commandlineArgs) {
             }
         }
 
+        PS4_RUNMIDLET_MARK("starting the MIDlet, suite", suiteId);
         do {
             status = midp_run_midlet_with_args_cp(suiteId, &classname,
                                                   &arg0, &arg1, &arg2,
@@ -364,6 +413,7 @@ runMidlet(int argc, char** commandlineArgs) {
         break;
     }
 
+    PS4_RUNMIDLET_MARK("finished with status", status);
     midpFinalize();
 
     return status;

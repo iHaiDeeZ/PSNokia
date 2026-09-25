@@ -32,9 +32,9 @@
 #if ENABLE_TRAMPOLINE
 class BranchItem{
 private:
-  address _inst_addr;  /*the mov pc... inst address*/
-  address _caller_addr; /*caller's compiled method description*/
-  address _callee_addr; /*callee's compiled method description*/
+  NARROW(address) _inst_addr;  /*the mov pc... inst address*/
+  NARROW(address) _caller_addr; /*caller's compiled method description*/
+  NARROW(address) _callee_addr; /*callee's compiled method description*/
   jint _old_inst; /*original instrucition*/
 public:
 inline  address inst_addr()
@@ -142,11 +142,11 @@ public:
   int  get_cache_index ( void ) const;
   void set_cache_index ( const int i );
 
-  void variable_oops_do(void do_oop(OopDesc**));
+  void variable_oops_do(void do_oop(OopSlot*));
 
-  void oops_do( void do_oop(OopDesc**) ) {
-    do_oop( (OopDesc**) this ); // _klass
-    do_oop( (OopDesc**)&_method);
+  void oops_do( void do_oop(OopSlot*) ) {
+    do_oop( (OopSlot*) this ); // _klass
+    do_oop( (OopSlot*)&_method);
     variable_oops_do( do_oop );
   }
 
@@ -227,13 +227,13 @@ public:
   }
 
   // High 9 bits are machine-dependent flags. Low 23 bits are size
-  size_t      _flags_and_size;
-  MethodDesc* _method;
+  juint       _flags_and_size;
+  NARROW(MethodDesc*) _method;
 
 #if ENABLE_JVMPI_PROFILE 
   // The actual code size, not include the compiled method header and
   // the relocation. Just the instruction code size.
-  size_t _jvmpi_code_size;
+  juint  _jvmpi_code_size;
 #endif
 
 public:

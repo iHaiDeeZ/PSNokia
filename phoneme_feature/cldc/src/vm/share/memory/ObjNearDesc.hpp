@@ -27,7 +27,7 @@
 class ObjNearDesc: public NearDesc {
  private:
   static size_t allocation_size() { return sizeof(ObjNearDesc); }
-  OopDesc*   _object;
+  NARROW(OopDesc*) _object;
   friend class ObjNear;
   friend class Universe;
   friend class OopDesc;

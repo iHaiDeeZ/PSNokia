@@ -27,8 +27,8 @@
 # include "incls/_precompiled.incl"
 # include "incls/_MixedOopDesc.cpp.incl"
 
-void MixedOopDesc::variable_oops_do(void do_oop(OopDesc**)) {
-  OopDesc** addr = obj_field_addr(sizeof(MixedOopDesc));
+void MixedOopDesc::variable_oops_do(void do_oop(OopSlot*)) {
+  OopSlot* addr = obj_field_addr(sizeof(MixedOopDesc));
 
   for (int i=0; i<_pointer_count; i++) {
     do_oop(addr);

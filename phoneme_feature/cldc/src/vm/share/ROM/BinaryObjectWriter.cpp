@@ -60,7 +60,7 @@ void BinaryObjectWriter::begin_object(Oop *object JVM_TRAPS) {
   GUARANTEE(!ROM::system_contains(object->obj()), "sanity");
 
   int skip_words = writer()->skip_words_of(object JVM_CHECK);
-  int skip_bytes = sizeof(jobject) * skip_words;
+  int skip_bytes = sizeof(OopSlot) * skip_words;
 
   count(object, -skip_bytes);
 #endif
@@ -441,7 +441,7 @@ void BinaryObjectWriter::count(Oop *object, int adjustment) {
         count(mc_class_info, num_bytes);
 
         if (info().vtable_length() > 0) {
-          count(mc_vtable, info().vtable_length() * sizeof(jobject));
+          count(mc_vtable, info().vtable_length() * sizeof(OopSlot));
         }
         if (info().itable_length() > 0) {
           count(mc_itable, info().itable_size());

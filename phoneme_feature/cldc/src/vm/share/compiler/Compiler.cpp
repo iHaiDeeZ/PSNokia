@@ -53,18 +53,18 @@ CompilerStatic  Compiler::_state;
 CompilerState   Compiler::_suspended_compiler_state;
 CompilerContext Compiler::_suspended_compiler_context;
 
-inline void CompilerState::oops_do( void do_oop(OopDesc**) ) {
+inline void CompilerState::oops_do( void do_oop(OopSlot*) ) {
   if( valid() ) {
-    OopDesc** p = (OopDesc**) this;
+    OopSlot* p = (OopSlot*) this;
     for( int i = pointer_count(); --i >= 0; p++ ) {
       do_oop( p );
     }
   }
 }
 
-inline void CompilerStaticPointers::oops_do( void do_oop(OopDesc**) ) {
+inline void CompilerStaticPointers::oops_do( void do_oop(OopSlot*) ) {
   if( valid() ) {
-    OopDesc** p = (OopDesc**) this;
+    OopSlot* p = (OopSlot*) this;
     for( int i = pointer_count(); --i >= 0; p++ ) {
       do_oop( p );
     }
@@ -77,9 +77,9 @@ inline void CompilerStaticPointers::cleanup( void ) {
   }
 }
 
-inline void CompilerContext::oops_do( void do_oop(OopDesc**) ) {
+inline void CompilerContext::oops_do( void do_oop(OopSlot*) ) {
   if( valid() ) {
-    OopDesc** p = (OopDesc**) this;
+    OopSlot* p = (OopSlot*) this;
     for( int i = pointer_count(); --i >= 0; p++ ) {
       do_oop( p );
     }
@@ -374,7 +374,7 @@ void Compiler::process_interpretation_log() {
 #endif // ENABLE_INTERPRETATION_LOG
 
 
-void Compiler::oops_do( void do_oop(OopDesc**) ) {
+void Compiler::oops_do( void do_oop(OopSlot*) ) {
   _state.oops_do( do_oop );
   _suspended_compiler_state.oops_do( do_oop );
   _suspended_compiler_context.oops_do( do_oop );

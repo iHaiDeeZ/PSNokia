@@ -43,15 +43,15 @@ typedef  struct  {
   jlong               _step_starting_offset;
   jlong               _dup_current_line_offset;
   jlong               _post_dup_line_offset;
-  address             _step_starting_fp;
+  NARROW(address)             _step_starting_fp;
   locationModifier    _step_target;
 } single_step_mod;
 
 class VMEventModifierDescPointers : public MixedOopDesc {
 protected:
-  OopDesc*         _class_name;
-  OopDesc*         _next;
-  OopDesc*         _rom_debug_method;
+  NARROW(OopDesc*) _class_name;
+  NARROW(OopDesc*) _next;
+  NARROW(OopDesc*) _rom_debug_method;
 
   friend class OopDesc;
   friend class VMEventModifier;
@@ -79,7 +79,7 @@ class VMEventModifierDesc : public VMEventModifierDescPointers {
   // If this is in the heap we will not restore it into the method
   // Instead we will just set the entry to the 'default'
   // Hence we don't bother with GC protection for it.
-  address         _saved_method_entry;
+  NARROW(address)         _saved_method_entry;
 
   jint            _event_count;
   jboolean        _compile_state;
@@ -91,7 +91,7 @@ class VMEventModifierDesc : public VMEventModifierDescPointers {
     
   static size_t pointer_count() {
     return (sizeof(VMEventModifierDescPointers) - sizeof(MixedOopDesc)) /
-           sizeof(OopDesc*);
+           sizeof(OopSlot);
   }
   friend class VMEventModifier;
 

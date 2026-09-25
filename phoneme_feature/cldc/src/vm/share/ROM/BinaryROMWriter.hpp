@@ -71,7 +71,7 @@ public:
   void copy_persistent_handles(JVM_SINGLE_ARG_TRAPS);
 
   void write_subtype_ranges();
-  static void generate_fast_fieldmap_by_oops_do(OopDesc**p);
+  static void generate_fast_fieldmap_by_oops_do(OopSlot*p);
   void write_all_objects_of_type(BlockType type JVM_TRAPS);
 
   // Returns: 0 ... 100 to indicate the progress of the binary

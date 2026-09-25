@@ -46,7 +46,7 @@ class VirtualStackFrameDesc: public MixedOopDesc {
 
  private:
 #if USE_COMPILER_FPU_MAP
-  TypeArrayDesc * _fpu_register_map;
+  NARROW(TypeArrayDesc*) _fpu_register_map;
 #endif
 
   /* All oops must go before here.  If you change the number of oops, be

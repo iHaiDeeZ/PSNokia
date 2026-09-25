@@ -154,7 +154,7 @@ void ConstantPoolRewriter::free_unused_space(JVM_SINGLE_ARG_TRAPS) {
 
     
     ROMTools::shrink_object(&_merged_pool, old_pool_size, 
-                            unused_entries * sizeof(jobject));
+                            unused_entries * sizeof(OopSlot));
     //we must allign tags by 4 bytes!
     int unused_tags_entries = unused_entries & (~3);
     ROMTools:: shrink_object(&tags, old_tags_size, 
@@ -728,7 +728,7 @@ ReturnOop ConstantPoolRewriter::find_method_replacement(Method *p_old_method) {
   return *p_old_method;
 }
 
-void ConstantPoolRewriter::replace_oop_if_method(OopDesc** addr) {
+void ConstantPoolRewriter::replace_oop_if_method(OopSlot* addr) {
   OopDesc*  value = *addr;
   if (value->is_method()) {
     Method::Raw old_method = value;

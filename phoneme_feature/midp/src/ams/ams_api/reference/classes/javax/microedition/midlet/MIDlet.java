@@ -219,6 +219,9 @@ public abstract class MIDlet {
      *
      */
     public final void notifyDestroyed() {
+        // Port diagnostics: show who ended the MIDlet
+        System.out.println("MIDlet.notifyDestroyed called");
+        new Throwable().printStackTrace();
         peer.notifyDestroyed();
     }
 

@@ -54,7 +54,7 @@ void Frame::init(Thread* thread) {
             "Last java fp and sp should be set");
   address  fp      = thread->last_java_fp();
   address  sp      = thread->last_java_sp();
-  address* pc_addr = (address*)(sp + JavaStackDirection * BytesPerWord);
+  AddressSlot* pc_addr = (AddressSlot*)(sp + JavaStackDirection * BytesPerWord);
   set_values(thread, thread->stack_base(), pc_addr, sp, fp);
 
   // Add to the linked list of all frames
@@ -318,7 +318,7 @@ void JavaFrame::fill_in_compiled_frame() {
             "must have a compiled method by now")
 
   // Fill in the locals pointer.
-  *(address*)(fp() + locals_pointer_offset()) = calculated_locals_pointer();
+  *(AddressSlot*)(fp() + locals_pointer_offset()) = calculated_locals_pointer();
 
   // Fill in stack bottom pointer
   Method::Raw m = raw_compiled_method()->method();
@@ -329,7 +329,7 @@ void JavaFrame::fill_in_compiled_frame() {
 }
 
 void JavaFrame::set_empty_stack_bottom_pointer() {
-  *(address*) (fp() + stack_bottom_pointer_offset()) =
+  *(AddressSlot*) (fp() + stack_bottom_pointer_offset()) =
                          fp() + empty_stack_offset();
 }
 
@@ -522,7 +522,7 @@ address JavaFrame::locals_pointer() const {
     return calculated_locals_pointer();
   } 
 #endif
-  return *(address*) (fp() + locals_pointer_offset());
+  return *(AddressSlot*) (fp() + locals_pointer_offset());
 }
 
 #if ENABLE_COMPILER
@@ -588,22 +588,22 @@ address JavaFrame::stack_bottom_pointer() {
     }
   }
 #endif
-  return *(address*) (fp() + stack_bottom_pointer_offset());
+  return *(AddressSlot*) (fp() + stack_bottom_pointer_offset());
 }
 
 /*
 void JavaFrame::caller_is(Frame& result) {
-  address  caller_fp      = *(address*) (fp() + caller_fp_offset());
+  address  caller_fp      = *(AddressSlot*) (fp() + caller_fp_offset());
   address  caller_sp      = this->caller_sp();
-  address* caller_pc_addr = (address*) (fp() + return_address_offset());
+  AddressSlot* caller_pc_addr = (AddressSlot*) (fp() + return_address_offset());
   result.set_values(_thread, _stack_base, caller_pc_addr, caller_sp , caller_fp);
 }
 */
 
 void JavaFrame::relocate_internal_pointers(int delta, bool do_locks) {
-  address caller_fp    = *(address*)(fp() + caller_fp_offset());
-  address locals       = *(address*)(fp() + locals_pointer_offset());
-  address stack_bottom = *(address*)(fp() + stack_bottom_pointer_offset());
+  address caller_fp    = *(AddressSlot*)(fp() + caller_fp_offset());
+  address locals       = *(AddressSlot*)(fp() + locals_pointer_offset());
+  address stack_bottom = *(AddressSlot*)(fp() + stack_bottom_pointer_offset());
   if (do_locks) {
     // called as a result of grow execution stack
     jint stack_lock_len = stack_lock_length();
@@ -614,9 +614,9 @@ void JavaFrame::relocate_internal_pointers(int delta, bool do_locks) {
     }
   }
 
-  *(address*)(fp() + caller_fp_offset())            = caller_fp    + delta;
-  *(address*)(fp() + locals_pointer_offset())       = locals       + delta;
-  *(address*)(fp() + stack_bottom_pointer_offset()) = stack_bottom + delta;
+  *(AddressSlot*)(fp() + caller_fp_offset())            = caller_fp    + delta;
+  *(AddressSlot*)(fp() + locals_pointer_offset())       = locals       + delta;
+  *(AddressSlot*)(fp() + stack_bottom_pointer_offset()) = stack_bottom + delta;
 }
 
 /*
@@ -653,7 +653,7 @@ jint JavaFrame::bci_with_flags() const {
   return raw_bcp() - m().code_base();
 }
 
-void JavaFrame::oops_do(void do_oop(OopDesc**)) {
+void JavaFrame::oops_do(void do_oop(OopSlot*)) {
   GUARANTEE(in_gc_state(), "We can only execute oops_do in gc state");
 
   // Compute length info before visiting method
@@ -665,7 +665,7 @@ void JavaFrame::oops_do(void do_oop(OopDesc**)) {
   TypeArray::Raw map = generate_stack_map(map_length);
 
   // Visit method >>after<< we generate the stack map
-  OopDesc** method_address = (OopDesc**) (fp() + method_offset());
+  OopSlot* method_address = (OopSlot*) (fp() + method_offset());
   do_oop(method_address);
 
   // Locals and expression stack
@@ -686,7 +686,7 @@ void JavaFrame::oops_do(void do_oop(OopDesc**)) {
   }
 }
 
-void JavaFrame::gc_prologue(void do_oop(OopDesc**)) {
+void JavaFrame::gc_prologue(void do_oop(OopSlot*)) {
 #if ENABLE_COMPILER && !ENABLE_C_INTERPRETER
 
 #if ENABLE_EMBEDDED_CALLINFO
@@ -807,30 +807,30 @@ void JavaFrame::gc_epilogue(void) {
 
 /*
 void EntryFrame::caller_is(Frame& result) const {
-  address caller_fp       = *(address*)(fp() + stored_last_fp_offset());
-  address caller_sp       = *(address*)(fp() + stored_last_sp_offset());
-  address* caller_pc_addr =  (address*)(caller_sp + JavaStackDirection * (int)sizeof(jint));
+  address caller_fp       = *(AddressSlot*)(fp() + stored_last_fp_offset());
+  address caller_sp       = *(AddressSlot*)(fp() + stored_last_sp_offset());
+  AddressSlot* caller_pc_addr =  (AddressSlot*)(caller_sp + JavaStackDirection * (int)sizeof(jint));
   result.set_values(_thread, _stack_base, caller_pc_addr, caller_sp , caller_fp);
 }
 */
 void EntryFrame::relocate_internal_pointers(int delta) {
-  address stored_fp   = *(address*) (fp() + stored_last_fp_offset());
-  address stored_sp   = *(address*) (fp() + stored_last_sp_offset());
+  address stored_fp   = *(AddressSlot*) (fp() + stored_last_fp_offset());
+  address stored_sp   = *(AddressSlot*) (fp() + stored_last_sp_offset());
   if (stored_fp != NULL) {
     GUARANTEE(stored_sp != NULL, "Sanity check");
-    *(address*)(fp() + stored_last_fp_offset()) = stored_fp + delta;
-    *(address*)(fp() + stored_last_sp_offset()) = stored_sp + delta;
+    *(AddressSlot*)(fp() + stored_last_fp_offset()) = stored_fp + delta;
+    *(AddressSlot*)(fp() + stored_last_sp_offset()) = stored_sp + delta;
   } else {
     GUARANTEE(stored_sp == NULL, "Sanity check");
   }
 }
 
-void EntryFrame::oops_do(void do_oop(OopDesc**)) {
+void EntryFrame::oops_do(void do_oop(OopSlot*)) {
   GUARANTEE(fp() + EntryFrame::empty_stack_offset() == sp(), 
             "No stack elements");
-  do_oop((OopDesc**)(fp() + EntryFrame::stored_obj_value_offset()));
-  do_oop((OopDesc**)(fp() + EntryFrame::pending_exception_offset()));
-  do_oop((OopDesc**)(fp() + EntryFrame::pending_activation_offset()));
+  do_oop((OopSlot*)(fp() + EntryFrame::stored_obj_value_offset()));
+  do_oop((OopSlot*)(fp() + EntryFrame::pending_exception_offset()));
+  do_oop((OopSlot*)(fp() + EntryFrame::pending_activation_offset()));
 }
 
 
@@ -954,7 +954,7 @@ JavaFrame::find_exception_frame(Thread* thread,
   }
   // Update the end of the stack, which always points to the correct value
   // for fp.
-  address* stack_pointer = (address*)(address_word)thread->stack_pointer();
+  AddressSlot* stack_pointer = (AddressSlot*)(address_word)thread->stack_pointer();
   stack_pointer[0] = frame.fp();
   if (bci >= 0) {
 #if ENABLE_COMPILER
@@ -966,7 +966,7 @@ JavaFrame::find_exception_frame(Thread* thread,
     // is space.  What if this is the topmost frame, and it didn't have any
     // stack previously?)
     address empty_stack =
-      *(address*)(frame.fp() + JavaFrame::stack_bottom_pointer_offset());
+      *(AddressSlot*)(frame.fp() + JavaFrame::stack_bottom_pointer_offset());
     address one_item_stack =
         empty_stack + JavaStackDirection * BytesPerStackElement;
 
@@ -1125,7 +1125,7 @@ void Frame::init(Thread *thread, address guessed_fp) {
 
   // (1) Find the object that contains guessed_fp. It must
   //     be an ExecutionStackDesc.
-  Oop s = ObjectHeap::slow_object_start((OopDesc**)guessed_fp);
+  Oop s = ObjectHeap::slow_object_start((OopSlot*)guessed_fp);
   if (!s.is_execution_stack()) {
     return;
   }
@@ -1151,7 +1151,7 @@ void Frame::init(Thread *thread, address guessed_fp) {
     if (Frame::is_plausible_fp(guessed_fp, start, limit, fp, sp, pc_addr)) {
       _is_valid_guessed_frame = true;
 
-      set_values(thread, thread->stack_base(), (address*)pc_addr, sp, fp);
+      set_values(thread, thread->stack_base(), (AddressSlot*)pc_addr, sp, fp);
       return;
     }
     guessed_fp += (-JavaStackDirection) * wordSize;
@@ -1184,14 +1184,14 @@ bool Frame::is_plausible_fp(address start, address top, address bottom,
   for (;;) {
     // Check if fp points to a valid EntryFrame
     const address ret_addr = 
-        *(address*) (fp + JavaFrame::return_address_offset());
+        *(AddressSlot*) (fp + JavaFrame::return_address_offset());
     bool is_entry = (ret_addr == (address)EntryFrame::FakeReturnAddress);
     address last_fp_address = NULL;
     address last_sp = NULL;
 
     if (is_entry) {
       // This may be an EntryFrame
-      const address caller_fp = *(address*) 
+      const address caller_fp = *(AddressSlot*) 
           (fp + EntryFrame::stored_last_fp_offset());
       if (caller_fp == NULL) {
         // This is the first entry frame
@@ -1233,7 +1233,7 @@ bool Frame::is_plausible_fp(address start, address top, address bottom,
       return false;
     }
 
-    address last_fp = *(address*) last_fp_address;
+    address last_fp = *(AddressSlot*) last_fp_address;
     if (!is_within_stack_range(last_fp, fp, bottom)) {
       // last_fp is not within range
       return false;
@@ -1350,7 +1350,7 @@ void JavaFrame::print_stack_locks_on(Stream *st) {
         st->print("SL%d ", i / STACK_LOCK_SIZE);
 
         int offset = addr - lock_low;
-        address value = *(address*)addr;
+        address value = *(AddressSlot*)addr;
         if (offset == StackLock::thread_offset()) {
           st->print(fmt, "thread");
           st->print_hex8(value);
@@ -1398,7 +1398,7 @@ void JavaFrame::print_raw_frame_on(Stream* st) {
 
   for (int offset = start; ; offset += delta) {
     const char *fmt = "%-12s";
-    address *addr = (address*)(fp() + offset);
+    AddressSlot*addr = (AddressSlot*)(fp() + offset);
     print_stack_address(st, (address)addr);
 
     if (offset == stack_bottom_pointer_offset()) {
@@ -1447,7 +1447,7 @@ void JavaFrame::print_expression_stack_on(Stream* st, TypeArray* map,
     if (PrintExtraLongFrames) {
       print_stack_address(st, (address)expr);
       st->print("E%-10d ", i);
-      st->print_hex8(*(address*)expr);
+      st->print_hex8(*(AddressSlot*)expr);
       st->print(" ");
     } else {
       st->print("        E%d ", i);
@@ -1470,7 +1470,7 @@ void JavaFrame::print_locals_on(Stream* st, TypeArray* map) {
     if (PrintExtraLongFrames) {
       print_stack_address(st, (address)local);
       st->print("L%-10d ", i);
-      st->print_hex8(*(address*)local);
+      st->print_hex8(*(AddressSlot*)local);
       st->print(" ");
     } else {
       st->print("        L%d ", i);
@@ -1526,9 +1526,9 @@ void EntryFrame::print_on(Stream* st, int index) {
     print_raw_frame_on(st);
   } else if (PrintLongFrames) {
     UsingFastOops oops;
-    Oop::Fast objValue   = stored_obj_value();
-    Oop::Fast exception  = pending_exception();
-    Oop::Fast activation = pending_activation();
+    Oop::Fast objValue   = (OopDesc*)stored_obj_value();
+    Oop::Fast exception  = (OopDesc*)pending_exception();
+    Oop::Fast activation = (OopDesc*)pending_activation();
     st->print("       I1 (int) %d\n", stored_int_value1());    
     st->print("       I2 (int) %d\n", stored_int_value2());    
     st->print("      Obj "); objValue.print_value_on(st);   st->cr();
@@ -1547,9 +1547,9 @@ void EntryFrame::print_raw_frame_on(Stream *st) {
 
   for (int offset = start; ; offset += delta) {
     const char *fmt = "%-12s";
-    address *addr = (address*)(fp() + offset);
+    AddressSlot*addr = (AddressSlot*)(fp() + offset);
 
-    if (addr == (address*)fp()) {
+    if (addr == (AddressSlot*)fp()) {
       st->print("   fp=> ");
     } else {
       st->print("        ");
@@ -1585,7 +1585,7 @@ void EntryFrame::print_raw_frame_on(Stream *st) {
       st->print(fmt, "activation");
       st->print_hex8(*addr);
 
-      EntryActivation entry = *((OopDesc**)addr);
+      EntryActivation entry = (OopDesc*)*((OopSlot*)addr);
       if (entry.not_null()) {
         st->print(" ");
         entry.print_value_on(st);

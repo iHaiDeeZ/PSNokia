@@ -32,7 +32,7 @@
 #include "SDL.h"
 #include <stdio.h>
 #include <string.h>
-#include <psp2/io/fcntl.h>
+#include <renderlog.h>
 
 static void mq_write_marker(const char* text) {
   /* Diagnostic-only: disabled — checkForSystemSignal is called on every
@@ -45,11 +45,7 @@ static void mq_write_marker(const char* text) {
 static void log_input_event(const char* source, int rawtype, int chr, int action) {
   char buf[96];
   int len = sprintf(buf, "INPUT src=%s raw=%d CHR=%d ACTION=%d\n", source, rawtype, chr, action);
-  int fd = sceIoOpen("ux0:data/renderlog.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
-  if (fd >= 0) {
-    sceIoWrite(fd, buf, len);
-    sceIoClose(fd);
-  }
+  RENDERLOG_WRITE(buf, len);
 }
 
 /*
@@ -197,17 +193,78 @@ void AxisCheck(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNewMid
  */
 extern void pss(void);
 
+#ifdef PS4
+/*
+ * The OpenOrbis SDL2 PS4 joystick numbers the DualShock 4 buttons
+ *   0 Cross, 1 Circle, 2 Square, 3 Triangle, 4 L1, 5 R1, 9 Options,
+ *   11 L3, 12 R3, 13-16 D-pad Up/Down/Left/Right, 17 Touchpad, 18 L2, 19 R2
+ * (see OpenOrbis samples/SDL2/SDL2/Game.h). Translate to the Vita indices
+ * the mapping below is written for: Options acts as Start and the
+ * touchpad click as Select (the two softkeys).
+ */
+static int ps4_to_vita_button(int btn)
+{ switch (btn) {
+    case 0:  return 2;   /* Cross    */
+    case 1:  return 1;   /* Circle   */
+    case 2:  return 3;   /* Square   */
+    case 3:  return 0;   /* Triangle */
+    case 4:  return 4;   /* L1       */
+    case 5:  return 5;   /* R1       */
+    case 9:  return 7;   /* Options -> Start  */
+    case 17: return 6;   /* Touchpad -> Select */
+    case 18: return 8;   /* L2       */
+    case 19: return 9;   /* R2       */
+    case 11: return 10;  /* L3       */
+    case 12: return 11;  /* R3       */
+    case 13: return 12;  /* D-pad Up    */
+    case 14: return 13;  /* D-pad Down  */
+    case 15: return 14;  /* D-pad Left  */
+    case 16: return 15;  /* D-pad Right */
+    default: return -1;
+  }
+}
+#endif
+
 void JoystickCheck(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNewMidpEvent)
 { int btn = event->jbutton.button;
   int isPress = (event->jbutton.state == SDL_PRESSED);
   int Key = KEYMAP_KEY_INVALID;
 
+#ifdef PS4
+  btn = ps4_to_vita_button(btn);
+#endif
   if (btn == 4 || btn == 5) { /* L1 or R1 = Shift modifier, no key of its own */
     shiftHeld = isPress;
+#ifndef PS4
   } else if (btn == 9 && isPress) { /* R2 - DEBUG_TRACE1 (temporary), direct call */
     log_input_event("pss_before", 0, 0, 0);
     pss();
     log_input_event("pss_after", 0, 0, 0);
+#endif
+#ifdef PS4
+  } else {
+    /* DS4 layout: Cross confirms and Circle is the right soft key (usually
+     * Back/Exit), matching the console's own convention; Square is the
+     * left soft key. L1/R1 held gives the second set. */
+    switch (btn) {
+      case 2: Key = shiftHeld ? KEYMAP_KEY_5 : KEYMAP_KEY_SELECT; break;       /* Cross    */
+      case 1: Key = shiftHeld ? KEYMAP_KEY_POUND : KEYMAP_KEY_SOFT2; break;    /* Circle   */
+      case 3: Key = shiftHeld ? KEYMAP_KEY_ASTERISK : KEYMAP_KEY_SOFT1; break; /* Square   */
+      case 0: Key = shiftHeld ? KEYMAP_KEY_CLEAR : KEYMAP_KEY_0; break;        /* Triangle */
+      case 7: Key = KEYMAP_KEY_SOFT1; break;     /* Options: left soft key (menu/pause) */
+      case 6: Key = KEYMAP_KEY_ASTERISK; break;  /* Touchpad */
+      case 8: Key = KEYMAP_KEY_1; break;         /* L2 */
+      case 9: Key = KEYMAP_KEY_3; break;         /* R2 */
+      case 10: Key = KEYMAP_KEY_7; break;        /* L3 */
+      case 11: Key = KEYMAP_KEY_9; break;        /* R3 */
+      case 12: Key = KEYMAP_KEY_2; break;        /* D-pad Up    */
+      case 13: Key = KEYMAP_KEY_8; break;        /* D-pad Down  */
+      case 14: Key = KEYMAP_KEY_4; break;        /* D-pad Left  */
+      case 15: Key = KEYMAP_KEY_6; break;        /* D-pad Right */
+      default: Key = KEYMAP_KEY_INVALID;
+    }
+  }
+#else
   } else {
     switch (btn) {
       case 0: Key = shiftHeld ? KEYMAP_KEY_9 : KEYMAP_KEY_3; break;            /* Triangle */
@@ -235,6 +292,7 @@ void JoystickCheck(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNe
       default: Key = KEYMAP_KEY_INVALID;
     }
   }
+#endif
   pNewSignal->waitingFor = UI_SIGNAL;
   pNewMidpEvent->type = MIDP_KEY_EVENT;
   pNewMidpEvent->CHR = Key;
@@ -286,7 +344,12 @@ void CheckEvent(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNewMi
        return;
      }
   if (event->type == SDL_JOYHATMOTION)
-     { HatCheck(event, pNewSignal, pNewMidpEvent);
+     {
+#ifndef PS4
+       /* On the PS4 the D-pad also arrives as buttons 13-16 (JoystickCheck);
+        * handling the hat as well would send every press twice */
+       HatCheck(event, pNewSignal, pNewMidpEvent);
+#endif
        return;
      }
   if (event->type == SDL_JOYAXISMOTION)
@@ -299,9 +362,22 @@ void CheckEvent(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNewMi
      }
   /* Skip logging known-noisy, non-actionable event types to avoid
    * flooding the log (and re-throttling the event loop) during
-   * diagnostics; log anything else unrecognized. */
+   * diagnostics; log anything else unrecognized.
+   * SDL_MULTIGESTURE/DOLLARGESTURE/DOLLARRECORD added after a real-hardware
+   * renderlog.txt (session 6, 2026-09-04) showed SDL_MULTIGESTURE
+   * (raw=2050) firing continuously - hundreds of times - almost certainly
+   * from the Vita's rear touchpad picking up incidental contact from how
+   * the device is held. This port doesn't implement multi-touch gestures
+   * at all, so these were pure noise, but each one still triggered a real
+   * blocking write_marker() file write - on real hardware's actual flash
+   * storage (unlike Vita3K's host-backed, effectively-instant file I/O),
+   * a flood of these is a very plausible cause of the real-hardware-only
+   * "black screen, nothing loading" hangs this project chased for two
+   * sessions without a reproducible native-side lead. */
   if (event->type != SDL_MOUSEMOTION && event->type != SDL_JOYAXISMOTION &&
-      event->type != SDL_WINDOWEVENT && event->type != SDL_TEXTINPUT) {
+      event->type != SDL_WINDOWEVENT && event->type != SDL_TEXTINPUT &&
+      event->type != SDL_MULTIGESTURE && event->type != SDL_DOLLARGESTURE &&
+      event->type != SDL_DOLLARRECORD) {
     log_input_event("unhandled", event->type, -999, -999);
   }
 }

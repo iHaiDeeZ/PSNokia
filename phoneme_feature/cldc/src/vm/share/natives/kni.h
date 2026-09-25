@@ -163,7 +163,24 @@ KNIEXPORT jboolean KNI_IsAssignableFrom(jclass classHandle1,
 /**
  * Exceptions and errors
  */
-KNIEXPORT jint     KNI_ThrowNew(const char* name, const char* message);
+/* Diagnostic added 2026-09-05: chasing a real-hardware OutOfMemoryError
+ * (Metal Slug) that turned out to come from kni.cpp's KNI_ThrowNew,
+ * meaning some native code explicitly throws OutOfMemoryError by name
+ * (KNI_ThrowNew(midpOutOfMemoryError, NULL)) rather than the Java heap
+ * allocator itself failing - confirmed via the OOM_SITE_KNI141 marker
+ * in kni.cpp. There are ~40 such call sites scattered across MIDP's
+ * native code, each identical in appearance, so instead of editing
+ * every one, this macro captures __FILE__/__LINE__ at every EXISTING,
+ * unmodified call site and forwards to a location-aware implementation
+ * - a compile-time fix, not the unreliable __builtin_return_address()
+ * runtime technique already tried and found to give wrong answers
+ * twice for tail-call-shaped throw sites. Remove both the macro here
+ * and KNI_ThrowNewImpl/its logging in kni.cpp once the real call site
+ * is found and fixed. */
+KNIEXPORT jint     KNI_ThrowNewImpl(const char* name, const char* message,
+                       const char* file, int line);
+#define KNI_ThrowNew(name, message) \
+        KNI_ThrowNewImpl((name), (message), __FILE__, __LINE__)
 KNIEXPORT void     KNI_FatalError(const char* message);
 
 /**
@@ -374,11 +391,31 @@ KNIEXPORT void     _KNI_pop_handles(_KNI_HandleInfo*);
 #define KNI_DeclareHandle(x) \
   jobject x = (jobject)(void*)&__handles__[__handle_info__.declared_count++]
 
+#if defined(__LP64__) || defined(_WIN64)
+/*
+ * 64-bit hosts: object references are 4-byte words (see narrow<T> in
+ * GlobalDefinitions.hpp). A handle may point at a 4-byte slot (a Java stack
+ * parameter, a persistent handle) or at an 8-byte __handles__ entry whose
+ * upper half is always zero, so only the low 4 bytes are ever accessed.
+ */
+#define KNI_IsNullHandle(x) \
+  (*(unsigned int*)(x) == 0)
+
+#define KNI_ReleaseHandle(x) \
+  *(unsigned int*)(x) = 0
+
+#define _KNI_HANDLE_VALUE(x) \
+  ((jobject)(unsigned long long)*(unsigned int*)(x))
+#else
 #define KNI_IsNullHandle(x) \
   (*(jobject*)x == 0)
 
 #define KNI_ReleaseHandle(x) \
   *(jobject*)x = 0
+
+#define _KNI_HANDLE_VALUE(x) \
+  (*(jobject*)x)
+#endif
 
 #define KNI_EndHandles() \
   (void)_KNI_pop_handles(&__handle_info__); \
@@ -388,7 +425,7 @@ KNIEXPORT void     _KNI_pop_handles(_KNI_HandleInfo*);
 #define KNI_EndHandlesAndReturnObject(x) \
     (void)_KNI_pop_handles(&__handle_info__); \
     (void)__dummy__; \
-    return *(jobject*)x; \
+    return _KNI_HANDLE_VALUE(x); \
 }
 
 #ifdef __ARMCC_VERSION

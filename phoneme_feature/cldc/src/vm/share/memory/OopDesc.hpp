@@ -37,19 +37,19 @@
 // object in the java heap. Do not write the pointer directly.
 
 #ifndef PRODUCT
-bool oop_check_barrier(OopDesc** addr);
-bool oop_in_old_space(OopDesc** addr);
+bool oop_check_barrier(OopSlot* addr);
+bool oop_in_old_space(OopSlot* addr);
 #endif
 
 // Call this if addr is guaranteed to be in the young space
-inline void oop_write_barrier_for_young_obj(OopDesc** addr, OopDesc* value)
+inline void oop_write_barrier_for_young_obj(OopSlot* addr, OopDesc* value)
 {
   GUARANTEE(!oop_in_old_space(addr), "must not be in old space");
   *addr = value;
 }
 
 // Call this if addr is not guaranteed to be in the young space
-void oop_write_barrier(OopDesc** addr, OopDesc* value);
+void oop_write_barrier(OopSlot* addr, OopDesc* value);
 
 class OopDesc {
 public:
@@ -83,15 +83,15 @@ public:
   size_t object_size() const {
     return object_size_for(blueprint());
   }
-  inline void oops_do(void do_oop(OopDesc**)) {
+  inline void oops_do(void do_oop(OopSlot*)) {
     oops_do_for(blueprint(), do_oop);
   }
-  inline void oops_do_inline(void do_oop(OopDesc**)) {
+  inline void oops_do_inline(void do_oop(OopSlot*)) {
     oops_do_for(blueprint(), do_oop);
   }
 
-  inline void near_do(void do_oop(OopDesc**));  // Visits near pointer only
-  inline void map_oops_do(jubyte* map, void do_oop(OopDesc**));
+  inline void near_do(void do_oop(OopSlot*));  // Visits near pointer only
+  inline void map_oops_do(jubyte* map, void do_oop(OopSlot*));
   void* field_base(int offset) const { return (void*)&((char*)this)[offset];  }
 
   // simple type tests:
@@ -148,8 +148,8 @@ public:
   inline bool is_jar_file_parser() const;  
 
   // field address computation:
-  OopDesc** obj_field_addr(int offset) const {
-    return (OopDesc**)&((char*)this)[offset];
+  OopSlot* obj_field_addr(int offset) const {
+    return (OopSlot*)&((char*)this)[offset];
   }
   jbyte* byte_field_addr(int offset) const {
     return (jbyte*)&((char*)this)[offset];
@@ -189,7 +189,7 @@ public:
   }
 
 private:
-  OopDesc* _klass;
+  NARROW(OopDesc*) _klass;
 #if ENABLE_OOP_TAG
   // Useful for extreme debugging of objects.  Each object can get
   // some identifier applied (see Oop.hpp).  In one implementation
@@ -212,7 +212,7 @@ private:
   int      _oop_tag;
 #endif
   size_t object_size_for(const FarClassDesc* blueprint) const;
-  void oops_do_for(const FarClassDesc* blueprint, void do_oop(OopDesc**));
+  void oops_do_for(const FarClassDesc* blueprint, void do_oop(OopSlot*));
 
   friend class BasicOop;
   friend class LinkedBasicOop;

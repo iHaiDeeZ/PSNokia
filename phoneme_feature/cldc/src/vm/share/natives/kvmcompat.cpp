@@ -92,36 +92,36 @@ void kvmcompat_initialize() {
   GlobalRootsLength = 0;
 }
 
-void kvmcompat_oops_do(void do_oop(OopDesc**)) {
+void kvmcompat_oops_do(void do_oop(OopSlot*)) {
   ARRAY_CLASS *pac = PrimitiveArrayClasses;
 
-  do_oop((OopDesc**)(&pac[T_BOOLEAN]));
-  do_oop((OopDesc**)(&pac[T_CHAR]));
+  do_oop((OopSlot*)(&pac[T_BOOLEAN]));
+  do_oop((OopSlot*)(&pac[T_CHAR]));
 #if ENABLE_FLOAT
-  do_oop((OopDesc**)(&pac[T_FLOAT]));
-  do_oop((OopDesc**)(&pac[T_DOUBLE]));
+  do_oop((OopSlot*)(&pac[T_FLOAT]));
+  do_oop((OopSlot*)(&pac[T_DOUBLE]));
 #endif
-  do_oop((OopDesc**)(&pac[T_BYTE]));
-  do_oop((OopDesc**)(&pac[T_SHORT]));
-  do_oop((OopDesc**)(&pac[T_INT]));
-  do_oop((OopDesc**)(&pac[T_LONG]));
+  do_oop((OopSlot*)(&pac[T_BYTE]));
+  do_oop((OopSlot*)(&pac[T_SHORT]));
+  do_oop((OopSlot*)(&pac[T_INT]));
+  do_oop((OopSlot*)(&pac[T_LONG]));
 
   cell *p, *end;
 
   p   = (cell*)(&GlobalRoots[0]);
   end = (cell*)(&GlobalRoots[GlobalRootsLength]);
   for (; p<end; p++) {
-    do_oop((OopDesc**)(*p));
+    do_oop((OopSlot*)(*p));
   }
 
   p   = (cell*)(&TemporaryRoots[0]);
   end = (cell*)(&TemporaryRoots[TemporaryRootsLength]);
   for (; p<end; p++) {
-    do_oop((OopDesc**)(*p));
+    do_oop((OopSlot*)(*p));
   }
 
   if (_kvm_return_type == T_OBJECT || _kvm_return_type == T_ARRAY) {
-    do_oop((OopDesc**)(&_kvm_return_value32));
+    do_oop((OopSlot*)(&_kvm_return_value32));
   }
 }
 

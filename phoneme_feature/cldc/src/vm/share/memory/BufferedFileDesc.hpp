@@ -35,7 +35,7 @@ class BufferedFileDesc: public MixedOopDesc {
  protected:
   static size_t header_size() { return allocation_size(); }
 
-  OopDesc * _data_buffer;
+  NARROW(OopDesc*) _data_buffer;
 
   /* All oops must go before here.  If you change the number of oops, be
    * sure to change pointer_count()

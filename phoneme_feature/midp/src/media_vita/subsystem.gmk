@@ -1,0 +1,35 @@
+#####################################################################
+#
+# Media subsystem for the Vita port: real tone / tone-sequence / WAV
+# playback via a native SDL2-backed mixer (media_vita.c +
+# vita_mix_shim.c). Replaces the plain "media" stub subsystem (see
+# Subsystems.gmk's USE_MEDIA_VITA guard) - createPlayer()/playTone()
+# actually work instead of always throwing MediaException. Standard MIDI
+# Files play through a software synthesizer (midi_synth.c).
+#
+#####################################################################
+
+SUBSYSTEM_MEDIA_VITA_JAVA_FILES = \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/Control.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/Controllable.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/Manager.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/MediaException.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/Player.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/PlayerListener.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/MIDletPauseListener.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/ABBBasicPlayer.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/GenericPlayer.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/ToneSequencePlayer.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/MIDIPlayer.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/MidiFilePlayer.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/control/ToneControl.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/control/VolumeControl.java \
+    $(SUBSYSTEM_DIR)/media_vita/reference/classes/javax/microedition/media/control/MIDIControl.java
+
+SUBSYSTEM_MEDIA_VITA_NATIVE_FILES = media_vita.c vita_mix_shim.c midi_synth.c
+
+SUBSYSTEM_MEDIA_VITA_SOURCEPATH = $(SUBSYSTEM_DIR)/media_vita/reference/classes
+
+MIDP_JAVADOC_SOURCEPATH += $(SUBSYSTEM_MEDIA_VITA_SOURCEPATH)
+
+vpath %.c $(SUBSYSTEM_DIR)/media_vita/reference/native

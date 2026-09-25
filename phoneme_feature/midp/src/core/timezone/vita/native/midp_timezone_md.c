@@ -44,7 +44,12 @@
 #include <midp_properties_port.h>
 #include <midpTimeZone.h>
 
+#ifdef PS4
+#include <stdio.h>
+#include <time.h>
+#else
 #include <psp2/rtc.h>
+#endif
 
 /**
  * Return local timezone ID string. This string is maintained by this
@@ -59,9 +64,22 @@
  */
 char* getLocalTimeZone() {
     static char tz[12]; /* No longer than "GMT-10:00" */
+    int offsetMinutes = 0;
+#ifdef PS4
+    /* localtime_r() applies the console's time zone setting (and DST);
+     * tm_gmtoff is that offset from UTC in seconds. */
+    {
+        time_t now = time(NULL);
+        struct tm local;
+        if (localtime_r(&now, &local) != NULL) {
+            offsetMinutes = (int)(local.tm_gmtoff / 60);
+        } else {
+            REPORT_WARN(LC_CORE, "getLocalTimeZone: localtime_r failed, defaulting to GMT+00:00.");
+        }
+    }
+#else
     SceDateTime utcTime, localTime;
     SceRtcTick utcTick, localTick;
-    int offsetMinutes = 0;
 
     /* sceRtcGetCurrentClockLocalTime() already applies the Vita's
      * configured system timezone (and DST, if the underlying platform
@@ -77,6 +95,7 @@ char* getLocalTimeZone() {
     } else {
         REPORT_WARN(LC_CORE, "getLocalTimeZone: RTC query failed, defaulting to GMT+00:00.");
     }
+#endif
 
     {
         int hours = offsetMinutes / 60;

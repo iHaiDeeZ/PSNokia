@@ -196,8 +196,8 @@ void SourceROMWriter::write_image(JVM_SINGLE_ARG_TRAPS) {
 }
 
 void SourceROMWriter::write_text_defines(FileStream* stream) {
-  stream->print_cr("#define TEXT(x)  (int)&_rom_text_block[x]");
-  stream->print_cr("#define TEXTb(x) (int)&(((char*)_rom_text_block)[x])");
+  stream->print_cr("#define TEXT(x)  ROMPTR(&_rom_text_block[x])");
+  stream->print_cr("#define TEXTb(x) ROMPTR(&(((char*)_rom_text_block)[x]))");
 }
 
 void SourceROMWriter::write_text_undefines(FileStream* stream) {
@@ -221,9 +221,9 @@ void SourceROMWriter::init_declare_stream() {
 
   write_text_defines(&_declare_stream);
 
-  _declare_stream.print_cr("#define DATA(x)  (int)&_rom_data_block[x]");
-  _declare_stream.print_cr("#define DATAb(x) (int)&(((char*)_rom_data_block)[x])");
-  _declare_stream.print_cr("#define HEAP(x)  (int)&_rom_heap_block[x]");
+  _declare_stream.print_cr("#define DATA(x)  ROMPTR(&_rom_data_block[x])");
+  _declare_stream.print_cr("#define DATAb(x) ROMPTR(&(((char*)_rom_data_block)[x]))");
+  _declare_stream.print_cr("#define HEAP(x)  ROMPTR(&_rom_heap_block[x])");
   _declare_stream.cr();
 }
 
@@ -1050,13 +1050,13 @@ int SourceROMWriter::print_rom_hashtable_header(const char *table_name,
     main_stream()->print_cr("#define BUCKET(x) TEXT(%d + (x))", text_offset);
 #endif
   } else {
-    main_stream()->print_cr("#define BUCKET(x) (const int)&_rom_%s[x]", table_name);
+    main_stream()->print_cr("#define BUCKET(x) ROMPTR(&_rom_%s[x])", table_name);
   }
   write_text_undefines(main_stream());
   main_stream()->print_cr("#undef DATA");
   
   write_text_defines(main_stream());
-  main_stream()->print_cr("#define DATA(x) (const int)&_rom_data_block[x]");
+  main_stream()->print_cr("#define DATA(x) ROMPTR(&_rom_data_block[x])");
 
   main_stream()->print_cr("const int _rom_%s_num_buckets = %d;", table_name,
                    num_buckets);
@@ -2033,7 +2033,7 @@ void OffsetFinder::begin_object(Oop *object JVM_TRAPS) {
         loc_offset -= writer()->_pass_sizes[i]; 
       }
 
-      loc_offset -= skip_words * sizeof(jobject);
+      loc_offset -= skip_words * sizeof(OopSlot);
       writer()->set_loc_offset_of(object, loc_offset JVM_CHECK);
     }
 #endif
@@ -2056,7 +2056,7 @@ void OffsetFinder::begin_object(Oop *object JVM_TRAPS) {
     SHOULD_NOT_REACH_HERE();
   }
 
-  offset -= skip_words * sizeof(jobject);
+  offset -= skip_words * sizeof(OopSlot);
 #if ENABLE_HEAP_NEARS_IN_HEAP  
   if (_current_type == ROMWriter::TEXT_AND_HEAP_BLOCK) {
     //we must clone it into the heap!    

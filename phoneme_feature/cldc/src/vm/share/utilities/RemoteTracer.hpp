@@ -53,7 +53,7 @@ class RemoteTracer: public AllStatic {
   static void set_classparser_state_size(int value);
   static bool tick();
   static void update_stats(OopDesc* obj);
-  static void update_stats_from_heap(OopDesc** heap_start, OopDesc** collection_area_start);
+  static void update_stats_from_heap(OopSlot* heap_start, OopSlot* collection_area_start);
   static void freeze_stats();
   static void send_snapshot();
  private:

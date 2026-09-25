@@ -46,6 +46,26 @@ interface AbstractImageDataFactory {
     ImageData createOffScreenImageData(int width, int height);
 
     /**
+     * Creates a new, mutable image data for off-screen drawing whose alpha
+     * channel starts fully allocated and zeroed (i.e. every pixel starts
+     * fully TRANSPARENT, not opaque white like createOffScreenImageData).
+     * Added for Nokia UI's DirectUtils.createImage(w,h,argb) with an
+     * alpha=0 argb - real callers (sprite-sheet tile extractors that build
+     * a shaped icon by drawing a source region onto a blank canvas and
+     * relying on everything else staying transparent) depend on this; see
+     * build notes for why this needs a dedicated ImageData constructor
+     * path rather than filling an already-created image after the fact
+     * (Graphics.drawRGB with an all-alpha-0 source silently writes
+     * nothing, confirmed empirically - it cannot retrofit transparency
+     * onto an existing opaque image).
+     *
+     * @param width the width of the new image, in pixels
+     * @param height the height of the new image, in pixels
+     * @return the created, fully transparent image data
+     */
+    ImageData createTransparentOffScreenImageData(int width, int height);
+
+    /**
      * Creates an immutable image data from a source mutable image data.
      *
      * <p> This method is useful for placing the contents of mutable images

@@ -1,0 +1,21 @@
+#
+# PCSL platform configuration for the PS4 (OpenOrbis, clang for x86_64
+# FreeBSD ELF via the gcc-style wrappers in GNU_TOOLS_DIR, see
+# ps4/toolchain). Build with PCSL_OS=ps4 PCSL_CPU=c so the
+# output lands in output/ps4_c, where the CLDC (ps4_c) and MIDP builds
+# look for it.
+#
+
+PCSL_OS=ps4
+PCSL_CPU=c
+
+FILE_MODULE=posix
+NETWORK_MODULE=stubs
+PRINT_MODULE=stubs
+# pcsl_mem_malloc -> malloc, which is the low heap on this platform
+MEMORY_MODULE=malloc
+
+include $(PCSL_DIR)/makefiles/share/gcc.gmk
+
+EXE=
+LIBS=

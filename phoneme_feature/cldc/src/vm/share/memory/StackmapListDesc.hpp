@@ -36,7 +36,7 @@ class StackmapListDesc: public OopDesc {
   
  public:
   // GC support.
-  void variable_oops_do(void do_oop(OopDesc**));
+  void variable_oops_do(void do_oop(OopSlot*));
 
   // Returns the object size
   size_t object_size() { return allocation_size(_entry_count); }

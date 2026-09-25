@@ -1,0 +1,2 @@
+#!/bin/bash
+exec "${PS4_LLVM:?source ps4/env.sh first}/bin/llvm-ranlib" "$@"

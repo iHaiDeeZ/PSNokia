@@ -41,7 +41,7 @@
 
 // The scheduler handles all thread switching
 
-typedef void (*do_thread_proc)(Thread*, void do_oop(OopDesc**));
+typedef void (*do_thread_proc)(Thread*, void do_oop(OopSlot*));
 
 class Scheduler : public AllStatic {
 private:
@@ -205,7 +205,7 @@ private:
   static void master_mode_wait_for_event_or_timer(jlong sleep_time);
   static void slave_mode_wait_for_event_or_timer(jlong sleep_time);
 
-  static void oops_doer(Thread* thread, void do_oop(OopDesc**));
+  static void oops_doer(Thread* thread, void do_oop(OopSlot*));
 
   static OopDesc* _gc_global_head;
   static OopDesc* _gc_current_thread;
@@ -282,16 +282,16 @@ private:
 
   // GC support
   static void threads_do_list(do_thread_proc do_thread,
-                              void do_oop(OopDesc**),
+                              void do_oop(OopSlot*),
                               OopDesc* list_head);
 
   static void iterate(do_thread_proc do_thread) {
     threads_do_list(do_thread, NULL, Universe::global_threadlist()->obj());
   }
 
-  static void oops_do(void do_oop(OopDesc**));
+  static void oops_do(void do_oop(OopSlot*));
 
-  static void gc_prologue(void do_oop(OopDesc**));
+  static void gc_prologue(void do_oop(OopSlot*));
   static void gc_epilogue(void);
 
   // Makes current thread wait for condition

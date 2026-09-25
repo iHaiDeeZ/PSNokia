@@ -24,13 +24,13 @@
  * information or have any questions.
  */
 
-void OopDesc::map_oops_do(jubyte* map, void do_oop(OopDesc**)) {
+void OopDesc::map_oops_do(jubyte* map, void do_oop(OopSlot*)) {
   // Note: each value in the map is between [0, 0x80] (inclusive).
   // This is a little waste of space, but rarely we have more than 127
   // words between pointers inside an object. This restriction makes
   // it possible to complete the following loop with 1 comparison per
   // iteration in most cases.
-  for( OopDesc** base = (OopDesc**) this;;) {
+  for( OopSlot* base = (OopSlot*) this;;) {
     const jint entry = (jint)(*((jbyte*)map)); map++;
     if (entry > 0) {
       base += entry; 
@@ -44,9 +44,9 @@ void OopDesc::map_oops_do(jubyte* map, void do_oop(OopDesc**)) {
   }
 }
 
-void OopDesc::near_do(void do_oop(OopDesc**)) {
+void OopDesc::near_do(void do_oop(OopSlot*)) {
   // No oop map for near pointer
-  do_oop((OopDesc**)&_klass);
+  do_oop((OopSlot*)&_klass);
 }
 
 // The basic Java types

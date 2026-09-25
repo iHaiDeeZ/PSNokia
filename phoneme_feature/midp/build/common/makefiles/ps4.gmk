@@ -1,0 +1,14 @@
+######################################################################
+#
+# OS specific defines for the Vita target
+#
+######################################################################
+ifndef _PS4_GMK_
+_PS4_GMK_      =
+# Java tools here are native Windows programs: separate paths with ;
+PATHSEP         = \;
+EXE             =
+BAT             =
+EXTRA_CFLAGS    += -DLINUX -DUNIX
+WHOAMI          = whoami
+endif

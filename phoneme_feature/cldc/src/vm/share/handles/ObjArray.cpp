@@ -31,17 +31,17 @@ HANDLE_CHECK(ObjArray, is_obj_array())
 
 void ObjArray::fill_zero(OopDesc *obj_array) {
   ObjArray::Raw array = obj_array;
-  jvm_memset(array().base_address(), 0, array().length() * sizeof(OopDesc*));
+  jvm_memset(array().base_address(), 0, array().length() * sizeof(OopSlot));
 }
 
 void ObjArray::obj_at_put(int index, OopDesc* value) {
   obj_field_put(offset_from_index(index), value);
 }
 
-void oop_write_barrier_range(OopDesc** start, int len) {
+void oop_write_barrier_range(OopSlot* start, int len) {
   juint start_offset;
   juint head, main, tail;
-  OopDesc **p;
+  OopSlot*p;
   const juint BLOCK = 32;
 
   if (len < BLOCK) {
@@ -107,10 +107,10 @@ void ObjArray::array_copy(ObjArray* src, jint src_pos,
     return;
   }
 
-  OopDesc** src_start =
-      (OopDesc**) src->field_base(base_offset() + src_pos * oopSize);
-  OopDesc** dst_start =
-      (OopDesc**) dst->field_base(base_offset() + dst_pos * oopSize);
+  OopSlot* src_start =
+      (OopSlot*) src->field_base(base_offset() + src_pos * oopSize);
+  OopSlot* dst_start =
+      (OopSlot*) dst->field_base(base_offset() + dst_pos * oopSize);
   if (src->equals(dst)) {
     // since source and destination are equal we do not need conversion checks.
     jvm_memmove(dst_start, src_start, length * oopSize);

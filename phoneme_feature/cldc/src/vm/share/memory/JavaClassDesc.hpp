@@ -30,29 +30,29 @@
  */
 class JavaClassDesc: public FarClassDesc {
  public:
-  ClassInfoDesc* _class_info;     // Info for this class that remains constant
-  FarClassDesc*  _subtype_cache_1;// used for fast is_a test
-  FarClassDesc*  _subtype_cache_2;
+  NARROW(ClassInfoDesc*) _class_info;     // Info for this class that remains constant
+  NARROW(FarClassDesc*) _subtype_cache_1;// used for fast is_a test
+  NARROW(FarClassDesc*) _subtype_cache_2;
 
   // array class holding elements of this class
-  FarClassDesc* _array_class;
+  NARROW(FarClassDesc*) _array_class;
 #if ENABLE_ISOLATES 
   // The JavaClassDesc object does not contain static variable, java mirror
   // or references to array_class. Instead, a Task Mirror object referenced
   // from the current mirror list at the index equal to the class's id
   // holds these items.
 #else
-  InstanceDesc*  _java_mirror;    // instance of java/lang/Class mirroring
+  NARROW(InstanceDesc*) _java_mirror;    // instance of java/lang/Class mirroring
                                   // this class
 #endif
 
-  FarClassDesc*  _super;          // superclass
+  NARROW(FarClassDesc*) _super;          // superclass
 
   struct _instance {
-    JavaClassDesc* _next;         // Next Java class with same hash value
+    NARROW(JavaClassDesc*) _next;         // Next Java class with same hash value
   };
   struct _array {
-    JavaClassDesc* _element_class;// The klass of the elements of this
+    NARROW(JavaClassDesc*) _element_class;// The klass of the elements of this
                                   // array type
   };
 

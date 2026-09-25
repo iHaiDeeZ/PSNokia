@@ -70,9 +70,12 @@ typedef struct Java_javax_microedition_lcdui_ImageData java_imagedata;
 /**
  * Get a C structure representing the given <tt>ImageData</tt> class.
  */
+/* The explicit cast gives both branches the same pointer type: on 64-bit
+ * hosts imageData is a 32-bit (__ptr32) reference, and clang 18 crashes
+ * on conditionals that mix the two. */
 #define GXAPI_GET_IMAGEDATA_PTR_FROM_GRAPHICS(handle) \
   GXAPI_GET_GRAPHICS_PTR(handle)->img != NULL ? \
-  GXAPI_GET_GRAPHICS_PTR(handle)->img->imageData : \
+  (java_imagedata*)GXAPI_GET_GRAPHICS_PTR(handle)->img->imageData : \
   (java_imagedata*)NULL
 
 /**

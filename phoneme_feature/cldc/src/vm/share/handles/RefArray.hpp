@@ -59,18 +59,20 @@ class RefArray: public Array {
   static OopDesc* null ( void ) {
     return (OopDesc*) NULL;
   }
+  // All ones in a 4-byte heap word; (OopDesc*)-1 does not fit in one on
+  // 64-bit hosts (see narrow<T>).
   static OopDesc* dead ( void ) {
-    return (OopDesc*) -1;
+    return (OopDesc*)(address_word)0xFFFFFFFFu;
   }
   static bool not_null_or_dead( OopDesc* obj ) {
-    return address_word(address_word(obj)+1) > address_word(1);
+    return juint(juint(address_word(obj))+1) > juint(1);
   }
 
-  OopDesc** base( void ) const {
-    return DERIVED( OopDesc**, obj(), base_offset() );
+  OopSlot* base( void ) const {
+    return DERIVED( OopSlot*, obj(), base_offset() );
   }
 
-  OopDesc** obj_addr_at(const int index) const {
+  OopSlot* obj_addr_at(const int index) const {
     GUARANTEE( index >= 0 && index < length(), "sanity");
     return base() + index;
   }
@@ -105,6 +107,6 @@ class RefArray: public Array {
     return obj == dead() ? null() : get_value( obj );
   }
 
-  void oops_do(void do_oop(OopDesc**), const int mask);
-  static void clear_non_marked( OopDesc** p );
+  void oops_do(void do_oop(OopSlot*), const int mask);
+  static void clear_non_marked( OopSlot* p );
 };

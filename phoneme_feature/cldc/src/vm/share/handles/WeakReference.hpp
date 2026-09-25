@@ -36,7 +36,7 @@ class WeakReference : public Instance {
   HANDLE_DEFINITION_CHECK(WeakReference, Instance);
 
   static int referent_index_offset() {
-    return header_size() + 0 * sizeof(jobject);
+    return header_size() + 0 * sizeof(OopSlot);
   }
 
   jint referent_index() const {

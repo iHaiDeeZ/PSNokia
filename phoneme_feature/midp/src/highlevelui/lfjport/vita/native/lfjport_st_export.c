@@ -33,18 +33,15 @@
 #include "SDL.h"
 #include "midp_constants_data.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <psp2/io/fcntl.h>
+#include <renderlog.h>
 unsigned int _newlib_heap_size_user = 8*1024*1024; /* override vitasdk 128MiB default that fails to allocate */
 
 static void st_write_marker(const char* text) {
   /* Only called from lfjport_ui_init now (twice, at startup) — cheap,
    * safe to leave as real file I/O for diagnostics. */
-  int fd = sceIoOpen("ux0:data/renderlog.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
-  if (fd >= 0) {
-    sceIoWrite(fd, text, strlen(text));
-    sceIoClose(fd);
-  }
+  RENDERLOG_WRITE(text, (int)strlen(text));
 }
 
 #define SDL_FULLWIDTH	FULLWIDTH
@@ -67,6 +64,13 @@ void FinalizeAudioSubsystem(void) { }
 int  pushcacheddatasize(int fd) { (void)fd; return 0; }
 
 SDL_Surface     *Native_SDL_Screen, *Native_SDL_HScreen, *Native_SDL_VScreen;
+#ifdef PS4
+/* The PS4 always outputs 1080p. The MIDP framebuffer is converted to the
+ * window's pixel format (PS4_Converted) and scaled to fit the TV. */
+#define PS4_SCREEN_WIDTH  1920
+#define PS4_SCREEN_HEIGHT 1080
+static SDL_Surface *PS4_Converted;
+#endif
 SDL_Window      *Native_SDL_Window;
 static jboolean  Native_SDL_ScreenOrientation;
 static jboolean  Native_SDL_Fullscreen;
@@ -103,8 +107,24 @@ int lfjport_ui_init()
   if (getenv("J2ME_GP2X_REVERSE") != NULL) OriginalOrientation = 1;
   OriginalWidth = OriginalOrientation ? SDL_FULLHEIGHT : SDL_FULLWIDTH;
   OriginalHeight = OriginalOrientation ? SDL_FULLWIDTH : SDL_FULLHEIGHT;
+#ifdef PS4
+  /* Per-game screen size ("WxH", set by runMidlet_md.c): e.g. 128x128 for
+   * early Nokia games, which otherwise draw into one corner */
+  { const char *size = getenv("J2ME_SCREEN_SIZE");
+    int w, h;
+    if (size != NULL && sscanf(size, "%dx%d", &w, &h) == 2 &&
+        w >= 96 && h >= 64 && w <= 640 && h <= 640)
+       { OriginalWidth = w;
+         OriginalHeight = h;
+       }
+  }
+#endif
   InitGP2XKeys();
+#ifdef PS4
+  Native_SDL_Window = SDL_CreateWindow("MIDP", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, PS4_SCREEN_WIDTH, PS4_SCREEN_HEIGHT, 0);
+#else
   Native_SDL_Window = SDL_CreateWindow("MIDP", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SDL_FULLWIDTH, SDL_FULLHEIGHT, 0);
+#endif
   if (Native_SDL_Window == NULL) return(-2);
   Native_SDL_Screen = SDL_GetWindowSurface(Native_SDL_Window);
   if (Native_SDL_Screen == NULL) return(-2);
@@ -169,31 +189,66 @@ static void fps_report(void) {
      * before a full second elapses) still leave evidence in the log. */
     char buf[48];
     int len = sprintf(buf, "FIRST_FRAME at tick=%u\n", (unsigned int)now);
-    int fd = sceIoOpen("ux0:data/renderlog.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
-    if (fd >= 0) {
-      sceIoWrite(fd, buf, len);
-      sceIoClose(fd);
-    }
+    RENDERLOG_WRITE(buf, len);
     reportedFirst = 1;
   }
   if (now - lastTick >= 1000) {
     char buf[48];
     int len = sprintf(buf, "FPS: %u (total=%u)\n", frames, totalFrames);
-    int fd = sceIoOpen("ux0:data/renderlog.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
-    if (fd >= 0) {
-      sceIoWrite(fd, buf, len);
-      sceIoClose(fd);
-    }
+    RENDERLOG_WRITE(buf, len);
     frames = 0;
     lastTick = now;
   }
 }
+
+#ifdef PS4
+/* Scales the current MIDP framebuffer to the largest centered rectangle
+ * with the same aspect ratio that fits the 1080p window. */
+static void ps4_present(SDL_Surface *source)
+{ SDL_Rect dst;
+  if (PS4_Converted == NULL || PS4_Converted->w != source->w ||
+      PS4_Converted->h != source->h)
+     { if (PS4_Converted != NULL) SDL_FreeSurface(PS4_Converted);
+       PS4_Converted = SDL_ConvertSurface(source, Native_SDL_Screen->format, 0);
+       if (PS4_Converted == NULL) return;
+     }
+  SDL_BlitSurface(source, NULL, PS4_Converted, NULL);
+  /* Snapshots of the MIDP screen for diagnosis (fetch over FTP) */
+  { static int frames;
+    frames++;
+    if (frames == 60 || frames == 250 || frames == 600 || frames == 1500)
+       { char name[64];
+         snprintf(name, sizeof(name), "/data/psnokia/frame%d.bmp", frames);
+         SDL_SaveBMP(PS4_Converted, name);
+       }
+  }
+  if (source->w * Native_SDL_Screen->h > source->h * Native_SDL_Screen->w)
+     { dst.w = Native_SDL_Screen->w;
+       dst.h = source->h * Native_SDL_Screen->w / source->w;
+     }
+  else
+     { dst.h = Native_SDL_Screen->h;
+       dst.w = source->w * Native_SDL_Screen->h / source->h;
+     }
+  dst.x = (Native_SDL_Screen->w - dst.w) / 2;
+  dst.y = (Native_SDL_Screen->h - dst.h) / 2;
+  /* Clear the borders every frame: the window surface may be double
+   * buffered */
+  SDL_FillRect(Native_SDL_Screen, NULL, SDL_MapRGB(Native_SDL_Screen->format, 0, 0, 0));
+  SDL_BlitScaled(PS4_Converted, NULL, Native_SDL_Screen, &dst);
+}
+#endif
 
 void lfjport_refresh(int x1, int y1, int x2, int y2)
 { unsigned short *Video, *Buffer;
   fps_report();
   SDL_UnlockSurface(Native_SDL_HScreen);
   SDL_UnlockSurface(Native_SDL_VScreen);
+#ifdef PS4
+  (void)Video;
+  (void)Buffer;
+  ps4_present(Native_SDL_ScreenOrientation ? Native_SDL_VScreen : Native_SDL_HScreen);
+#else
   if (Native_SDL_ScreenOrientation) 
      { if (OriginalOrientation == 1) SDL_BlitSurface(Native_SDL_VScreen, NULL, Native_SDL_Screen, NULL);
        else { SDL_LockSurface(Native_SDL_Screen);
@@ -211,6 +266,7 @@ void lfjport_refresh(int x1, int y1, int x2, int y2)
                 SDL_UnlockSurface(Native_SDL_Screen);
               }
        }
+#endif
   SDL_UpdateWindowSurface(Native_SDL_Window);
   SDL_LockSurface(Native_SDL_HScreen);
   SDL_LockSurface(Native_SDL_VScreen);

@@ -28,6 +28,7 @@
 #include "incls/_kni.cpp.incl"
 
 extern "C" int _in_kvm_native_method;
+extern "C" void write_marker(const char* text, int len);
 
 //
 // Version information
@@ -120,7 +121,8 @@ KNIEXPORT jboolean KNI_IsAssignableFrom(jclass classHandle1,
 //
 // Exceptions and errors
 //
-KNIEXPORT jint KNI_ThrowNew(const char* name, const char* message) {
+KNIEXPORT jint KNI_ThrowNewImpl(const char* name, const char* message,
+                                const char* file, int line) {
 
   if(_jvm_in_quick_native_method) {
     _jvm_quick_native_exception = (char*)name;
@@ -138,6 +140,8 @@ KNIEXPORT jint KNI_ThrowNew(const char* name, const char* message) {
 
   if (class_name.equals(Symbols::java_lang_OutOfMemoryError())) {
     // Avoid allocating the exception object when we're running out of memory.
+    { char b[512]; int l=jvm_sprintf(b,"OOM_SITE_KNI141 from %s:%d\n", file, line);
+      write_marker(b,l); }
     Throw::out_of_memory_error(JVM_SINGLE_ARG_NO_CHECK);
     return KNI_OK;
   }
@@ -551,7 +555,7 @@ KNIEXPORT jdouble KNI_GetParameterAsDouble(jint index) {
 
 KNIEXPORT void KNI_GetParameterAsObject(jint index, jobject obj) {
   GUARANTEE(!_in_kvm_native_method, "sanity");
-  kni_set_handle(obj, *((OopDesc**)parameter_address(index)));
+  kni_set_handle(obj, *((OopSlot*)parameter_address(index)));
 }
 
 KNIEXPORT void KNI_GetThisPointer(jobject toHandle) {

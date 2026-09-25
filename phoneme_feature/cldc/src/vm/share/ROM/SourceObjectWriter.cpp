@@ -233,7 +233,7 @@ void SourceObjectWriter::begin_object(Oop *object JVM_TRAPS) {
   }
   int pass = writer()->pass_of(object JVM_CHECK);
   int skip_words = writer()->skip_words_of(object JVM_CHECK);
-  int skip_bytes = sizeof(jobject) * skip_words;
+  int skip_bytes = sizeof(OopSlot) * skip_words;
 
   FarClass blueprint = object->blueprint();
   InstanceSize instance_size = blueprint.instance_size();
@@ -649,7 +649,7 @@ void SourceObjectWriter::put_compiled_method_symbolic(CompiledMethod *cm,
         if (GenerateROMComments) {
           _stream->print("/* Native= */ ");
         }
-        _stream->print("(int)%s", (char*)native_name.data());
+        _stream->print("ROMPTR(%s)", (char*)native_name.data());
         return;
       }
     }
@@ -686,7 +686,7 @@ void SourceObjectWriter::put_method_variable_part(Method *method JVM_TRAPS) {
   _stream->print("/* variable_part= */");
     
   if (has_split_variable_part(method)) { 
-    _stream->print("(int) &(_rom_method_variable_parts[%d])", 
+    _stream->print("ROMPTR(&(_rom_method_variable_parts[%d]))", 
                    _variable_parts_offset);
     _method_variable_parts.obj_at_put(_variable_parts_offset, method);
 
@@ -820,7 +820,7 @@ void SourceObjectWriter::put_c_function(Method *method, address addr,
     }
   }
 
-  output_stream->print("(int) %s%s", prefix, name);
+  output_stream->print("ROMPTR(%s%s)", prefix, name);
 }
 
 bool SourceObjectWriter::is_kvm_native(Method *method) {
@@ -999,7 +999,7 @@ void SourceObjectWriter::put_oopmap(Oop *owner, address addr) {
 
   for (int i=0; i<count; i++) {
     if (addr == oopmap_info[i].addr) {
-      _stream->print("(int) %s", oopmap_info[i].name);
+      _stream->print("ROMPTR(%s)", oopmap_info[i].name);
       return;
     }
   }
@@ -1167,7 +1167,7 @@ void SourceObjectWriter::count(Oop *object, int adjustment) {
         count(mc_class_info, num_bytes);
 
         if (info().vtable_length() > 0) {
-          count(mc_vtable, info().vtable_length() * sizeof(jobject));
+          count(mc_vtable, info().vtable_length() * sizeof(OopSlot));
         }
         if (info().itable_length() > 0) {
           count(mc_itable, info().itable_size());

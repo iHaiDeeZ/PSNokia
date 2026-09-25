@@ -219,7 +219,7 @@ class ClassInfo: public Oop {
     return ushort_field(vtable_length_offset());
   }
   static int vtable_offset_from_index(int index) {
-    return ClassInfoDesc::header_size() + (index *  sizeof(jobject));
+    return ClassInfoDesc::header_size() + (index *  sizeof(OopSlot));
   }
 
   // Interfaces this class declares locally to implement

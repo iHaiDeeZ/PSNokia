@@ -391,7 +391,7 @@ void ClassFileParser::remove_unused_utf8_entries(ConstantPool* cp) {
   AllocationDisabler raw_pointers_used_in_this_function;
 
   TypeArray::Raw tags = cp->tags();
-  OopDesc **entryptr = (OopDesc**)cp->base_address();
+  OopSlot*entryptr = (OopSlot*)cp->base_address();
   jubyte *tagptr = (jubyte*)tags().base_address();
   jubyte *tagend = tagptr + cp->length();
 
@@ -422,9 +422,23 @@ void ClassFileParser::remove_unused_utf8_entries(ConstantPool* cp) {
   }
 }
 
+/* Diagnostic added 2026-09-05: chasing a real-hardware OOM (Metal
+ * Slug) that throws OutOfMemoryError during class parsing with the
+ * heap barely touched (326KB used of 7MB) - see write_marker at
+ * Throw::out_of_memory_error. Logging the raw constant-pool-count and
+ * stackmap-count fields as read, unconditionally (bounded to once per
+ * class/method, not a per-frame flood) to see directly whether either
+ * is a plausible small value or a corrupted/garbage one. */
+extern "C" void write_marker(const char* text, int len);
+
 ReturnOop ClassFileParser::parse_constant_pool(JVM_SINGLE_ARG_TRAPS) {
   UsingFastOops fast_oops;
   int length = get_u2(JVM_SINGLE_ARG_CHECK_0);
+  {
+    char diag_buf[64];
+    int diag_len = jvm_sprintf(diag_buf, "CFP_CP_LEN len=%d\n", length);
+    write_marker(diag_buf, diag_len);
+  }
   ConstantPool::Fast cp = Universe::new_constant_pool(length JVM_CHECK_0);
   parse_constant_pool_entries(&cp JVM_CHECK_0);
   validate_and_fixup_constant_pool_entries(&cp JVM_CHECK_0);
@@ -580,7 +594,7 @@ void ClassFileParser::check_for_duplicate_fields(ConstantPool* cp,
     int jmax = fields.length();
     int step = Field::NUMBER_OF_SLOTS;
     const jushort* const field_base = (jushort*)fields.base_address();
-    OopDesc **cp_base = (OopDesc**)cp->base_address();
+    OopSlot*cp_base = (OopSlot*)cp->base_address();
 
     //
     // Note: this algorithm has quadratic complexity
@@ -720,7 +734,7 @@ bool ClassFileParser::are_valid_method_access_flags(
       //
       //if (!class_access_flags.is_abstract()) {
       //  //abstract methods must be declared in an abstract class, 
-      //  //   JVMS §2.10.3
+      //  //   JVMS ï¿½2.10.3
       //  return false;
       //}
       if ((flags & JVM_ACC_STRICT) != 0) {
@@ -1104,6 +1118,9 @@ ReturnOop ClassFileParser::parse_method(ClassParserState *state, ConstantPool* c
   if (max_stack_count >= 0x00008000) {
     // Make sure we don't overflow Method::max_execution_stack_count.
     // Make it less than 0x8000, in case we have subtle sign-extension bugs.
+    { char b[64]; int l=jvm_sprintf(b,
+        "OOM_SITE_CFP1121 max_stack_count=%d\n", (int)max_stack_count);
+      write_marker(b,l); }
     Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW_(0));
   }
 
@@ -1287,6 +1304,13 @@ ReturnOop ClassFileParser::parse_code_attributes(ConstantPool* cp,
       }
 
       num_stackmaps = get_u2(JVM_SINGLE_ARG_CHECK_0);
+      {
+        char diag_buf[96];
+        int diag_len = jvm_sprintf(diag_buf,
+            "CFP_NUM_STACKMAPS n=%d max_stack=%d max_locals=%d\n",
+            num_stackmaps, max_stack, max_locals);
+        write_marker(diag_buf, diag_len);
+      }
       stackmaps = Universe::new_obj_array(2*num_stackmaps JVM_CHECK_0);
 
       // parse the stackmap entries for this method
@@ -1335,7 +1359,7 @@ void ClassFileParser::check_for_duplicate_methods(ConstantPool *cp,
 
     AllocationDisabler raw_pointers_used_in_this_block;
     const int len = methods.length();
-    OopDesc ** cp_base = (OopDesc**)cp->base_address();
+    OopSlot* cp_base = (OopSlot*)cp->base_address();
 
     // Note: this algorithm has quadratic complexity
     //

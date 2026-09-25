@@ -641,8 +641,8 @@ ReturnOop InstanceClass::find_method(ObjArray* class_methods, Symbol* name,
 
   OopDesc *name_obj = name->obj();
   OopDesc *sig_obj = signature->obj();
-  MethodDesc **ptr = (MethodDesc**)class_methods->base_address();
-  MethodDesc **end = ptr + class_methods->length();
+  NARROW(MethodDesc*)*ptr = (NARROW(MethodDesc*)*)class_methods->base_address();
+  NARROW(MethodDesc*)*end = ptr + class_methods->length();
 
   while (ptr < end) {
     MethodDesc *m = *ptr++;
@@ -909,7 +909,7 @@ void InstanceClass::itable_copy_down(InstanceClass* ic, int& index,
     }
 
     info().obj_field_put(method_offset, &method);
-    method_offset += sizeof(jobject);
+    method_offset += sizeof(OopSlot);
   }
 }
 

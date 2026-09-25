@@ -58,7 +58,7 @@ class Profiler : public AllStatic {
    static void print(Stream* out, int id);
 
    /// Garbage collection support
-   static void oops_do(void do_oop(OopDesc**));
+   static void oops_do(void do_oop(OopSlot*));
 
    // Profile the current method
    static void profile_method(Method* method, bool is_compiled);

@@ -298,6 +298,36 @@ public class Image {
     }
 
     /**
+     * Creates a new, mutable image for off-screen drawing whose every pixel
+     * starts fully TRANSPARENT, unlike {@link #createImage(int, int)} whose
+     * pixels start opaque white. Not part of the standard MIDP API - added
+     * to back Nokia UI's DirectUtils.createImage(w,h,argb) for an alpha=0
+     * argb, which real Nokia-originated MIDlets (e.g. sprite-sheet tile
+     * extractors that draw a source region onto a blank canvas and expect
+     * everywhere else to stay transparent) depend on. Filling an
+     * already-created image via Graphics.drawRGB with an all-alpha-0
+     * buffer does NOT work on this port (confirmed empirically - it
+     * silently writes nothing), so this needs its own ImageData
+     * construction path with the alpha channel pre-allocated and zeroed
+     * from the start, not a way to retrofit transparency after the fact.
+     *
+     * @param width the width of the new image, in pixels
+     * @param height the height of the new image, in pixels
+     * @return the created, fully transparent image
+     *
+     * @throws IllegalArgumentException if either <code>width</code> or
+     * <code>height</code> is zero or less
+     */
+    public static Image createTransparentImage(int width, int height) {
+        if (width <= 0 || height <= 0) {
+            throw new IllegalArgumentException();
+        }
+
+        return new Image(ImageDataFactory.getImageDataFactory().
+                         createTransparentOffScreenImageData(width, height));
+    }
+
+    /**
      * Creates an immutable image from a source image.
      * If the source image is mutable, an immutable copy is created and
      * returned.  If the source image is immutable, the implementation may

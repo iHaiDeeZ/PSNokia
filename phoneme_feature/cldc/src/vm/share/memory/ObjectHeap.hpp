@@ -147,11 +147,11 @@ private:
   // fields in a struct, instead of from disparate global vars.
   class QuickVars {
   public:
-    OopDesc**  heap_start;
-    OopDesc**  compaction_start;
-    OopDesc**  collection_area_start;
-    OopDesc**  collection_area_end;
-    OopDesc*** slices_start;
+    OopSlot*  heap_start;
+    OopSlot*  compaction_start;
+    OopSlot*  collection_area_start;
+    OopSlot*  collection_area_end;
+    OopSlot** slices_start;
 
     size_t     slice_shift;
     size_t     slice_offset_bits;
@@ -159,9 +159,9 @@ private:
     size_t     near_mask;
     size_t     slice_offset_mask;
 
-    OopDesc**  rom_text_start;
+    OopSlot*  rom_text_start;
     size_t     rom_text_size;
-    OopDesc**  rom_data_start;
+    OopSlot*  rom_data_start;
   };
 
   static QuickVars _quick_vars;
@@ -209,7 +209,7 @@ public:
   // (including _klass field) - use with CARE
   static OopDesc* clone(OopDesc* source JVM_TRAPS);
   
-  inline static OopDesc **allocation_top() { return _inline_allocation_top; }
+  inline static OopSlot*allocation_top() { return _inline_allocation_top; }
 
   // Deallocate the heap
   static void dispose();
@@ -217,7 +217,7 @@ public:
   // Set the size of the object heap and the adjacent user allocation space
   // by setting the pointer delineating the border between the two spaces
   static void* set_heap_limit ( void* new_heap_limit );
-  static void set_heap_top    ( OopDesc** const new_heap_top );
+  static void set_heap_top    ( OopSlot* const new_heap_top );
   static void get_heap_info   ( void **heap_start, void **heap_limit, 
                                 void **heap_end);
 
@@ -245,9 +245,9 @@ public:
       clear_inline_allocation_area();
     }
 #endif
-  static OopDesc** disable_allocation_trap( void ) {
+  static OopSlot* disable_allocation_trap( void ) {
 #if ENABLE_ISOLATES
-    OopDesc** const allocation_end = _inline_allocation_end;
+    OopSlot* const allocation_end = _inline_allocation_end;
     _inline_allocation_end = _real_inline_allocation_end;
     return allocation_end;
 #else
@@ -255,7 +255,7 @@ public:
 #endif
   }
 
-  static void enable_allocation_trap(OopDesc** allocation_end) {
+  static void enable_allocation_trap(OopSlot* allocation_end) {
 #if ENABLE_ISOLATES
     _inline_allocation_end = allocation_end == NULL ? allocation_end :
       current_task_allocation_end();
@@ -327,17 +327,17 @@ private:
 #endif
   };
 
-  static FinalizerConsDesc* _finalizer_reachable[ NUM_OF_FINALIZERS ];
-  static FinalizerConsDesc* _finalizer_pending  [ NUM_OF_FINALIZERS ];
+  static NARROW(FinalizerConsDesc*) _finalizer_reachable[ NUM_OF_FINALIZERS ];
+  static NARROW(FinalizerConsDesc*) _finalizer_pending  [ NUM_OF_FINALIZERS ];
 
   static void init_finalizers( void );
 
   static void register_finalizer_reachable_object(Oop* referent JVM_TRAPS);
-  static void mark_finalizers( FinalizerConsDesc** list );
+  static void mark_finalizers( NARROW(FinalizerConsDesc*)* list );
   static void unmark_pending_finalizers( void );
-  static void update_interior_pointers( FinalizerConsDesc** list );
-  static void finalize( FinalizerConsDesc** list );
-  static void finalize( FinalizerConsDesc** list, const int task );
+  static void update_interior_pointers( NARROW(FinalizerConsDesc*)* list );
+  static void finalize( NARROW(FinalizerConsDesc*)* list );
+  static void finalize( NARROW(FinalizerConsDesc*)* list, const int task );
   static void set_heap_limit0( void* new_heap_limit );
 public:
   static address glue_code_start() {
@@ -425,7 +425,7 @@ public:
   }
 #endif
 
-  static OopDesc** mark_area_end (void) {
+  static OopSlot* mark_area_end (void) {
     return _large_object_area_bottom;
   }
 
@@ -438,10 +438,10 @@ public:
   }
 
   static void update_compiler_area_top(const OopDesc* latest_compiled_method) {
-    OopDesc** compiler_area_top = _saved_compiler_area_top;
+    OopSlot* compiler_area_top = _saved_compiler_area_top;
     if( latest_compiled_method ) {
       GUARANTEE(latest_compiled_method == (OopDesc*)compiler_area_top, "sanity");
-      compiler_area_top = DERIVED(OopDesc**, compiler_area_top,
+      compiler_area_top = DERIVED(OopSlot*, compiler_area_top,
                                    latest_compiled_method->object_size());
     }
     _compiler_area_top = compiler_area_top;
@@ -470,12 +470,12 @@ public:
   static void shrink_with_compiler_area( const int size );
 #endif
 
-  static OopDesc** compiler_area_end (void) {
+  static OopSlot* compiler_area_end (void) {
     return mark_area_end();
   }
 
 #if ENABLE_COMPILER
-  static int compiler_area_tail (OopDesc** start) {
+  static int compiler_area_tail (OopSlot* start) {
     return DISTANCE(start, compiler_area_end());
   }
   static int compiler_area_size (void) {
@@ -522,12 +522,12 @@ public:
   static void set_collection_area_boundary_reuse();
   static void set_collection_area_boundary_no_reuse(
                                            size_t min_free_after_collection);
-  static void rom_init_heap_bounds(OopDesc **init_heap_bound, 
-                                   OopDesc **permanent_top);
+  static void rom_init_heap_bounds(OopSlot*init_heap_bound, 
+                                   OopSlot*permanent_top);
   // Iteration
 #if !defined(PRODUCT) || USE_PRODUCT_BINARY_IMAGE_GENERATOR
   static void iterate(ObjectHeapVisitor* visitor);
-  static void iterate(ObjectHeapVisitor* visitor, OopDesc** from, OopDesc** to);
+  static void iterate(ObjectHeapVisitor* visitor, OopSlot* from, OopSlot* to);
 #else
   static void iterate(ObjectHeapVisitor*) PRODUCT_RETURN;
 #endif
@@ -574,59 +574,59 @@ public:
   static int code_item_summary();
 
   // Testing
-  static bool contains_live(OopDesc** /*target*/) PRODUCT_RETURN0;
+  static bool contains_live(OopSlot* /*target*/) PRODUCT_RETURN0;
   static bool contains_live(const OopDesc* target) {
-    return contains_live((OopDesc**) target);
+    return contains_live((OopSlot*) target);
   }
-  static bool contains(OopDesc** target) {
+  static bool contains(OopSlot* target) {
     return _heap_start <= target && target < mark_area_end();
   }
   static bool contains(const OopDesc* target)  {
-      return contains((OopDesc**) target);
+      return contains((OopSlot*) target);
   }
-  static bool in_collection_area(OopDesc** target) {
+  static bool in_collection_area(OopSlot* target) {
     return _debugger_active && _collection_area_start <= target
 #if ENABLE_COMPILER
       && target < compiler_area_end()
 #endif
       ;
   }
-  static bool in_collection_area_unmarked( OopDesc** obj ) {
+  static bool in_collection_area_unmarked( OopSlot* obj ) {
     return _collection_area_start <= obj && obj < mark_area_end()
       && !test_bit_for( obj );
   }
   static bool in_collection_area_unmarked( const OopDesc* obj ) {
-    return in_collection_area_unmarked( (OopDesc**) obj );
+    return in_collection_area_unmarked( (OopSlot*) obj );
   }
 
-  static bool permanent_contains(OopDesc** /*target*/) PRODUCT_RETURN0;
+  static bool permanent_contains(OopSlot* /*target*/) PRODUCT_RETURN0;
 
   static bool contains_moveable(const OopDesc* target) {
-    return _heap_start <= ((OopDesc**)target)&&((OopDesc**)target)<_heap_top;
+    return _heap_start <= ((OopSlot*)target)&&((OopSlot*)target)<_heap_top;
   }
 
   // Bitvector access
-  static inline bool test_bit_for(OopDesc** p, 
+  static inline bool test_bit_for(OopSlot* p, 
                                   address bitvector_base = _bitvector_base);
-  static inline void set_bit_for(OopDesc** p,
+  static inline void set_bit_for(OopSlot* p,
                                   address bitvector_base = _bitvector_base);
-  static inline void clear_bit_for(OopDesc** p, 
+  static inline void clear_bit_for(OopSlot* p, 
                                   address bitvector_base = _bitvector_base);
-  static inline bool test_and_set_bit_for(OopDesc** p, 
+  static inline bool test_and_set_bit_for(OopSlot* p, 
                                   address bitvector_base = _bitvector_base);
-  static inline void set_bit_range(OopDesc** start, int len);
-  static void clear_bit_range(OopDesc** start, OopDesc** exclusive_end);
-  static void do_nothing(OopDesc**);
+  static inline void set_bit_range(OopSlot* start, int len);
+  static void clear_bit_range(OopSlot* start, OopSlot* exclusive_end);
+  static void do_nothing(OopSlot*);
 
   // Debugging support
-  static OopDesc* slow_object_start(OopDesc** /*target*/) PRODUCT_RETURN0;
-  static void verify_near_oop(OopDesc** /*p*/) PRODUCT_RETURN;
-  static void verify_other_oop(OopDesc** /*p*/) PRODUCT_RETURN;
-  static void verify_only_permanent_pointers(OopDesc** /*p*/) PRODUCT_RETURN;
+  static OopDesc* slow_object_start(OopSlot* /*target*/) PRODUCT_RETURN0;
+  static void verify_near_oop(OopSlot* /*p*/) PRODUCT_RETURN;
+  static void verify_other_oop(OopSlot* /*p*/) PRODUCT_RETURN;
+  static void verify_only_permanent_pointers(OopSlot* /*p*/) PRODUCT_RETURN;
   static void verify() PRODUCT_RETURN;
-  static void verify_bitvector_range(OopDesc** /*verify_start*/) 
+  static void verify_bitvector_range(OopSlot* /*verify_start*/) 
                                      PRODUCT_RETURN;
-  static void verify_bitvector_alignment(OopDesc** /*p*/) PRODUCT_RETURN;
+  static void verify_bitvector_alignment(OopSlot* /*p*/) PRODUCT_RETURN;
   static void verify_layout() PRODUCT_RETURN;
 
 #ifdef AZZERT
@@ -666,7 +666,7 @@ private:
 
  private:
   // Bitvector access implementation
-  static unsigned oop_index (OopDesc** p) {
+  static unsigned oop_index (OopSlot* p) {
     GUARANTEE(contains(p), "Should be in object heap");
     return unsigned(address_word(p) >> LogBytesPerWord);
   }
@@ -692,8 +692,8 @@ private:
   static int      _current_task_id;          // Current resource owner
   static int      _previous_task_id;         // Previous task that allocated memory
 
-  static OopDesc**_real_inline_allocation_end;
-  static OopDesc**_task_allocation_start;
+  static OopSlot*_real_inline_allocation_end;
+  static OopSlot*_task_allocation_start;
 
   static unsigned _reserved_memory_deficit;
   static unsigned _current_deficit;
@@ -707,18 +707,18 @@ private:
     return _task_info[ task_id ];
   }
  
-  static OopDesc** current_task_allocation_end ( void );
+  static OopSlot* current_task_allocation_end ( void );
 
  private:
-  static OopDesc**      get_boundary_classes( void );
-  static BoundaryDesc** get_boundary_list   ( void );
+  static OopSlot*      get_boundary_classes( void );
+  static NARROW(BoundaryDesc*)* get_boundary_list   ( void );
   static int            get_current_task    ( void );
 
   // Pointer to classes is cached in a temporary variable
   static int get_owner( const BoundaryDesc* p, const OopDesc* const classes[] );
 
-  static void create_boundary( OopDesc** p, const int task );
-  static void accumulate_memory_usage( OopDesc* lwb[], OopDesc* upb[] );
+  static void create_boundary( OopSlot* p, const int task );
+  static void accumulate_memory_usage( OopSlot lwb[], OopSlot upb[] );
   static void set_task_memory_reserve_limit(const int task,
                 const unsigned reserve, const unsigned limit) {
     TaskMemoryInfo& task_info = get_task_info( task );
@@ -731,8 +731,8 @@ private:
   static unsigned detect_out_of_memory_tasks( const size_t /*alloc_size*/ );
 #endif
 
-  static inline void set_task_allocation_start( OopDesc** p );
-  static inline void set_inline_allocation_end( OopDesc** p ) {
+  static inline void set_task_allocation_start( OopSlot* p );
+  static inline void set_inline_allocation_end( OopSlot* p ) {
     _inline_allocation_end = p;
 #if ENABLE_ISOLATES
     _real_inline_allocation_end = p;
@@ -740,9 +740,9 @@ private:
   }
 
   // Marking support
-  static void roots_do_to( void do_oop(OopDesc**), const bool young_only,
+  static void roots_do_to( void do_oop(OopSlot*), const bool young_only,
                                                                 const int upb );
-  static void roots_do( void do_oop(OopDesc**), const bool young_only = false ){
+  static void roots_do( void do_oop(OopSlot*), const bool young_only = false ){
 #if ENABLE_COMPILER
     const int upb = CompiledMethodCache::upb;
 #else
@@ -753,12 +753,12 @@ private:
 
   static void setup_marking_stack(void);
   static void mark_remembered_set(void);
-  static juint mark_and_stack_pointers(OopDesc** p, juint bitword);
-  static void mark_pointer_to_young_generation  (OopDesc** p);
-  static void mark_and_push(OopDesc** p);
+  static juint mark_and_stack_pointers(OopSlot* p, juint bitword);
+  static void mark_pointer_to_young_generation  (OopSlot* p);
+  static void mark_and_push(OopSlot* p);
   static void mark_and_push_compiled_method(CompiledMethodDesc *cm);
-  static void mark_root_and_stack(OopDesc** p);
-  static void mark_and_stack_root_and_interior_pointers(OopDesc** p);
+  static void mark_root_and_stack(OopSlot* p);
+  static void mark_and_stack_root_and_interior_pointers(OopSlot* p);
   static void continue_marking(void);
   static void check_marking_stack_overflow(void);
 
@@ -769,13 +769,13 @@ private:
   // Pointer updating
   static void update_other_interior_pointers( const bool is_full_collect );
   static void update_execution_stack_interior_pointers();
-  static void update_interior_pointer(OopDesc** p);
-  static void update_interior_pointer_delimited(OopDesc** p);
-  static void mark_forward_pointer(OopDesc** p);
-  static OopDesc** mark_forward_pointers();
+  static void update_interior_pointer(OopSlot* p);
+  static void update_interior_pointer_delimited(OopSlot* p);
+  static void mark_forward_pointer(OopSlot* p);
+  static OopSlot* mark_forward_pointers();
 
-  static void update_moving_object_interior_pointers(OopDesc** p);
-  static void update_moving_object_near_pointer(OopDesc** p);
+  static void update_moving_object_interior_pointers(OopSlot* p);
+  static void update_moving_object_near_pointer(OopSlot* p);
 
   // Four main GC phases
   static void mark_objects( const bool is_full_collect );
@@ -789,7 +789,7 @@ private:
   inline static OopDesc* rom_oop_from_offset(size_t offset,
                                              const QuickVars& qv);
   inline static OopDesc* rom_oop_from_offset(size_t offset);
-  inline static OopDesc* decode_near(OopDesc* obj, OopDesc **heap_start, 
+  inline static OopDesc* decode_near(OopDesc* obj, OopSlot*heap_start, 
                                      size_t near_mask);
   inline static FarClassDesc* decode_far_class_with_real_near(OopDesc* obj);
   inline static FarClassDesc* decode_far_class_with_encoded_near(OopDesc* obj,
@@ -798,21 +798,21 @@ private:
                                              const QuickVars& qv = _quick_vars);
 
   // Global reference support
-  static void global_refs_do(void do_oop(OopDesc**), const int mask);
+  static void global_refs_do(void do_oop(OopSlot*), const int mask);
 
   // Finalization support
   static void discover_finalizer_reachable_objects();
 
   // Bitvector support
 
-  static OopDesc** align_down ( OopDesc** p ) {
-    return (OopDesc**) align_size_down((size_t)p, alignment);
+  static OopSlot* align_down ( OopSlot* p ) {
+    return (OopSlot*) align_size_down((size_t)p, alignment);
   }
   static unsigned align_down ( const unsigned n ) {
     return align_size_down(n, alignment);
   }
-  static OopDesc** align_up ( OopDesc** p ) {
-    return (OopDesc**) align_size_up((size_t)p, alignment);
+  static OopSlot* align_up ( OopSlot* p ) {
+    return (OopSlot*) align_size_up((size_t)p, alignment);
   }
   static unsigned align_up ( const unsigned n ) {
     return align_size_up(n, alignment);
@@ -822,32 +822,32 @@ private:
     GUARANTEE_R( n % alignment == 0, "must be aligned" );    
   }
 public:
-  static juint* get_bitvectorword_for_aligned(OopDesc** p) {
+  static juint* get_bitvectorword_for_aligned(OopSlot* p) {
     AZZERT_ONLY(verify_bitvector_alignment(p));
     return DERIVED(juint*, _bitvector_base,
                      ((uintptr_t)p) >> (LogBytesPerWord+LogBitsPerByte));
   }
 private:
-  static juint* get_bitvectorword_for_unaligned(OopDesc** p) {
+  static juint* get_bitvectorword_for_unaligned(OopSlot* p) {
     return get_bitvectorword_for_aligned( align_down( p ) );
   }
 
-  static OopDesc** get_aligned_for_bitvectorword(juint *ptr) {
-    return (OopDesc**)
+  static OopSlot* get_aligned_for_bitvectorword(juint *ptr) {
+    return (OopSlot*)
         (DISTANCE(_bitvector_base, ptr) << (LogBytesPerWord + LogBitsPerByte));
   }
-  static void write_barrier_oops_do(void do_oop(OopDesc**),
-                                    OopDesc** start, OopDesc** end);
-  static void write_barrier_oops_update_interior_pointers(OopDesc** start,
-                                                          OopDesc** end);
+  static void write_barrier_oops_do(void do_oop(OopSlot*),
+                                    OopSlot* start, OopSlot* end);
+  static void write_barrier_oops_update_interior_pointers(OopSlot* start,
+                                                          OopSlot* end);
   static void write_barrier_oops_update_moving_object_interior_pointers(
-                               OopDesc** start, OopDesc** end);
+                               OopSlot* start, OopSlot* end);
   static void write_barrier_oops_update_moving_object_near_pointer(
-                               OopDesc** start, OopDesc** end);
+                               OopSlot* start, OopSlot* end);
   static void write_barrier_oops_unencode_moving_object_near_pointer(
-                               OopDesc** start, OopDesc** end);
+                               OopSlot* start, OopSlot* end);
 
-  static void finalizer_oops_do(FinalizerConsDesc** list, void do_oop(OopDesc**));
+  static void finalizer_oops_do(NARROW(FinalizerConsDesc*)* list, void do_oop(OopSlot*));
 
   // Code flushing support
   static void mark_or_flush_compiled_methods();
@@ -902,7 +902,7 @@ private:
 
   // Static variables for heap boundaries
   static address    _bitvector_start;
-  static OopDesc**  _permanent_generation_top;
+  static OopSlot*  _permanent_generation_top;
 
   // Static variables for bit masks and sizes
 
@@ -927,7 +927,7 @@ private:
   static bool      _last_heap_expansion_failed;
 
 #if ENABLE_COMPILER
-  static OopDesc** _saved_compiler_area_top;
+  static OopSlot* _saved_compiler_area_top;
 #endif
 
 #if ENABLE_INTERNAL_CODE_OPTIMIZER
@@ -939,7 +939,7 @@ public:
   //free the memory allocated during code scheduling quickly
   static void update_compiler_area_top_fast();
 private:
-  static OopDesc** _saved_compiler_area_top_quick;
+  static OopSlot* _saved_compiler_area_top_quick;
 #endif
 
 #if ENABLE_PERFORMANCE_COUNTERS || ENABLE_TTY_TRACE
@@ -949,7 +949,7 @@ private:
 #endif
 
 #ifndef PRODUCT
-  static OopDesc** _heap_start_bitvector_verify;
+  static OopSlot* _heap_start_bitvector_verify;
   static int       _excessive_gc_countdown;
 
   friend class GCDisabler;
@@ -962,7 +962,7 @@ private:
 
   friend class LargeObject;
   friend class Universe;
-  friend void oop_write_barrier_range(OopDesc** start, int len);
+  friend void oop_write_barrier_range(OopSlot* start, int len);
   friend void garbageCollect(int moreMemory);
 #if ENABLE_TRAMPOLINE  && !CROSS_GENERATOR
   friend class BranchTable;
@@ -977,7 +977,7 @@ class ObjectHeapVisitor : public StackObj {
 };
 
 // Write barrier for object array copy
-void oop_write_barrier_range(OopDesc** start, int len);
+void oop_write_barrier_range(OopSlot* start, int len);
 
 #ifndef PRODUCT
 
@@ -1005,7 +1005,7 @@ public:
 class AllocationDisabler {
 private:
   friend class ObjectHeap;
-  static OopDesc** _current_allocation_top;
+  static OopSlot* _current_allocation_top;
 public:
   AllocationDisabler()  {
     if (AllocationDisabler__disabling_count == 0) {
@@ -1098,22 +1098,22 @@ inline bool is_bit_set(unsigned int offset, unsigned int* map) {
   return is_set_nth_bit(*word_for(offset, map), offset%BitsPerWord); 
 }
 
-inline void ObjectHeap::set_bit_for(OopDesc** p, address bitvector_base) {
+inline void ObjectHeap::set_bit_for(OopSlot* p, address bitvector_base) {
   const unsigned i = oop_index(p);
   bitvector_word( i, bitvector_base ) |= bitvector_bit_mask( i );
 }
 
-inline void ObjectHeap::clear_bit_for(OopDesc** p, address bitvector_base) {
+inline void ObjectHeap::clear_bit_for(OopSlot* p, address bitvector_base) {
   const unsigned i = oop_index(p);
   bitvector_word( i, bitvector_base ) &=~bitvector_bit_mask( i );
 }
 
-inline bool ObjectHeap::test_bit_for(OopDesc** p, address bitvector_base) {
+inline bool ObjectHeap::test_bit_for(OopSlot* p, address bitvector_base) {
   const unsigned i = oop_index(p);
   return (bitvector_word( i, bitvector_base ) & bitvector_bit_mask( i )) != 0;
 }
 
-inline bool ObjectHeap::test_and_set_bit_for(OopDesc** p,
+inline bool ObjectHeap::test_and_set_bit_for(OopSlot* p,
                                              address bitvector_base) {
   const unsigned i = oop_index(p);
   const unsigned bitword = bitvector_word( i, bitvector_base );
@@ -1123,7 +1123,7 @@ inline bool ObjectHeap::test_and_set_bit_for(OopDesc** p,
 }
 
 // Consider using word stores here, depends on the average length
-inline void ObjectHeap::set_bit_range(OopDesc** start, int len) {
+inline void ObjectHeap::set_bit_range(OopSlot* start, int len) {
   unsigned int t = oop_index(start);
   unsigned int* const bitvector_base = (unsigned int*)_bitvector_base;
   for (int i = 0; i < len; i++, t++) {

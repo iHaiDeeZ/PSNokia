@@ -30,7 +30,12 @@
 #include <midp_logging.h>
 #include <midp_constants_data.h>
 #include <midpNativeThread.h>
+#ifdef PS4
+#include <pthread.h>
+#include <unistd.h>
+#else
 #include <psp2/kernel/threadmgr.h>
+#endif
 /**
  * @file
  *
@@ -63,7 +68,11 @@ midp_ThreadId midp_startNativeThread(midp_ThreadRoutine thread,
  */
 void midp_sleepNativeThread(int duration) {
     if (duration > 0) {
+#ifdef PS4
+        sleep((unsigned int)duration);
+#else
         sceKernelDelayThread((SceUInt)duration * 1000000);
+#endif
     }
 }
 /**
@@ -72,5 +81,9 @@ void midp_sleepNativeThread(int duration) {
  * @return handle of the current created thread
  */
 midp_ThreadId midp_getCurrentThreadId() {
+#ifdef PS4
+    return (midp_ThreadId)(long)pthread_self();
+#else
     return (midp_ThreadId)(long)sceKernelGetThreadId();
+#endif
 }

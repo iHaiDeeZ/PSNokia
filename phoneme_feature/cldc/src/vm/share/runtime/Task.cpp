@@ -84,11 +84,11 @@ int     Task::_num_tasks_stopping;
 #if ENABLE_OOP_TAG
 int     Task::_seq_num = 1;
 int Task::current_task_seq(int id) {
-  ObjArrayDesc *tlist = *(ObjArrayDesc **)Universe::task_list();
+  ObjArrayDesc *tlist = *(NARROW(ObjArrayDesc*)*)Universe::task_list();
   if (tlist == NULL) {
     return _seq_num;
   }
-  TaskDesc *t = (TaskDesc *)*tlist->obj_field_addr(tlist->header_size() + (id * sizeof(jobject)));
+  TaskDesc *t = (TaskDesc *)*tlist->obj_field_addr(tlist->header_size() + (id * sizeof(OopSlot)));
   if (t == NULL) {
     return _seq_num;
   }

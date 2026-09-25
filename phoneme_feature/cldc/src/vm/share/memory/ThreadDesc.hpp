@@ -26,26 +26,26 @@
 
 class ThreadDescPointers: public MixedOopDesc {
 protected:
-  ThreadDesc*  _next;                  // 
-  ThreadDesc*  _previous;              // 
-  ThreadDesc*  _global_next;           // next thread in the global
+  NARROW(ThreadDesc*) _next;                  // 
+  NARROW(ThreadDesc*) _previous;              // 
+  NARROW(ThreadDesc*) _global_next;           // next thread in the global
                                        // thread list
-  ThreadDesc*  _next_waiting;          // list of all threads waiting
-  OopDesc*     _wait_obj;              // Object this thread is waiting for
+  NARROW(ThreadDesc*) _next_waiting;          // list of all threads waiting
+  NARROW(OopDesc*) _wait_obj;              // Object this thread is waiting for
 
-  OopDesc*     _pending_exception;     // Contains the pending exception.
-  OopDesc*     _thread_obj;            // java.lang.Thread mirror object.
-  OopDesc*     _pending_entries;       // Points to the list of pending
+  NARROW(OopDesc*) _pending_exception;     // Contains the pending exception.
+  NARROW(OopDesc*) _thread_obj;            // java.lang.Thread mirror object.
+  NARROW(OopDesc*) _pending_entries;       // Points to the list of pending
                                        // entry activations
-  OopDesc*     _execution_stack;       // Points to the execution stack
+  NARROW(OopDesc*) _execution_stack;       // Points to the execution stack
                                        // in the LWT case
-  OopDesc*     _step_info;             // really a VMEventModifier object
-  OopDesc*     _obj_value;             // for keeping return values
-  OopDesc*     _async_info;            // byte[]: information about a 
+  NARROW(OopDesc*) _step_info;             // really a VMEventModifier object
+  NARROW(OopDesc*) _obj_value;             // for keeping return values
+  NARROW(OopDesc*) _async_info;            // byte[]: information about a 
                                        // thread that has called 
                                        // SNI_BlockThread.
-  OopDesc*     _cached_async_info;     // byte[]: cached async info
-  OopDesc*     _profiler_info;         // exact profiler's private data
+  NARROW(OopDesc*) _cached_async_info;     // byte[]: cached async info
+  NARROW(OopDesc*) _profiler_info;         // exact profiler's private data
 
   friend class Thread;
   friend class Universe;
@@ -59,7 +59,7 @@ class ThreadDesc: public ThreadDescPointers {
   }
   static size_t pointer_count() {
     return (sizeof(ThreadDescPointers) - sizeof(MixedOopDesc)) /
-           sizeof(OopDesc*);
+           sizeof(OopSlot);
   }
 
  private:

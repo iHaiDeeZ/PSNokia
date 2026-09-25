@@ -172,6 +172,17 @@ extern const char**            _rom_profiles_restricted_packages[];
 /*
  * Flags that describes the options used by this the ROM image.
  */
+// A pointer stored in a 4-byte ROM image word. The generated ROM image uses
+// this for every address it contains. On 64-bit hosts everything the ROM
+// points to lives below 4GB (see narrow<T> in GlobalDefinitions.hpp); the
+// two-step cast is accepted by both g++ and clang, and makes those words
+// initialized at startup rather than at link time.
+#if defined(__LP64__) || defined(_WIN64)
+#define ROMPTR(x) ((int)(unsigned long long)(x))
+#else
+#define ROMPTR(x) ((int)(x))
+#endif
+
 #define ROM_SYSTEM_IMAGE (1 << 31)
 #define ROM_HAS_COMPACT_METHOD_TABLE     (1 << 30)
 #define ROM_IMAGE_LINKED (1 << 29)

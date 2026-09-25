@@ -32,6 +32,8 @@
 # include "incls/_precompiled.incl"
 # include "incls/_Method.cpp.incl"
 
+extern "C" void write_marker(const char* text, int len);
+
 HANDLE_CHECK(Method, is_method())
 
 int Method::vtable_index() const {
@@ -40,7 +42,7 @@ int Method::vtable_index() const {
   ClassInfoDesc *info = (ClassInfoDesc*) klass().class_info();
 
   OopDesc *this_obj = obj();
-  OopDesc **base = info->vtable_base();
+  OopSlot*base = info->vtable_base();
   int len = info->_vtable_length;
   for (int index = 0; index < len; index++) {
     if (this_obj != *base) {
@@ -1078,16 +1080,17 @@ void Method::check_bytecodes(JVM_SINGLE_ARG_TRAPS) {
     AccessFlags flags = access_flags();
     if (has_monitor_bytecodes) {
       GUARANTEE((numlocks *
-                 ((BytesPerWord + StackLock::size()) / sizeof(jobject)) +
+                 ((BytesPerWord + StackLock::size()) / sizeof(OopSlot)) +
                 (unsigned int)max_execution_stack_count()) < 0xffff,
                 "max lock size + max stack too big for unsigned short");
-      if ((numlocks * ((BytesPerWord + StackLock::size()) / sizeof(jobject)) +
+      if ((numlocks * ((BytesPerWord + StackLock::size()) / sizeof(OopSlot)) +
                        (unsigned int)max_execution_stack_count()) > 0xffff) {
         // Too big to fit into upper end of unsigned short
+        { char b[32]; int l=jvm_sprintf(b,"OOM_SITE_METHOD1087\n"); write_marker(b,l); }
         Throw::out_of_memory_error(JVM_SINGLE_ARG_THROW);
       }
       set_max_execution_stack_count((jushort)(numlocks *
-                      ((BytesPerWord + StackLock::size()) / sizeof(jobject)) +
+                      ((BytesPerWord + StackLock::size()) / sizeof(OopSlot)) +
                       (unsigned int)max_execution_stack_count()));
       flags.set_has_monitor_bytecodes();
     }

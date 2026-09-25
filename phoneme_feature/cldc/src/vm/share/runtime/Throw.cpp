@@ -197,6 +197,19 @@ void Throw::verify_error(ErrorMsgTag err JVM_TRAPS) {
                      JVM_NO_CHECK_AT_BOTTOM);
 }
 
+/* Diagnostic added 2026-09-05 while chasing a real-hardware crash
+ * (Metal Slug) that dies completely silently shortly after
+ * FIRST_FRAME, with no other log output at any heap size tried
+ * (6MB, 7MB) - suspected to be this exact OOM path, but never
+ * actually confirmed since nothing downstream of it ever logs
+ * anything. Uses write_marker() directly (real sceIoOpen/Write/Close,
+ * no JVM heap/malloc involved) so it's safe to call even when the
+ * heap is fully exhausted - unlike a normal Java-level exception
+ * message, which would need to allocate. Reports the real used/free/
+ * total byte counts at the exact moment of failure instead of
+ * continuing to guess-and-check heap sizes blind. */
+extern "C" void write_marker(const char* text, int len);
+
 void Throw::out_of_memory_error(JVM_SINGLE_ARG_TRAPS) {
   JVM_IGNORE_TRAPS;
 #ifndef PRODUCT
@@ -205,6 +218,27 @@ void Throw::out_of_memory_error(JVM_SINGLE_ARG_TRAPS) {
     ps();
   }
 #endif
+
+  {
+    /* Diagnostic upgraded 2026-09-05: the previous ALLOC_GIVEUP marker
+     * in ObjectHeap::allocate() never fired despite OOM_THROWN firing
+     * every test - meaning some OTHER of this codebase's ~20 call
+     * sites to Throw::out_of_memory_error() is the real one (compiler
+     * area, SymbolTable, StringTable, Buffer, CallInfo, etc.). Rather
+     * than instrument every site individually, capture the immediate
+     * caller's return address directly - resolve it afterward against
+     * the symbol table (same technique already used for the SAMPLE
+     * markers) to identify exactly which call site fired. */
+    void* caller = __builtin_return_address(0);
+    char diag_buf[96];
+    int diag_len = jvm_sprintf(diag_buf,
+        "OOM_THROWN caller=%p used=%d free=%d total=%d\n",
+        caller,
+        (int)ObjectHeap::used_memory(),
+        (int)ObjectHeap::free_memory(),
+        (int)ObjectHeap::total_memory());
+    write_marker(diag_buf, diag_len);
+  }
 
   Thread::set_current_pending_exception(
       Universe::out_of_memory_error_instance());

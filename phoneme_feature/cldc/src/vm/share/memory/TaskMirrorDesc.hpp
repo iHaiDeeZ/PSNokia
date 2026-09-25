@@ -59,7 +59,7 @@ public:
     return _object_size;
   }
 
-  void variable_oops_do(void do_oop(OopDesc **));
+  void variable_oops_do(void do_oop(OopSlot*));
 
 protected:
   static jint header_size() { return sizeof(TaskMirrorDesc); }
@@ -83,13 +83,13 @@ private:
     _object_size = allocation_size(statics_size, vtable_length);
   }
 
-  InstanceDesc*         _real_java_mirror;
-  InstanceClassDesc*    _containing_class;
+  NARROW(InstanceDesc*) _real_java_mirror;
+  NARROW(InstanceClassDesc*) _containing_class;
   jint                  _object_size;
-  TaskMirrorDesc *      _next_in_clinit_list;
+  NARROW(TaskMirrorDesc*) _next_in_clinit_list;
   // ptr to FarClassDesc of class holding elements of our containing class
-  FarClassDesc*         _array_class;
-  ThreadDesc*           _init_thread;
+  NARROW(FarClassDesc*) _array_class;
+  NARROW(ThreadDesc*) _init_thread;
 
   // Here starts the static fields
 #if USE_EMBEDDED_VTABLE_BITMAP

@@ -92,6 +92,21 @@ class ImageDataFactory implements AbstractImageDataFactory {
     }
 
     /**
+     * Creates a new, mutable image data for off-screen drawing with its
+     * alpha channel allocated and left at its Java-array default (all
+     * zero bytes = fully transparent everywhere). See
+     * AbstractImageDataFactory's doc for why this exists as its own
+     * method rather than a flag on createOffScreenImageData.
+     *
+     * @param width the width of the new image, in pixels
+     * @param height the height of the new image, in pixels
+     * @return the created, fully transparent image data
+     */
+    public ImageData createTransparentOffScreenImageData(int width, int height) {
+        return new ImageData(width, height, true, false, true);
+    }
+
+    /**
      * Creates an immutable <code>ImageData</code> from
      * a <code>mutableSource ImageData</code>.
      * If the source image data is mutable, an immutable copy is created and

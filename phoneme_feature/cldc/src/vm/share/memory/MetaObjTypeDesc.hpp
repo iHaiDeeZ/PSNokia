@@ -35,7 +35,7 @@ class MetaObjTypeDesc: public MixedOopDesc {
 
  private:
   // pointers
-  OopDesc *_objref;
+  NARROW(OopDesc*) _objref;
 
   /* All oops must go before here.  If you change the number of oops, 
    * be sure to change pointer_count()

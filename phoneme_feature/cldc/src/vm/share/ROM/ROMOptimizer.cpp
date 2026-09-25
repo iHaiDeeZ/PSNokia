@@ -31,7 +31,7 @@
 
 // Define all static fields of ROMOptimizer
 ROMOPTIMIZER_INT_FIELDS_DO(ROMOPTIMIZER_DEFINE_INT)
-OopDesc* ROMOptimizer::_romoptimizer_oops[ROMOptimizer::_number_of_oop_fields];
+OopSlot ROMOptimizer::_romoptimizer_oops[ROMOptimizer::_number_of_oop_fields];
 int ROMOptimizer::_time_counters[ROMOptimizer::STATE_COUNT];
 
 void ROMOptimizer::optimize(Stream *log_stream JVM_TRAPS) {
@@ -348,7 +348,7 @@ void ROMOptimizer::mark_hidden_classes(JVM_SINGLE_ARG_TRAPS) {
 #endif
 }
 
-void ROMOptimizer::oops_do(void do_oop(OopDesc**)) {
+void ROMOptimizer::oops_do(void do_oop(OopSlot*)) {
   for (int i=_number_of_oop_fields-1; i>=0; i--) {
     do_oop(&_romoptimizer_oops[i]);
   }
@@ -1187,7 +1187,7 @@ bool ROMOptimizer::is_in_public_itable(InstanceClass *ic, Method *method JVM_TRA
 
       ObjArray::Raw methods = intf().methods();
       for (int i = 0; i < methods().length(); i ++) {
-        Method::Raw m = ci().obj_field(offset + i * sizeof(jobject));
+        Method::Raw m = ci().obj_field(offset + i * sizeof(OopSlot));
         if (m.equals(method)) {
           return true;
         }
@@ -1624,7 +1624,7 @@ void ROMOptimizer::clean_itables(InstanceClass* intf_klass,
       if (!intf_klass->equals(intf)) {
         continue;
       }
-      jint addr = offset + itable_index * sizeof(jobject);
+      jint addr = offset + itable_index * sizeof(OopSlot);
       ci().obj_field_put(addr, &null_oop);
     }
   }
@@ -2508,8 +2508,8 @@ int ROMOptimizer::compact_one_interface(InstanceClass* ic) {
       jvm_memmove(new_itable_start, old_itable_start, new_itable_size);
 
       // Clear bits for new itable, since it is an int array.
-      ObjectHeap::clear_bit_range((OopDesc**)new_itable_start,  
-                              (OopDesc**)(new_itable_start + new_itable_size));
+      ObjectHeap::clear_bit_range((OopSlot*)new_itable_start,  
+                              (OopSlot*)(new_itable_start + new_itable_size));
 
       // Invalidate offsets, so that they won't be printed by
       // ClassInfo::iterate_tables().
@@ -2602,7 +2602,7 @@ ReturnOop ROMOptimizer::get_live_symbols(JVM_SINGLE_ARG_TRAPS) {
   int index;
   // (1) Record all Symbols stored in Universe
   for (index = 0; index < Universe::__number_of_persistent_handles; index++) {
-    Oop::Raw oop = persistent_handles[index];
+    Oop::Raw oop = (OopDesc*)persistent_handles[index];
     if (oop.not_null() && oop.is_symbol() &&
         !ROMWriter::write_by_reference(&oop)) {
       Symbol::Raw s = oop.obj();      

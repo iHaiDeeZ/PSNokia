@@ -109,14 +109,14 @@ MethodTrapDesc* MethodTrap::find_slot() {
   return NULL;
 }
 
-void MethodTrap::oops_do(void do_oop(OopDesc**)) {
+void MethodTrap::oops_do(void do_oop(OopSlot*)) {
   for (int i = 0; i < max_traps; i++) {
     if (!_method_trap[i].is_free()) {
       if (ObjectHeap::contains(_method_trap[i]._trapped_method)) {
-        do_oop((OopDesc**) &_method_trap[i]._trapped_method);
+        do_oop((OopSlot*) &_method_trap[i]._trapped_method);
       }
       if (ObjectHeap::contains(_method_trap[i]._handler_method)) {
-        do_oop((OopDesc**) &_method_trap[i]._handler_method);
+        do_oop((OopSlot*) &_method_trap[i]._handler_method);
       }
     }
   }

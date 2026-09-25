@@ -72,8 +72,8 @@ public:
   static int smart_evict_underweight  ( void );
 
   static inline bool has_index ( const Item* p ) {
-    return _compiler_area_start <= (OopDesc**) p &&
-      (OopDesc**) p < _compiler_area_top;
+    return _compiler_area_start <= (OopSlot*) p &&
+      (OopSlot*) p < _compiler_area_top;
   }
 
 #if ENABLE_APPENDED_CALLINFO
