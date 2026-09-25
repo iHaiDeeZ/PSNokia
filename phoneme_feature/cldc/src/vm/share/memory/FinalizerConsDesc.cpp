@@ -30,10 +30,13 @@
 void FinalizerConsDesc::run_finalizer( void ) {
   void (*native_finalizer)();
   unsigned char *remember_kni_parameter_base;
-  
-  {
-    JavaOop::Raw r = referent();
+  // The finalizer reads its receiver through _kni_parameter_base, which
+  // points into r: r must live until the finalizer returns. (Declared in
+  // the block below, it went out of scope before the call, and optimizing
+  // compilers reused its slot: the finalizer then read null.)
+  JavaOop::Raw r = referent();
 
+  {
     if (TraceFinalization) {
       TTY_TRACE_CR(("TraceGC: finalizer 0x%p retrieved", (void*) r));
     }

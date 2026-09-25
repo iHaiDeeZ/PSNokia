@@ -78,47 +78,88 @@ struct fbsd_sigaction {
 int _sigaction(int sig, const struct fbsd_sigaction* action,
                struct fbsd_sigaction* old);
 
-// FreeBSD's siginfo_t has si_addr at byte 24. Its ucontext_t is a 16-byte
-// sigset_t followed by amd64 mcontext_t, a flat array of 8-byte registers.
+// FreeBSD's siginfo_t has si_addr at byte 24. The registers are FreeBSD's
+// amd64 mcontext_t, a flat array of 8-byte slots, but the PS4's ucontext_t
+// has more before it than FreeBSD's 16-byte sigset_t, so crash_handler
+// finds it: mc_addr (the fault address) is slot 17, with rip at 20 and rsp
+// at 23.
 #define SI_ADDR(info) (*(void* const*)((const char*)(info) + 24))
-#define UC_REG(uc, index) (((const uint64_t*)((const char*)(uc) + 16))[index])
-#define FBSD_MC_RBP 9
-#define FBSD_MC_RIP 20
-#define FBSD_MC_RSP 23
+#define MC_RDI 1
+#define MC_RSI 2
+#define MC_RDX 3
+#define MC_RCX 4
+#define MC_RAX 7
+#define MC_RBX 8
+#define MC_RBP 9
+#define MC_ADDR 17
+#define MC_RIP 20
+#define MC_RSP 23
 
-// The eboot's code (it is loaded at 0x400000)
+// The eboot's code (it is loaded at 0x400000) and the main thread's stack
 #define CODE_START 0x400000ULL
 #define CODE_END 0x1400000ULL
+#define IS_CODE(v) ((v) >= CODE_START && (v) < CODE_END)
+#define IS_STACK(v) ((v) >= 0x700000000ULL && (v) < 0x800000000ULL)
 
 static void crash_handler(int sig, void* info, void* context) {
   static int crashed;
   char line[160];
-  uint64_t rip = UC_REG(context, FBSD_MC_RIP);
-  uint64_t rsp = UC_REG(context, FBSD_MC_RSP);
-  uint64_t rbp = UC_REG(context, FBSD_MC_RBP);
+  const uint64_t* uc = (const uint64_t*)context;
+  uint64_t fault = info ? (uint64_t)SI_ADDR(info) : 0;
+  const uint64_t* mc = NULL;
   int n;
   if (crashed++) {
     return;
   }
+  // The raw context, to check the layout
+  for (int i = 0; i < 48; i += 4) {
+    n = snprintf(line, sizeof(line), "  uc[%2d] %lx %lx %lx %lx\n", i,
+                 (unsigned long)uc[i], (unsigned long)uc[i + 1],
+                 (unsigned long)uc[i + 2], (unsigned long)uc[i + 3]);
+    write_marker(line, n);
+  }
+  for (int base = 0; base <= 16 && mc == NULL; base++) {
+    const uint64_t* m = uc + base;
+    if (m[MC_ADDR] == fault && IS_STACK(m[MC_RSP])) {
+      mc = m;
+    }
+  }
+  if (mc == NULL) {
+    n = snprintf(line, sizeof(line), "CRASH signal %d, fault address %p (registers not found)\n",
+                 sig, (void*)fault);
+    write_marker(line, n);
+    goto done;
+  }
   n = snprintf(line, sizeof(line),
-               "CRASH signal %d, fault address %p, rip %p, rsp %p, rbp %p\n",
-               sig, info ? SI_ADDR(info) : NULL, (void*)rip, (void*)rsp,
-               (void*)rbp);
+               "CRASH signal %d, fault address %p, rip %p, rsp %p (registers at uc+%d)\n",
+               sig, (void*)fault, (void*)mc[MC_RIP], (void*)mc[MC_RSP],
+               (int)((mc - uc) * 8));
+  write_marker(line, n);
+  n = snprintf(line, sizeof(line),
+               "  rax %lx rbx %lx rcx %lx rdx %lx rsi %lx rdi %lx rbp %lx\n",
+               (unsigned long)mc[MC_RAX], (unsigned long)mc[MC_RBX],
+               (unsigned long)mc[MC_RCX], (unsigned long)mc[MC_RDX],
+               (unsigned long)mc[MC_RSI], (unsigned long)mc[MC_RDI],
+               (unsigned long)mc[MC_RBP]);
   write_marker(line, n);
   // Optimized code keeps no frame pointers: list the return addresses
   // into our code found on the stack instead (some may be stale)
-  const uint64_t* stack = (const uint64_t*)rsp;
-  int found = 0;
-  for (int i = 0; i < 1024 && found < 24; i++) {
-    if (stack[i] >= CODE_START && stack[i] < CODE_END) {
-      n = snprintf(line, sizeof(line), "  stack+%d: %p\n", i * 8, (void*)stack[i]);
-      write_marker(line, n);
-      found++;
+  {
+    const uint64_t* stack = (const uint64_t*)mc[MC_RSP];
+    int found = 0;
+    for (int i = 0; i < 1024 && found < 24; i++) {
+      if (IS_CODE(stack[i])) {
+        n = snprintf(line, sizeof(line), "  stack+%d: %p\n", i * 8, (void*)stack[i]);
+        write_marker(line, n);
+        found++;
+      }
     }
   }
-  // Let the fault happen again with the default action (system crash report)
-  struct fbsd_sigaction dfl = { 0 };
-  _sigaction(sig, &dfl, NULL);
+done: {
+    // Let the fault happen again with the default action (system crash report)
+    struct fbsd_sigaction dfl = { 0 };
+    _sigaction(sig, &dfl, NULL);
+  }
 }
 
 void psn_install_crash_handler(void) {
