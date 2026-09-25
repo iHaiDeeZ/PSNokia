@@ -93,8 +93,14 @@ public final class Manager {
             throw new MediaException("Media type not supported: " + type);
         }
         ret.setSource(stream);
+        if (createLogCount < 100) {
+            createLogCount++;
+            System.out.println("MEDIA: createPlayer " + type + " -> " + ret.getClass().getName());
+        }
         return ret;
     }
+
+    private static int createLogCount;
 
     public static void playTone(int note, int duration, int volume) throws MediaException {
         if (note < 0 || note > 127 || duration <= 0) { throw new IllegalArgumentException("bad param"); }

@@ -50,6 +50,7 @@ public class MidiFilePlayer extends ABBBasicPlayer implements VolumeControl {
         }
         songId = nLoad(data);
         if (songId == 0) {
+            System.out.println("MEDIA: MIDI load FAILED (" + data.length + " bytes)");
             throw new MediaException("Invalid MIDI data, or audio unavailable");
         }
         data = null; // the native side keeps its own copy

@@ -539,6 +539,110 @@ struct NativeWavPlayer
                             0: MC.abuf is our own malloc'd, format-converted copy (free via free()) */
 };
 
+/*
+ * IMA ADPCM WAV (format 0x11) decoder. Games often ship their sound
+ * effects in it (4 bits per sample); the old SDL2 in the OpenOrbis
+ * toolchain predates SDL's reworked WAV loader and is unreliable with it.
+ * Decodes to S16 samples in an SDL_malloc'd buffer (freed by SDL_FreeWAV),
+ * filling spec like SDL_LoadWAV_RW. Returns 1 on success, 0 when the data
+ * is not IMA ADPCM or is malformed.
+ */
+static const int ImaIndexTable[16] = { -1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8 };
+static const int ImaStepTable[89] = {
+    7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45,
+    50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230,
+    253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963,
+    1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327,
+    3660, 4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493, 10442,
+    11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794,
+    32767 };
+
+static unsigned int ReadLE(const unsigned char *p, int n)
+{ unsigned int v = 0;
+  while (n-- > 0) v = (v << 8) | p[n];
+  return v;
+}
+
+static int ImaNibble(int nibble, int *predictor, int *index)
+{ int step = ImaStepTable[*index];
+  int diff = step >> 3;
+  if (nibble & 1) diff += step >> 2;
+  if (nibble & 2) diff += step >> 1;
+  if (nibble & 4) diff += step;
+  if (nibble & 8) diff = -diff;
+  *predictor += diff;
+  if (*predictor > 32767) *predictor = 32767;
+  if (*predictor < -32768) *predictor = -32768;
+  *index += ImaIndexTable[nibble & 15];
+  if (*index < 0) *index = 0;
+  if (*index > 88) *index = 88;
+  return *predictor;
+}
+
+static int DecodeImaAdpcmWav(const unsigned char *data, unsigned int size, SDL_AudioSpec *spec,
+                             Uint8 **out, Uint32 *outLen)
+{ unsigned int pos = 12, fmtFound = 0, channels = 0, rate = 0, blockAlign = 0;
+  const unsigned char *pcm = NULL;
+  unsigned int pcmLen = 0, blocks, perBlock, b, c, i, total;
+  Sint16 *dst;
+  if (size < 12 || memcmp(data, "RIFF", 4) != 0 || memcmp(data + 8, "WAVE", 4) != 0) return 0;
+  while (pos + 8 <= size)
+     { unsigned int len = ReadLE(data + pos + 4, 4);
+       if (len > size - pos - 8) len = size - pos - 8;
+       if (memcmp(data + pos, "fmt ", 4) == 0 && len >= 16)
+          { if (ReadLE(data + pos + 8, 2) != 0x11) return 0;
+            channels = ReadLE(data + pos + 10, 2);
+            rate = ReadLE(data + pos + 12, 4);
+            blockAlign = ReadLE(data + pos + 20, 2);
+            fmtFound = 1;
+          }
+       else if (memcmp(data + pos, "data", 4) == 0)
+          { pcm = data + pos + 8;
+            pcmLen = len;
+          }
+       pos += 8 + len + (len & 1);
+     }
+  if (!fmtFound || pcm == NULL || channels < 1 || channels > 2 || rate == 0 ||
+      blockAlign <= 4 * channels)
+     return 0;
+  /* Each block: per channel a 4-byte header (first sample, step index),
+   * then 4-bit samples, interleaved in 4-byte groups per channel */
+  perBlock = (blockAlign - 4 * channels) * 2 / channels + 1;
+  blocks = pcmLen / blockAlign;
+  total = blocks * perBlock * channels;
+  if (total == 0) return 0;
+  dst = (Sint16 *)SDL_malloc(total * 2);
+  if (dst == NULL) return 0;
+  for (b = 0; b < blocks; b++)
+     { const unsigned char *blk = pcm + b * blockAlign;
+       Sint16 *o = dst + b * perBlock * channels;
+       int pred[2], idx[2];
+       for (c = 0; c < channels; c++)
+          { pred[c] = (Sint16)ReadLE(blk + c * 4, 2);
+            idx[c] = blk[c * 4 + 2];
+            if (idx[c] > 88) idx[c] = 88;
+            o[c] = (Sint16)pred[c];
+          }
+       /* Samples after the header one, 8 per 4-byte group per channel */
+       for (i = 0; i < (perBlock - 1) / 8; i++)
+          for (c = 0; c < channels; c++)
+             { const unsigned char *g = blk + 4 * channels + (i * channels + c) * 4;
+               int k;
+               for (k = 0; k < 8; k++)
+                  { int nib = (g[k >> 1] >> ((k & 1) * 4)) & 15;
+                    o[(1 + i * 8 + k) * channels + c] = (Sint16)ImaNibble(nib, &pred[c], &idx[c]);
+                  }
+             }
+     }
+  memset(spec, 0, sizeof(*spec));
+  spec->freq = (int)rate;
+  spec->format = AUDIO_S16SYS;
+  spec->channels = (Uint8)channels;
+  *out = (Uint8 *)dst;
+  *outLen = total * 2;
+  return 1;
+}
+
 static void WavPlayerCallback(int chan)
 { struct NativeWavPlayer *NWP = (struct NativeWavPlayer *)MediaVita_Channels[chan].Data;
   NWP->CheckEOM = 1;
@@ -561,8 +665,12 @@ KNIEXPORT KNI_RETURNTYPE_INT Java_javax_microedition_media_GenericPlayer_nWavLoa
           { SDL_AudioSpec wav_spec;
             Uint8 *wav_buf = NULL;
             Uint32 wav_len = 0;
-            SDL_RWops *rw = SDL_RWFromMem(raw, (int)size);
-            if (rw != NULL && SDL_LoadWAV_RW(rw, 1, &wav_spec, &wav_buf, &wav_len) != NULL)
+            SDL_RWops *rw = NULL;
+            int decoded = DecodeImaAdpcmWav(raw, size, &wav_spec, &wav_buf, &wav_len);
+            if (!decoded)
+               { rw = SDL_RWFromMem(raw, (int)size);
+               }
+            if (decoded || (rw != NULL && SDL_LoadWAV_RW(rw, 1, &wav_spec, &wav_buf, &wav_len) != NULL))
                { struct NativeWavPlayer *NWP = (struct NativeWavPlayer *)malloc(sizeof(struct NativeWavPlayer));
                  if (NWP != NULL)
                     { NWP->Chan = -1;

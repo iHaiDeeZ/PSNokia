@@ -77,7 +77,8 @@ public class GenericPlayer extends ABBBasicPlayer implements VolumeControl {
     protected void doRealize() throws MediaException {
         if (data == null) { throw new MediaException("no source set"); }
         wavId = nWavLoad(data);
-        if (wavId == 0) { throw new MediaException("Unsupported or invalid WAV data for: " + contentType); }
+        if (wavId == 0) {
+            System.out.println("MEDIA: " + contentType + " load FAILED (" + data.length + " bytes)"); throw new MediaException("Unsupported or invalid WAV data for: " + contentType); }
         data = null; // native side now owns a decoded copy
     }
 

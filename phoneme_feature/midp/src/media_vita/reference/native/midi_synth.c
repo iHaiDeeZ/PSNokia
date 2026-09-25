@@ -102,7 +102,8 @@ typedef struct {
 } MsVoice;
 
 static MsVoice voices[MS_MAX_VOICES];
-static MsSong *songs[8];
+#define MS_MAX_SONGS  32   /* loaded (realized) MIDI players at once */
+static MsSong *songs[MS_MAX_SONGS];
 static int sampleRate = 22050;
 static unsigned int voiceClock;
 static unsigned int noiseState = 22222;
@@ -696,7 +697,7 @@ static void music_hook(void *udata, Uint8 *stream, int len) {
     while (frames > 0) {
         int n = frames < MS_BLOCK ? frames : MS_BLOCK;
         int i;
-        for (i = 0; i < 8; i++) {
+        for (i = 0; i < MS_MAX_SONGS; i++) {
             MsSong *s = songs[i];
             if (s != NULL && s->playing) {
                 sequence(s);
@@ -738,7 +739,7 @@ KNIEXPORT KNI_RETURNTYPE_INT Java_javax_microedition_media_MidiFilePlayer_nLoad(
     if (size > 0 && MediaVita_EnsureAudio() == 1) {
         SDL_LockAudio();
         init_synth();
-        for (i = 0; i < 8; i++) {
+        for (i = 0; i < MS_MAX_SONGS; i++) {
             if (songs[i] == NULL) {
                 slot = i;
                 break;
@@ -827,7 +828,7 @@ KNIEXPORT KNI_RETURNTYPE_VOID Java_javax_microedition_media_MidiFilePlayer_nClos
                 voices[i].stage = ST_OFF;
             }
         }
-        for (i = 0; i < 8; i++) {
+        for (i = 0; i < MS_MAX_SONGS; i++) {
             if (songs[i] == s) {
                 songs[i] = NULL;
             }
