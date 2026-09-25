@@ -1,0 +1,31 @@
+######################################################################
+# JSR 172 XML parsing (javax.xml.parsers, org.xml.sax)
+#
+# The SAX part of JSR 172 (J2ME Web Services), which later games use to
+# read their level and settings files. A small non-validating parser;
+# see SAXParserImpl.java. Always included, unconditional, matching the
+# nokia_ui and m3g subsystems.
+######################################################################
+
+SUBSYSTEM_JSR172_JAVA_FILES = \
+    $(SUBSYSTEM_DIR)/jsr172/classes/com/sun/midp/jsr172/AttributesImpl.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/com/sun/midp/jsr172/SAXParserFactoryImpl.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/com/sun/midp/jsr172/SAXParserImpl.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/javax/xml/parsers/FactoryConfigurationError.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/javax/xml/parsers/ParserConfigurationException.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/javax/xml/parsers/SAXParser.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/javax/xml/parsers/SAXParserFactory.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/org/xml/sax/Attributes.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/org/xml/sax/InputSource.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/org/xml/sax/Locator.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/org/xml/sax/SAXException.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/org/xml/sax/SAXNotRecognizedException.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/org/xml/sax/SAXNotSupportedException.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/org/xml/sax/SAXParseException.java \
+    $(SUBSYSTEM_DIR)/jsr172/classes/org/xml/sax/helpers/DefaultHandler.java
+
+jsr172:
+
+SUBSYSTEM_JSR172_SOURCEPATH = $(SUBSYSTEM_DIR)/jsr172/classes
+
+MIDP_JAVADOC_SOURCEPATH += $(SUBSYSTEM_JSR172_SOURCEPATH)

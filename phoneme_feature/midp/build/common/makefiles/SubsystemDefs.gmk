@@ -295,6 +295,13 @@ $(MIDP_CLASSES_ZIP):: $(SUBSYSTEM_M3G_JAVA_FILES)
 JTWI_NATIVE_FILES	+= $(SUBSYSTEM_M3G_NATIVE_FILES)
 
 #######################################################################
+# JSR 172 XML parsing (SAX)
+#######################################################################
+
+$(MIDP_CLASSES_ZIP):: $(SUBSYSTEM_JSR172_JAVA_FILES)
+	$(appendjavafiles)
+
+#######################################################################
 # Vita media subsystem (real tone/tone-sequence/WAV playback)
 #######################################################################
 

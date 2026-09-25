@@ -163,6 +163,12 @@ include $(SUBSYSTEM_DIR)/nokia_ui/$(SUBSYSTEM_MAKE_FILE)
 include $(SUBSYSTEM_DIR)/m3g/$(SUBSYSTEM_MAKE_FILE)
 
 #####################################################################
+# JSR 172 XML parsing (SAX)
+#####################################################################
+
+include $(SUBSYSTEM_DIR)/jsr172/$(SUBSYSTEM_MAKE_FILE)
+
+#####################################################################
 # Vita media subsystem: real tone/tone-sequence/WAV playback
 # Description: replaces the plain "media" stub - see the USE_MEDIA_VITA
 #              guard below, which keeps the two mutually exclusive
