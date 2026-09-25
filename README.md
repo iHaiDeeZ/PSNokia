@@ -21,6 +21,7 @@ Tested on a real PS4 with GoldHEN:
 | Sonic Advance (Gameloft) | Plays through, with music |
 | Tower Bloxx, City Bloxx (Digital Chocolate / Nokia) | Play, including the 3D (M3G) buildings, with music |
 | Bounce (Nokia) | Plays, at its original 128x128 screen scaled up |
+| Rayman 3 (Gameloft) | Plays, with its Nokia ringtone music and sounds |
 
 ## What the port does
 
@@ -32,9 +33,11 @@ Tested on a real PS4 with GoldHEN:
 - **A PS4 platform layer** for the VM (`cldc/src/vm/os/ps4`), PCSL and MIDP:
   SDL2 video scaled to the TV, DS4 input, file access (with a fix for the
   OpenOrbis headers' `struct stat` layout), timers and threads.
-- **Sound:** WAV and tones, plus a software synthesizer for MIDI music
+- **Sound:** WAV (including IMA ADPCM) and tones, plus a software
+  synthesizer for MIDI music
   (`midp/src/media_vita/reference/native/midi_synth.c`), which most games
-  use.
+  use. Nokia ringtones (`com.nokia.mid.sound`) are converted to MIDI.
+- **Vibration** on the DS4's rumble motors.
 - **Nokia UI API** (`com.nokia.mid.ui`) and **JSR 184 (M3G)** 3D, which
   many commercial games need.
 - **Per-game settings:** save data in `/data/psnokia/<TITLE_ID>`, and the
@@ -53,9 +56,15 @@ Tested on a real PS4 with GoldHEN:
 | L2 / R2 / L3 / R3 | 1 / 3 / 7 / 9 |
 | Touchpad | * |
 | Hold L1 or R1 | Cross = 5, Square = *, Circle = #, Triangle = Clear |
+| L1 + Options | Display shape: fit, 4:3, full (16:9), pixel |
+| L1 + Touchpad | Display filter: sharp or smooth (Scale2x) |
 
 As on Nokia phones, the soft key labels are drawn in the bottom corners, and
 Circle usually leaves a screen — on a game's main menu it quits.
+
+The display settings are saved for each game. **fit** keeps the phone's
+proportions, **full** stretches to the whole screen, and **pixel** uses the
+largest whole-number scale, so every phone pixel is the same size.
 
 ## Building
 
@@ -107,6 +116,8 @@ Per-game overrides, as files in `/data/psnokia/<TITLE_ID>/` or
 
 - `screen.txt` — the phone screen size, e.g. `176x208`
 - `landscape` or `portrait` (empty files) — force the orientation
+- `display.txt` — the display shape and filter, e.g. `full smooth` (written
+  by the controller shortcuts)
 
 ## Known limitations
 
