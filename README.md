@@ -29,9 +29,9 @@ icon and its own saves.
 
 ## Which games work?
 
-See the **[compatibility list](COMPATIBILITY.md)**. Games tested so far
-include Sonic Advance, Rayman 3, Tower Bloxx, City Bloxx and Bounce, and
-all of them are playable.
+See the **[compatibility list](COMPATIBILITY.md)**. Of the 15 games tested
+so far, 12 are playable, among them Sonic Advance, Rayman 3, Prince of
+Persia, Spyro, Metal Slug, Bounce Tales and the Bloxx games.
 
 ## What you need
 
