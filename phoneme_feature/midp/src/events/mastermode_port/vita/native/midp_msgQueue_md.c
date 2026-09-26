@@ -225,11 +225,104 @@ static int ps4_to_vita_button(int btn)
   }
 }
 
-/* Display settings shortcuts (lfjport_st_export.c) */
+/* Display settings shortcuts and the menu (lfjport_st_export.c) */
 void ps4_display_next_view(void);
 void ps4_display_toggle_smooth(void);
+void ps4_open_menu(void);
 
 static int ps4_touch_click(int isPress, MidpReentryData* pNewSignal, MidpEvent* pNewMidpEvent);
+
+/*
+ * The buttons the player can assign in the menu, by Vita index, and the
+ * phone key each sends by default. L1/R1 (the second set, below) and the
+ * touchpad (the touchscreen) are fixed. The choice is saved per game in
+ * $MIDP_HOME/buttons.txt as soon as it changes.
+ */
+typedef struct { int vita; const char *name; int defaultKey; } ps4_button;
+static const ps4_button ps4_buttons[] = {
+  { 2,  "Cross",       KEYMAP_KEY_SELECT },
+  { 1,  "Circle",      KEYMAP_KEY_SOFT2 },   /* right soft key: Back / Exit */
+  { 3,  "Square",      KEYMAP_KEY_SOFT1 },   /* left soft key */
+  { 0,  "Triangle",    KEYMAP_KEY_0 },
+  { 7,  "Options",     KEYMAP_KEY_SOFT1 },
+  { 8,  "L2",          KEYMAP_KEY_1 },
+  { 9,  "R2",          KEYMAP_KEY_3 },
+  { 10, "L3",          KEYMAP_KEY_7 },
+  { 11, "R3",          KEYMAP_KEY_9 },
+  { 12, "D-pad up",    KEYMAP_KEY_2 },
+  { 13, "D-pad down",  KEYMAP_KEY_8 },
+  { 14, "D-pad left",  KEYMAP_KEY_4 },
+  { 15, "D-pad right", KEYMAP_KEY_6 },
+};
+#define PS4_BUTTON_COUNT ((int)(sizeof(ps4_buttons) / sizeof(ps4_buttons[0])))
+static int ps4_keys[PS4_BUTTON_COUNT];
+static int ps4_keys_loaded;
+
+static void ps4_buttons_path(char *path, int size)
+{ const char *home = getenv("MIDP_HOME");
+  snprintf(path, size, "%s/buttons.txt", home != NULL ? home : "/data/psnokia");
+}
+
+void ps4_save_buttons(void)
+{ char path[128];
+  FILE *f;
+  int i;
+  ps4_buttons_path(path, sizeof(path));
+  f = fopen(path, "w");
+  if (f == NULL) return;
+  for (i = 0; i < PS4_BUTTON_COUNT; i++)
+       fprintf(f, "%d %d\n", i, ps4_keys[i]);
+  fclose(f);
+}
+
+static void ps4_load_buttons(void)
+{ char path[128];
+  FILE *f;
+  int i, key;
+  for (i = 0; i < PS4_BUTTON_COUNT; i++)
+       ps4_keys[i] = ps4_buttons[i].defaultKey;
+  ps4_keys_loaded = 1;
+  ps4_buttons_path(path, sizeof(path));
+  f = fopen(path, "r");
+  if (f == NULL) return;
+  while (fscanf(f, "%d %d", &i, &key) == 2)
+       if (i >= 0 && i < PS4_BUTTON_COUNT) ps4_keys[i] = key;
+  fclose(f);
+}
+
+/* For the menu (lfjport_st_export.c) */
+int ps4_button_count(void) { return PS4_BUTTON_COUNT; }
+const char *ps4_button_name(int i) { return ps4_buttons[i].name; }
+
+int ps4_button_key(int i)
+{ if (!ps4_keys_loaded) ps4_load_buttons();
+  return ps4_keys[i];
+}
+
+void ps4_set_button_key(int i, int key)
+{ if (!ps4_keys_loaded) ps4_load_buttons();
+  ps4_keys[i] = key;
+  ps4_save_buttons();
+}
+
+void ps4_reset_buttons(void)
+{ int i;
+  for (i = 0; i < PS4_BUTTON_COUNT; i++)
+       ps4_keys[i] = ps4_buttons[i].defaultKey;
+  ps4_keys_loaded = 1;
+  ps4_save_buttons();
+}
+
+/* The phone key assigned to a button (Vita index) */
+static int ps4_key_for(int vita)
+{ int i;
+  if (!ps4_keys_loaded) ps4_load_buttons();
+  for (i = 0; i < PS4_BUTTON_COUNT; i++)
+       if (ps4_buttons[i].vita == vita) return ps4_keys[i];
+  return KEYMAP_KEY_INVALID;
+}
+
+static int l3Held, r3Held;
 #endif
 
 void JoystickCheck(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNewMidpEvent)
@@ -259,25 +352,27 @@ void JoystickCheck(SDL_Event *event, MidpReentryData* pNewSignal, MidpEvent* pNe
   } else if (btn == 6) {
     /* Touchpad click: touch the phone screen under the cursor */
     if (ps4_touch_click(isPress, pNewSignal, pNewMidpEvent)) return;
+  } else if ((btn == 10 && isPress && r3Held) || (btn == 11 && isPress && l3Held)) {
+    /* L3 + R3: the menu. The game is paused while it is open; afterwards
+     * release the key the first of the two buttons pressed. */
+    int first = btn == 10 ? 11 : 10;
+    l3Held = r3Held = 0;
+    shiftHeld = 0;
+    ps4_open_menu();
+    Key = ps4_key_for(first);
+    isPress = 0;
   } else {
-    /* DS4 layout: Cross confirms and Circle is the right soft key (usually
-     * Back/Exit), matching the console's own convention; Square is the
-     * left soft key. L1/R1 held gives the second set. */
-    switch (btn) {
-      case 2: Key = shiftHeld ? KEYMAP_KEY_5 : KEYMAP_KEY_SELECT; break;       /* Cross    */
-      case 1: Key = shiftHeld ? KEYMAP_KEY_POUND : KEYMAP_KEY_SOFT2; break;    /* Circle   */
-      case 3: Key = shiftHeld ? KEYMAP_KEY_ASTERISK : KEYMAP_KEY_SOFT1; break; /* Square   */
-      case 0: Key = shiftHeld ? KEYMAP_KEY_CLEAR : KEYMAP_KEY_0; break;        /* Triangle */
-      case 7: Key = KEYMAP_KEY_SOFT1; break;     /* Options: left soft key (menu/pause) */
-      case 8: Key = KEYMAP_KEY_1; break;         /* L2 */
-      case 9: Key = KEYMAP_KEY_3; break;         /* R2 */
-      case 10: Key = KEYMAP_KEY_7; break;        /* L3 */
-      case 11: Key = KEYMAP_KEY_9; break;        /* R3 */
-      case 12: Key = KEYMAP_KEY_2; break;        /* D-pad Up    */
-      case 13: Key = KEYMAP_KEY_8; break;        /* D-pad Down  */
-      case 14: Key = KEYMAP_KEY_4; break;        /* D-pad Left  */
-      case 15: Key = KEYMAP_KEY_6; break;        /* D-pad Right */
-      default: Key = KEYMAP_KEY_INVALID;
+    /* The assigned keys (by default Cross confirms and Circle is the right
+     * soft key, usually Back/Exit; Square is the left soft key). L1/R1
+     * held gives the second set on the face buttons. */
+    if (btn == 10) l3Held = isPress;
+    if (btn == 11) r3Held = isPress;
+    if (shiftHeld && btn >= 0 && btn <= 3) {
+      static const int second[4] = { KEYMAP_KEY_CLEAR, KEYMAP_KEY_POUND,
+                                     KEYMAP_KEY_5, KEYMAP_KEY_ASTERISK };
+      Key = second[btn];    /* Triangle, Circle, Cross, Square */
+    } else {
+      Key = ps4_key_for(btn);
     }
   }
 #else

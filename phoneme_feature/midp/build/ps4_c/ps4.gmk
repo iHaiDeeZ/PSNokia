@@ -22,9 +22,10 @@ EXTRA_CFLAGS    += -DPS4 -D_GNU_SOURCE=1 -D_REENTRANT -I$(PS4_COMMON)
 EXTRA_INCLUDES  += -I$(OO)/include/SDL2
 
 # The low heap objects (malloc replacement) come in with the VM's exported
-# LINK_FLAGS (ps4_c.cfg). Add the render log and scaler, then SDL2 and the
-# system libraries it needs, as in the OpenOrbis SDL2 sample.
+# LINK_FLAGS (ps4_c.cfg). Add the render log, scaler and menu, then SDL2 and
+# the system libraries they need, as in the OpenOrbis SDL2 and font samples.
 LIBS += $(PSNOKIA_OUT)/common/psn_marker.o $(PSNOKIA_OUT)/common/psn_scale.o \
+        $(PSNOKIA_OUT)/common/psn_menu.o \
         -L$(OO)/lib -lSDL2 -lSceUserService -lSceVideoOut -lSceAudioOut \
-        -lScePad -lSceSysmodule
+        -lScePad -lSceSysmodule -lSceFreeType -lSceSystemService
 LIBS := $(filter-out -lnsl -lpthread -lm -ldl,$(LIBS))

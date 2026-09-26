@@ -33,6 +33,11 @@ fi
 "${PSNOKIA_PYTHON:-python3}" "$(cygpath -m "$PSNOKIA_PS4/package/make_icon.py")" "$(cygpath -m "$D/game.jar")" \
     "$(cygpath -m "$D/sce_sys/icon0.png")" "$TITLE" 2>/dev/null ||
     cp "$PSNOKIA_PS4/package/icon0.png" "$D/sce_sys/icon0.png"
+# The same icon for the PSNokia menu, as raw pixels
+mkdir -p "$D/assets"
+"${PSNOKIA_PYTHON:-python3}" "$(cygpath -m "$PSNOKIA_PS4/package/make_raw_icon.py")" \
+    "$(cygpath -m "$D/sce_sys/icon0.png")" "$(cygpath -m "$D/assets/icon.raw")" 2>/dev/null ||
+    rm -f "$D/assets/icon.raw"
 cd "$D"
 make TITLE="$TITLE" TITLE_ID="$TID" CONTENT_ID="IV0000-${TID}_00-$LABEL" | tail -1
 ls -l "$D"/*.pkg

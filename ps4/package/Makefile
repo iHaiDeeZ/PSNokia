@@ -6,7 +6,9 @@
 #   /app0/lib         - Chameleon LCDUI skin resources
 #   /app0/appdb       - seed for MIDP_HOME/appdb (/data/psnokia/<TITLE_ID>)
 #   /app0/titleid.txt - TITLE_ID, read at startup (sce_sys is not readable)
+#   /app0/title.txt   - the game's name, for the menu
 #   /app0/screen.txt  - optional phone screen size, "WxH"
+#   /app0/assets      - the menu's font (with its licence) and game icon
 
 VERSION     := 1.00
 # The release or debug build, as chosen in env.sh (PSNOKIA_BUILD)
@@ -19,19 +21,27 @@ OO_SAMPLE   := $(OO_PS4_TOOLCHAIN)/samples/audio-wav
 LIBMODULES  := sce_module/libc.prx sce_module/libSceFios2.prx
 LIBFILES    := $(addprefix lib/,$(notdir $(wildcard $(MIDP_OUT)/lib/*)))
 APPDBFILES  := $(addprefix appdb/,$(notdir $(wildcard $(MIDP_OUT)/appdb/*)))
+FONTFILES   := assets/fonts/Gontserrat-Regular.ttf assets/fonts/OFL.txt
 
 all: $(CONTENT_ID).pkg
 
 $(CONTENT_ID).pkg: pkg.gp4
 	$(TOOLS)/PkgTool.Core pkg_build $< .
 
-pkg.gp4: eboot.bin sce_sys/about/right.sprx sce_sys/param.sfo sce_sys/icon0.png game.jar titleid.txt $(wildcard screen.txt) $(LIBFILES) $(APPDBFILES) $(LIBMODULES)
+pkg.gp4: eboot.bin sce_sys/about/right.sprx sce_sys/param.sfo sce_sys/icon0.png game.jar titleid.txt title.txt $(wildcard screen.txt) $(LIBFILES) $(APPDBFILES) $(LIBMODULES) $(FONTFILES) $(wildcard assets/icon.raw)
 	$(TOOLS)/create-gp4 -out $@ --content-id=$(CONTENT_ID) --files "$^"
 	# create-gp4 only declares its own fixed directories; add ours
 	sed -i 's|<dir targ_name="sce_module" />|<dir targ_name="sce_module" /><dir targ_name="lib" /><dir targ_name="appdb" />|' $@
 
 titleid.txt:
 	printf '%s' '$(TITLE_ID)' > $@
+
+title.txt:
+	printf '%s' '$(TITLE)' > $@
+
+assets/fonts/%: $(PSNOKIA_PS4)/package/assets/fonts/%
+	@mkdir -p assets/fonts
+	cp $< $@
 
 sce_module/%: $(OO_SAMPLE)/sce_module/%
 	@mkdir -p sce_module

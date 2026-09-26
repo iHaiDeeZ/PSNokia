@@ -2,12 +2,14 @@
 # Builds the CLDC VM for the PS4 into $PSNOKIA_OUT/cldc (needs PCSL built).
 . "$(dirname "$0")/env.sh"
 set -e
-# The low heap, malloc replacement, stat fix, render log and scaler, linked as
-# objects into the VM and MIDP (see cldc/build/ps4_c/ps4_c.cfg)
+# The low heap, malloc replacement, stat fix, render log, scaler and menu,
+# linked as objects into the VM and MIDP (see cldc/build/ps4_c/ps4_c.cfg and
+# midp/build/ps4_c/ps4.gmk)
 mkdir -p "$PSNOKIA_OUT/common"
-for f in lowheap lowheap_malloc psn_marker ps4_stat_fix psn_scale; do
+for f in lowheap lowheap_malloc psn_marker ps4_stat_fix psn_scale psn_menu; do
   "$PS4_LLVM/bin/clang" --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -O2 \
     -isysroot "$OO_PS4_TOOLCHAIN" -isystem "$OO_PS4_TOOLCHAIN/include" \
+    -isystem "$OO_PS4_TOOLCHAIN/include/SDL2" \
     -c "$PSNOKIA_PS4/common/$f.c" -o "$PSNOKIA_OUT/common/$f.o"
 done
 set +e

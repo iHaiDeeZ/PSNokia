@@ -71,6 +71,7 @@ SDL_Surface     *Native_SDL_Screen, *Native_SDL_HScreen, *Native_SDL_VScreen;
 #define PS4_SCREEN_HEIGHT 1080
 static SDL_Surface *PS4_Converted;
 static void ps4_display_load(void);
+static void ps4_menu(int in_game);
 #endif
 SDL_Window      *Native_SDL_Window;
 static jboolean  Native_SDL_ScreenOrientation;
@@ -143,6 +144,10 @@ int lfjport_ui_init()
   Native_SDL_ScreenOrientation = KNI_FALSE;
   Native_SDL_Fullscreen = KNI_FALSE;
   atexit(SDL_Quit);
+#ifdef PS4
+  /* The menu first; the game starts when the player chooses to */
+  ps4_menu(0);
+#endif
   printf("TRACE: lfjport_ui_init SUCCESS\n"); fflush(stdout);
   st_write_marker("RMARKER2: lfjport_ui_init SUCCESS\n");
   return 0;
@@ -392,6 +397,104 @@ void ps4_display_next_view(void)
 void ps4_display_toggle_smooth(void)
 { ps4_smooth = !ps4_smooth;
   ps4_display_changed();
+}
+
+/* --- The menu (ps4/common/psn_menu.c) ---------------------------------- */
+
+#include "psn_menu.h"
+
+int32_t sceSystemServiceLoadExec(const char *path, const char *args[]);
+
+/* Buttons (midp_msgQueue_md.c) */
+int ps4_button_count(void);
+const char *ps4_button_name(int i);
+int ps4_button_key(int i);
+void ps4_set_button_key(int i, int key);
+void ps4_reset_buttons(void);
+void ps4_save_buttons(void);
+
+static SDL_Surface *menu_game_frame(void) { return PS4_Converted; }
+static int menu_view_count(void) { return VIEW_COUNT; }
+static const char *menu_view_name(int view)
+{ static const char *const names[VIEW_COUNT] = { "Fit", "4:3", "Full", "Pixel" };
+  return names[view];
+}
+static int menu_get_view(void) { return ps4_view; }
+/* Every change is saved at once */
+static void menu_set_view(int view) { ps4_view = view; ps4_display_save(); }
+static int menu_get_smooth(void) { return ps4_smooth; }
+static void menu_set_smooth(int smooth) { ps4_smooth = smooth; ps4_display_save(); }
+
+static char menu_title[64];
+static char menu_subtitle[96];
+
+/* The game's name (titleid.txt's neighbour title.txt, written by
+ * make_game.sh) and its maker and screen */
+static void menu_texts(void)
+{ FILE *f;
+  const char *vendor = getenv("PSN_GAME_VENDOR");
+  if (menu_title[0] != 0) return;
+  f = fopen("/app0/title.txt", "r");
+  if (f != NULL)
+     { if (fgets(menu_title, sizeof(menu_title), f) != NULL)
+          menu_title[strcspn(menu_title, "\r\n")] = 0;
+       fclose(f);
+     }
+  if (menu_title[0] == 0) snprintf(menu_title, sizeof(menu_title), "Java game");
+  snprintf(menu_subtitle, sizeof(menu_subtitle), "%s%s%dx%d",
+           vendor != NULL ? vendor : "", vendor != NULL ? " \xc2\xb7 " : "",
+           OriginalWidth, OriginalHeight);
+}
+
+/* Shows the menu; returns only to resume the game */
+static void ps4_menu(int in_game)
+{ psn_menu_host host;
+  int action;
+  menu_texts();
+  memset(&host, 0, sizeof(host));
+  host.title = menu_title;
+  host.subtitle = menu_subtitle;
+  host.game_frame = menu_game_frame;
+  host.view_count = menu_view_count;
+  host.view_name = menu_view_name;
+  host.get_view = menu_get_view;
+  host.set_view = menu_set_view;
+  host.get_smooth = menu_get_smooth;
+  host.set_smooth = menu_set_smooth;
+  host.button_count = ps4_button_count;
+  host.button_name = ps4_button_name;
+  host.get_button_key = ps4_button_key;
+  host.set_button_key = ps4_set_button_key;
+  host.reset_buttons = ps4_reset_buttons;
+  host.save_buttons = ps4_save_buttons;
+  SDL_PauseAudio(1);
+  action = psn_menu_run(Native_SDL_Window, in_game, &host);
+  if (action == PSN_MENU_RESTART)
+     { char line[64];
+       int n = snprintf(line, sizeof(line), "MENU: restart\n");
+       RENDERLOG_WRITE(line, n);
+       sceSystemServiceLoadExec("/app0/eboot.bin", NULL);
+     }
+  if (action == PSN_MENU_CLOSE)
+     { char line[64];
+       int rc, n;
+       n = snprintf(line, sizeof(line), "MENU: close\n");
+       RENDERLOG_WRITE(line, n);
+       rc = sceSystemServiceLoadExec("exit", NULL);
+       n = snprintf(line, sizeof(line), "MENU: exit returned %d\n", rc);
+       RENDERLOG_WRITE(line, n);
+       exit(0);
+     }
+  SDL_PauseAudio(0);
+  /* The game again, even if it is not repainting */
+  SDL_FillRect(Native_SDL_Screen, NULL, SDL_MapRGB(Native_SDL_Screen->format, 0, 0, 0));
+  ps4_draw();
+  SDL_UpdateWindowSurface(Native_SDL_Window);
+}
+
+/* L3 + R3 during the game (midp_msgQueue_md.c) */
+void ps4_open_menu(void)
+{ ps4_menu(1);
 }
 
 /* Converts the current MIDP framebuffer and shows it */

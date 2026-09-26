@@ -149,6 +149,22 @@ static char* vita_find_midlet_class(const char* jarPath) {
 
 #ifdef PS4
         ps4_check_display_size(buf);
+        /* The game's maker, for the menu (lfjport_st_export.c) */
+        {
+            char* v = strstr(buf, "MIDlet-Vendor:");
+            if (v != NULL) {
+                char vendor[64];
+                int n = 0;
+                v += strlen("MIDlet-Vendor:");
+                while (*v == ' ' || *v == '\t') v++;
+                while (v[n] && v[n] != '\r' && v[n] != '\n' && n < (int)sizeof(vendor) - 1) {
+                    vendor[n] = v[n];
+                    n++;
+                }
+                vendor[n] = '\0';
+                setenv("PSN_GAME_VENDOR", vendor, 1);
+            }
+        }
 #endif
         line = strstr(buf, "MIDlet-1:");
         if (line == NULL) {
