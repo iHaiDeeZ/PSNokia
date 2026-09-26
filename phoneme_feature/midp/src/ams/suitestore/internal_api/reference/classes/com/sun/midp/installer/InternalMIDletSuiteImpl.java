@@ -99,6 +99,75 @@ public class InternalMIDletSuiteImpl implements MIDletSuite {
                 [Permissions.CUR_LEVELS];
 
         properties = new Properties();
+        loadManifest();
+    }
+
+    /**
+     * Adds the attributes of the manifest of the JAR on the classpath, so
+     * MIDlet.getAppProperty() finds them for a MIDlet run straight from
+     * its JAR (games keep settings there, e.g. In-Fusio's Gamelet-Timer).
+     * Long lines continue on the next line, which starts with a space.
+     */
+    private void loadManifest() {
+        try {
+            java.io.InputStream in =
+                getClass().getResourceAsStream("/META-INF/MANIFEST.MF");
+            if (in == null) {
+                return;
+            }
+            java.io.ByteArrayOutputStream bytes =
+                new java.io.ByteArrayOutputStream();
+            byte[] chunk = new byte[1024];
+            int n;
+            while ((n = in.read(chunk)) > 0) {
+                bytes.write(chunk, 0, n);
+            }
+            in.close();
+            String text;
+            try {
+                text = new String(bytes.toByteArray(), "UTF-8");
+            } catch (java.io.UnsupportedEncodingException e) {
+                text = new String(bytes.toByteArray());
+            }
+
+            String entry = null;
+            int start = 0;
+            while (start <= text.length()) {
+                int end = text.indexOf('\n', start);
+                if (end < 0) {
+                    end = text.length();
+                }
+                String line = text.substring(start, end);
+                if (line.endsWith("\r")) {
+                    line = line.substring(0, line.length() - 1);
+                }
+                start = end + 1;
+                if (line.startsWith(" ") && entry != null) {
+                    entry = entry + line.substring(1);
+                    continue;
+                }
+                addManifestEntry(entry);
+                entry = line;
+            }
+            addManifestEntry(entry);
+        } catch (Exception e) {
+            // No readable manifest: no properties from it
+        }
+    }
+
+    private void addManifestEntry(String entry) {
+        if (entry == null) {
+            return;
+        }
+        int colon = entry.indexOf(':');
+        if (colon <= 0) {
+            return;
+        }
+        String key = entry.substring(0, colon).trim();
+        String value = entry.substring(colon + 1).trim();
+        if (key.length() > 0 && properties.getProperty(key) == null) {
+            properties.addProperty(key, value);
+        }
     }
 
     /**
