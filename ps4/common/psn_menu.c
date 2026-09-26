@@ -45,10 +45,18 @@ static uint32_t* fb;            // where drawing goes: staticBuf or frameBuf
 static uint32_t* staticBuf;
 static uint32_t* frameBuf;
 static int fbW, fbH;
+// The PS4 window is BGR888 (0x00BBGGRR): colours are stored in the
+// window's order, so a frame is copied to it as it is
+static int swapRB;
+
+#define SWAP_RB(c) ((((c) & 0xff) << 16) | ((c) & 0xff00) | (((c) >> 16) & 0xff))
 
 static void blend(int x, int y, uint32_t rgb, int alpha) {
     if (x < 0 || y < 0 || x >= fbW || y >= fbH || alpha <= 0) {
         return;
+    }
+    if (swapRB) {
+        rgb = SWAP_RB(rgb);
     }
     uint32_t* p = &fb[y * fbW + x];
     if (alpha >= 255) {
@@ -99,7 +107,7 @@ static void make_background(void) {
         int r = (int)(0x0a + (0x13 - 0x0a) * t);
         int g = (int)(0x1a + (0x40 - 0x1a) * t);
         int b = (int)(0x3a + (0x7a - 0x3a) * t);
-        uint32_t c = 0xff000000 | (r << 16) | (g << 8) | b;
+        uint32_t c = 0xff000000 | (swapRB ? (b << 16) | (g << 8) | r : (r << 16) | (g << 8) | b);
         for (int x = 0; x < fbW; x++) {
             bgImage[y * fbW + x] = c;
         }
@@ -804,6 +812,8 @@ int psn_menu_run(SDL_Window* window, int in_game, const psn_menu_host* host) {
         staticBuf = (uint32_t*)malloc(sizeof(uint32_t) * fbW * fbH);
         frameBuf = (uint32_t*)malloc(sizeof(uint32_t) * fbW * fbH);
         baseBuf = (uint32_t*)malloc(sizeof(uint32_t) * fbW * fbH);
+        Uint32 format = screen->format->format;
+        swapRB = format == SDL_PIXELFORMAT_BGR888 || format == SDL_PIXELFORMAT_ABGR8888;
         make_background();
         load_fonts();
         load_game_icon();
@@ -816,13 +826,20 @@ int psn_menu_run(SDL_Window* window, int in_game, const psn_menu_host* host) {
     if (staticBuf == NULL || frameBuf == NULL || baseBuf == NULL || bgImage == NULL) {
         return PSN_MENU_RESUME;
     }
-    // Opaque ARGB8888 like the pixels, copied without blending: a plain
-    // memory copy when the window has the same format
-    SDL_Surface* fbSurface = SDL_CreateRGBSurfaceFrom(frameBuf, fbW, fbH, 32, fbW * 4,
-                                                      0x00ff0000, 0x0000ff00, 0x000000ff,
-                                                      0xff000000);
-    if (fbSurface != NULL) {
-        SDL_SetSurfaceBlendMode(fbSurface, SDL_BLENDMODE_NONE);
+    // Frames go straight into the window's memory when it has our pixel
+    // layout (32-bit, red and blue in the low or high byte); otherwise SDL
+    // converts them
+    Uint32 format = screen->format->format;
+    int direct = screen->format->BytesPerPixel == 4 && screen->w == fbW && screen->h == fbH
+                 && (format == SDL_PIXELFORMAT_BGR888 || format == SDL_PIXELFORMAT_ABGR8888
+                     || format == SDL_PIXELFORMAT_RGB888 || format == SDL_PIXELFORMAT_ARGB8888);
+    SDL_Surface* fbSurface = NULL;
+    if (!direct) {
+        fbSurface = SDL_CreateRGBSurfaceFrom(frameBuf, fbW, fbH, 32, fbW * 4, 0x00ff0000,
+                                             0x0000ff00, 0x000000ff, 0xff000000);
+        if (fbSurface != NULL) {
+            SDL_SetSurfaceBlendMode(fbSurface, SDL_BLENDMODE_NONE);
+        }
     }
     if (host->game_frame != NULL && in_game) {
         SDL_Surface* frame = host->game_frame();
@@ -841,7 +858,7 @@ int psn_menu_run(SDL_Window* window, int in_game, const psn_menu_host* host) {
     Uint32 start = SDL_GetTicks();
     int result = -1;
     int drawnOnce = 0, staticDraws = 0, frames = 0;
-    Uint32 frameTime = 0;
+    Uint32 frameTime = 0, drawTime = 0, copyTime = 0;
     while (result < 0) {
         Uint32 frameStart = SDL_GetTicks();
         int in;
@@ -909,17 +926,35 @@ int psn_menu_run(SDL_Window* window, int in_game, const psn_menu_host* host) {
         drawnOnce = 1;
         draw_waves((SDL_GetTicks() - start) / 1000.0f);
         draw_hints(&m);
-        if (fbSurface != NULL) {
+        Uint32 drawn = SDL_GetTicks();
+        if (direct) {
+            if (SDL_MUSTLOCK(screen)) {
+                SDL_LockSurface(screen);
+            }
+            for (int y = 0; y < fbH; y++) {
+                memcpy((char*)screen->pixels + y * screen->pitch, frameBuf + y * fbW,
+                       sizeof(uint32_t) * fbW);
+            }
+            if (SDL_MUSTLOCK(screen)) {
+                SDL_UnlockSurface(screen);
+            }
+        } else if (fbSurface != NULL) {
             SDL_BlitSurface(fbSurface, NULL, screen, NULL);
         }
+        Uint32 copied = SDL_GetTicks();
         SDL_UpdateWindowSurface(window);
 
         Uint32 spent = SDL_GetTicks() - frameStart;
         frameTime += spent;
+        drawTime += drawn - frameStart;
+        copyTime += copied - drawn;
         if (++frames == 180) {
-            char line[96];
-            snprintf(line, sizeof(line), "MENU: %.1f ms per frame, %d redraws of the still parts\n",
-                     frameTime / 180.0f, staticDraws);
+            char line[160];
+            snprintf(line, sizeof(line), "MENU: %.1f ms per frame (drawing %.1f, copying %.1f, "
+                     "showing %.1f), %d redraws of the still parts%s\n", frameTime / 180.0f,
+                     drawTime / 180.0f, copyTime / 180.0f,
+                     (frameTime - drawTime - copyTime) / 180.0f, staticDraws,
+                     direct ? "" : ", converted by SDL");
             menu_log(line);
         }
         if (spent < 16) {

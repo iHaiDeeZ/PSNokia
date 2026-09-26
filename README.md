@@ -45,17 +45,18 @@ Each game becomes its own PS4 package (`.pkg`). For now you make it on a
 PC, after building PSNokia (see [Building](#building)):
 
 ```bash
-ps4/package/make_game.sh path/to/game.jar "Game Title" PSNK00001 176x208
+ps4/package/make_game.sh path/to/game.jar "Game Title" PSNK00001
 ```
 
 - **Game Title** is the name shown on the PS4 home screen.
 - **PSNK00001** is the game's ID: 4 letters and 5 digits, different for
   every game (PSNK00002 for the next one, and so on).
-- **176x208** is the screen size the game was made for. Leave it out for
-  the common 240x320. Early Nokia games are often 128x128 and Nokia's
-  Series 60 games 176x208. The [compatibility list](COMPATIBILITY.md) has
-  the size for each tested game. If a game sits in a corner of the screen
-  or is cut off, try another size.
+- The screen size the game was made for is worked out from the game
+  itself (early Nokia games are often 128x128, Nokia's Series 60 games
+  176x208, later ones 240x320 or larger). If a game sits in a corner of the
+  screen or is cut off, give the size yourself as a fourth word, for
+  example `176x208`. The [compatibility list](COMPATIBILITY.md) has the
+  size for each tested game.
 
 The package is saved in `ps4/out/games/PSNK00001/`. Copy it to your PS4 and
 install it like any other package, for example with GoldHEN's package
@@ -85,14 +86,23 @@ cursor appears over the game; click the touchpad to tap there, and keep it
 clicked while sliding your finger to drag (for example, to pull back a
 slingshot).
 
-### Picture settings
+### The PSNokia menu
 
-| DS4 | What it does |
-|---|---|
-| L1 + Options | Change the shape: **fit** (the phone's shape), **4:3**, **full** (fills the whole TV), **pixel** (every pixel the same size) |
-| L1 + Touchpad | Switch between **sharp** pixels and **smooth** edges |
+The menu opens before the game starts, and at any time during the game
+when you press **L3 and R3** together (the game waits while it is open):
 
-Each game remembers its own settings.
+- **Start the game** / **Return to the game**
+- **Restart the game**
+- **Assign buttons**: pick a phone key, then press the controller button
+  you want for it
+- **Aspect ratio**: **fit** (the phone's shape), **4:3**, **full** (fills
+  the whole TV) or **pixel** (every pixel the same size)
+- **Picture**: **sharp** pixels or **smooth** edges
+- **Close game**
+
+Each game remembers its own settings, saved as soon as you change them.
+The shape and picture can also be changed during the game with
+**L1 + Options** and **L1 + Touchpad**.
 
 ## Questions
 

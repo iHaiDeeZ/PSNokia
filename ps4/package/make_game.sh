@@ -4,8 +4,9 @@
 #
 # Usage: ps4/package/make_game.sh <jar> <title> <title-id> [WxH] [content-label]
 #   title-id:      4 letters + 5 digits, unique per game, e.g. PSNK00004
-#   WxH:           the phone screen the game was made for, e.g. 128x128
-#                  (default: portrait 240x320); "-" for the default
+#   WxH:           the phone screen the game was made for, e.g. 128x128;
+#                  left out (or "auto"), it is detected from the game
+#                  (detect_screen.py); "-" for the default portrait 240x320
 #   content-label: 16 characters A-Z/0-9 (default: made from the title)
 #
 # The package lands in $PSNOKIA_OUT/games/<title-id>/.
@@ -24,6 +25,11 @@ rm -rf "$D"
 mkdir -p "$D/sce_sys"
 cp "$PSNOKIA_PS4/package/Makefile" "$D/"
 cp "$JAR" "$D/game.jar"
+if [ -z "$SCREEN" ] || [ "$SCREEN" = auto ]; then
+    SCREEN=$("${PSNOKIA_PYTHON:-python3}" "$(cygpath -m "$PSNOKIA_PS4/package/detect_screen.py")" \
+             "$(cygpath -m "$D/game.jar")" 2>/dev/null | tr -d '\r') || SCREEN=-
+    echo "screen size: ${SCREEN/-/default (240x320)} (detected)"
+fi
 if [ -n "$SCREEN" ] && [ "$SCREEN" != "-" ]; then
     printf '%s' "$SCREEN" > "$D/screen.txt"
 fi

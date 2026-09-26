@@ -63,7 +63,13 @@ class CldcForegroundController implements ForegroundController {
         midletControllerEventProducer.
             sendDisplayCreateNotifyEvent(displayId, ownerClassName);
 
-        return new HeadlessAlert(displayId, midletControllerEventProducer);
+        /*
+         * An empty screen until the game shows its own: the "does not use
+         * the screen and runs in the background" alert covered games that
+         * set their screen from a thread after startApp returns (Metal
+         * Slug), and a game on a console never runs in the background.
+         */
+        return null;
     }
 
     /**
