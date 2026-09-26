@@ -2,17 +2,16 @@
  * Concrete DirectGraphics implementation backed by a standard
  * javax.microedition.lcdui.Graphics instance. Pixel-drawing operations
  * (drawPixels/drawPolygon/fillPolygon/drawTriangle) are implemented for
- * real via Graphics.drawRGB()/fillTriangle()/drawLine(); drawImage's
- * flip/rotate manipulation is implemented for real too (getRGB() + manual
- * per-pixel rotate/flip + createRGBImage()), cached per (image identity,
- * manipulation) pair - see getTransformedImage()'s doc for why the cache
- * matters. getPixels() reads back from the Graphics' target image.
+ * real via Graphics.drawRGB()/fillRect()/drawLine(); drawImage's
+ * flip/rotate manipulation maps to the matching MIDP 2.0 drawRegion()
+ * transform. getPixels() reads back from the Graphics' target image.
  */
 
 package com.nokia.mid.ui;
 
 import javax.microedition.lcdui.Graphics;
 import javax.microedition.lcdui.Image;
+import javax.microedition.lcdui.game.Sprite;
 
 import com.sun.midp.lcdui.GameMap;
 
@@ -46,67 +45,37 @@ class DirectGraphicsImpl implements DirectGraphics {
         g.setColor(argbColor & 0x00FFFFFF);
     }
 
-    // Cache of (image identity, manipulation) -> pre-transformed Image. The
-    // naive approach (recompute the rotated/flipped pixel buffer on every
-    // drawImage call, via getRGB()+manual per-pixel index math+createRGBImage)
-    // is a genuine interpreted-bytecode per-pixel loop - tried unthrottled
-    // once before and dropped a game's FPS from ~10 to ~2 (a large image
-    // redrawn with manipulation every single frame for scrolling background
-    // tiles). Caching keyed by (image, manipulation) turns that into a
-    // one-time cost per distinct combo - cheap for the common case (static
-    // level decoration built from a handful of mirrored/rotated source
-    // tiles), same as any other per-mesh-not-per-frame cache in this port.
-    private static final int MAX_TRANSFORM_CACHE = 64;
-    private static final int[] cacheKey = new int[MAX_TRANSFORM_CACHE];
-    private static final Image[] cacheImg = new Image[MAX_TRANSFORM_CACHE];
-    private static final long[] cacheAge = new long[MAX_TRANSFORM_CACHE];
-    private static int cacheCount = 0;
-    private static long cacheClock = 0;
-
     public void drawImage(Image img, int x, int y, int anchor, int manipulation) {
         diagLog("drawImage", img.getWidth() * img.getHeight());
         if (manipulation == 0) {
             g.drawImage(img, x, y, anchor);
             return;
         }
-        g.drawImage(getTransformedImage(img, manipulation), x, y, anchor);
+        // Drawn by the native image code like any other image, instead of
+        // through a transformed copy made in Java
+        g.drawRegion(img, 0, 0, img.getWidth(), img.getHeight(),
+                     midpTransform(manipulation), x, y, anchor);
     }
 
-    private static Image getTransformedImage(Image img, int manipulation) {
-        int key = System.identityHashCode(img) * 31 + manipulation;
-        for (int i = 0; i < cacheCount; i++) {
-            if (cacheKey[i] == key) {
-                cacheAge[i] = ++cacheClock;
-                return cacheImg[i];
-            }
-        }
-        Image result = computeTransformedImage(img, manipulation);
-        int slot;
-        if (cacheCount < MAX_TRANSFORM_CACHE) {
-            slot = cacheCount++;
-        } else {
-            slot = 0;
-            for (int i = 1; i < MAX_TRANSFORM_CACHE; i++) {
-                if (cacheAge[i] < cacheAge[slot]) { slot = i; }
-            }
-        }
-        cacheKey[slot] = key;
-        cacheImg[slot] = result;
-        cacheAge[slot] = ++cacheClock;
-        return result;
-    }
+    /**
+     * The Sprite transform that draws like a Nokia manipulation: Nokia
+     * rotates counter-clockwise, then flips vertically and horizontally;
+     * MIDP mirrors, then rotates clockwise. Indexed by rotation / 90, then
+     * by flips (none, vertical, horizontal, both).
+     */
+    private static final int[] MIDP_TRANSFORMS = {
+        Sprite.TRANS_NONE,   Sprite.TRANS_MIRROR_ROT180, Sprite.TRANS_MIRROR,        Sprite.TRANS_ROT180,
+        Sprite.TRANS_ROT270, Sprite.TRANS_MIRROR_ROT270, Sprite.TRANS_MIRROR_ROT90,  Sprite.TRANS_ROT90,
+        Sprite.TRANS_ROT180, Sprite.TRANS_MIRROR,        Sprite.TRANS_MIRROR_ROT180, Sprite.TRANS_NONE,
+        Sprite.TRANS_ROT90,  Sprite.TRANS_MIRROR_ROT90,  Sprite.TRANS_MIRROR_ROT270, Sprite.TRANS_ROT270,
+    };
 
-    /** Rotation (counter-clockwise) is applied first, then the vertical and
-     *  horizontal flips - the order the Nokia UI API specifies. */
-    private static Image computeTransformedImage(Image img, int manipulation) {
-        int w = img.getWidth();
-        int h = img.getHeight();
-        int[] src = new int[w * h];
-        img.getRGB(src, 0, w, 0, 0, w, h);
-        int[] out = transform(src, w, h, manipulation);
+    private static int midpTransform(int manipulation) {
+        int flips = ((manipulation & DirectGraphics.FLIP_VERTICAL) != 0 ? 1 : 0)
+                  + ((manipulation & DirectGraphics.FLIP_HORIZONTAL) != 0 ? 2 : 0);
         int rotation = manipulation & ~(DirectGraphics.FLIP_HORIZONTAL | DirectGraphics.FLIP_VERTICAL);
-        boolean swap = rotation == DirectGraphics.ROTATE_90 || rotation == DirectGraphics.ROTATE_270;
-        return Image.createRGBImage(out, swap ? h : w, swap ? w : h, true);
+        int quarter = ((rotation % 360 + 360) % 360) / 90;
+        return MIDP_TRANSFORMS[quarter * 4 + flips];
     }
 
     /** Applies a manipulation to w x h ARGB pixels; 90 and 270 swap the sides. */
