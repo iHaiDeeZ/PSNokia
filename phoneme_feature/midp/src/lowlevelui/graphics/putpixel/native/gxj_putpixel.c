@@ -1612,6 +1612,25 @@ drawFilledRightTriangle(gxj_screen_buffer *sbuf, gxj_pixel_type color,
  * the clip bounds are empty and no pixels are generated
  *
  */
+/* Draws row y from xa to xb (in either order), clipped horizontally */
+static void
+fill_clipped_span(gxj_screen_buffer *sbuf, gxj_pixel_type color,
+    const jshort *clip, int xa, int xb, int y) {
+    int left = xa < xb ? xa : xb;
+    int right = xa < xb ? xb : xa;
+    if (right < clip[0] || left >= clip[2]) {
+      return;
+    }
+    if (left < clip[0]) {
+      left = clip[0];
+    }
+    if (right >= clip[2]) {
+      right = clip[2] - 1;
+    }
+    CHECK_XY_CLIP(sbuf, left, y); CHECK_XY_CLIP(sbuf, right, y);
+    primDrawHorzLine(sbuf, color, left, y, right, y);
+}
+
 void
 fill_triangle(gxj_screen_buffer *sbuf, gxj_pixel_type color,
     const jshort *clip, int x1, int y1, int x2, int y2, int x3, int y3) {
@@ -1701,42 +1720,23 @@ fill_triangle(gxj_screen_buffer *sbuf, gxj_pixel_type color,
     return;
     }
 /*clip: */
+    /* Each row's span is clipped on a copy: clamping the edge positions
+     * xa, xb themselves (as this code once did) made the edges continue
+     * from the clip border, so triangles reaching past the clip were drawn
+     * as wrong wedges (Bounce Tales' terrain). */
     {
       /* handle first edge x1,y1->x2,y2 */
       int xa = x1; int xb = x1;
       int xFRACTa = 0; int xFRACTb = 0;
 
       for (y=0; y < dya; y++) {
-        /* don't draw outside the clip */
-        if (y1 + y < clipY1) {
-          /* above the clip */
-          goto nextStepTop;
-        }
         if (y1 + y >= clipY2) {
           /* below the clip */
           goto done;
         }
-        { /* complication is xa,xb are not ordered and cannot be swapped */
-          int xaChanged, xbChanged;
-          if ((xaChanged = (xa < clipX1)))
-            xa = clipX1;
-          if ((xbChanged = (xb < clipX1)))
-            xb = clipX1;
-          if (xaChanged && xbChanged)  /* both to left */
-            goto nextStepTop;
-
-          if ((xaChanged = !xaChanged))  /* toggle changed */
-            if ((xaChanged = (xa >= clipX2)))
-              xa = clipX2-1;
-          if ((xbChanged = !xbChanged))
-            if ((xbChanged = (xb >= clipX2)))
-              xb = clipX2-1;
-          if (xaChanged && xbChanged)  /* both to right */
-            goto nextStepTop;
+        if (y1 + y >= clipY1) {
+          fill_clipped_span(sbuf, color, clip, xa, xb, y1 + y);
         }
-        CHECK_XY_CLIP(sbuf, xa, y1+y); CHECK_XY_CLIP(sbuf, xb, y1+y);
-        primDrawHorzLine(sbuf, color, xa, y1 + y, xb, y1 + y);
-nextStepTop:
         STEPx(xa,xFRACTa,dxa,dya,signDXa);
         STEPx(xb,xFRACTb,dxb,dyb,signDXb);
       }
@@ -1746,45 +1746,19 @@ nextStepTop:
       /* handle edge case (STEPx cannot take dyc == 0)
        * bottom of triangle is horizontal */
       if (dyc == 0) {
-        if ((clipY1 < (y1 + y)) || ((y1 + y) >= clipY2) ||
-            (clipX1 < (x2    )) || ((x2    ) >= clipX2) ||
-            (clipX1 < (x3    )) || ((x3    ) >= clipX2))
-          goto done;
-        CHECK_XY_CLIP(sbuf, x2, y1+y); CHECK_XY_CLIP(sbuf, x3, y1+y);
-        primDrawHorzLine(sbuf, color, x2, y1 + y, x3, y1 + y);
+        if (y1 + y >= clipY1 && y1 + y < clipY2) {
+          fill_clipped_span(sbuf, color, clip, x2, x3, y1 + y);
+        }
         goto done;
       }
       for (y=dya; y <= dyb; y++) {
-        /* don't draw outside the clip */
-        if (y1 + y < clipY1) {
-          /* above the clip */
-          goto nextStepBottom;
-        }
         if (y1 + y >= clipY2) {
           /* below the clip */
           goto done;
         }
-        { /* complication is xa,xb are not ordered and cannot be swapped */
-          int xaChanged, xbChanged;
-          if ((xaChanged = (xa < clipX1)))
-            xa = clipX1;
-          if ((xbChanged = (xb < clipX1)))
-            xb = clipX1;
-          if (xaChanged && xbChanged)  /* both to left */
-            goto nextStepBottom;
-
-          if ((xaChanged = !xaChanged))  /* toggle (changed) */
-            if ((xaChanged = (xa >= clipX2)))
-              xa = clipX2-1;
-          if ((xbChanged = !xbChanged))
-            if ((xbChanged = (xb >= clipX2)))
-              xb = clipX2-1;
-          if (xaChanged && xbChanged)  /* both to right */
-            goto nextStepBottom;
+        if (y1 + y >= clipY1) {
+          fill_clipped_span(sbuf, color, clip, xa, xb, y1 + y);
         }
-        CHECK_XY_CLIP(sbuf, xa, y1+y); CHECK_XY_CLIP(sbuf, xb, y1+y);
-        primDrawHorzLine(sbuf, color, xa, y1 + y, xb, y1 + y);
-nextStepBottom:
         STEPx(xa,xFRACTa,dxc,dyc,signDXc);
         STEPx(xb,xFRACTb,dxb,dyb,signDXb);
       }
