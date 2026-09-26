@@ -26,6 +26,8 @@ typedef struct psn_menu_host {
     void (*set_button_key)(int button, int key);
     void (*reset_buttons)(void);
     void (*save_buttons)(void);
+    // The assignable button for an SDL joystick button number, or -1
+    int (*button_from_sdl)(int sdl_button);
 } psn_menu_host;
 
 enum { PSN_MENU_RESUME, PSN_MENU_RESTART, PSN_MENU_CLOSE };

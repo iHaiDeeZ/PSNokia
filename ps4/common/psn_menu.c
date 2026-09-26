@@ -37,7 +37,13 @@ static void menu_log(const char* text) {
 
 // --- Frame buffer ------------------------------------------------------------
 
-static uint32_t* fb;            // 0x00RRGGBB
+// Pixels are 0xFFRRGGBB (opaque ARGB8888), so copying to a window of the
+// same format is a plain memory copy. The still parts of the menu are drawn
+// into staticBuf only when they change; each frame copies them to frameBuf
+// and draws the moving waves over them.
+static uint32_t* fb;            // where drawing goes: staticBuf or frameBuf
+static uint32_t* staticBuf;
+static uint32_t* frameBuf;
 static int fbW, fbH;
 
 static void blend(int x, int y, uint32_t rgb, int alpha) {
@@ -46,7 +52,7 @@ static void blend(int x, int y, uint32_t rgb, int alpha) {
     }
     uint32_t* p = &fb[y * fbW + x];
     if (alpha >= 255) {
-        *p = rgb;
+        *p = 0xff000000 | rgb;
         return;
     }
     uint32_t d = *p;
@@ -54,17 +60,23 @@ static void blend(int x, int y, uint32_t rgb, int alpha) {
     uint32_t r = (((rgb >> 16) & 0xff) * alpha + ((d >> 16) & 0xff) * ia) / 255;
     uint32_t g = (((rgb >> 8) & 0xff) * alpha + ((d >> 8) & 0xff) * ia) / 255;
     uint32_t b = ((rgb & 0xff) * alpha + (d & 0xff) * ia) / 255;
-    *p = (r << 16) | (g << 8) | b;
+    *p = 0xff000000 | (r << 16) | (g << 8) | b;
 }
 
 static float clampf(float v, float lo, float hi) {
     return v < lo ? lo : v > hi ? hi : v;
 }
 
-// Rounded rectangle, filled, with anti-aliased corners
+// Rounded rectangle, filled, with anti-aliased corners; only the corner
+// squares need the distance test
 static void fill_round_rect(int x, int y, int w, int h, int radius, uint32_t rgb, int alpha) {
     for (int yy = y; yy < y + h; yy++) {
+        int inCornerRows = yy < y + radius || yy >= y + h - radius;
         for (int xx = x; xx < x + w; xx++) {
+            if (!inCornerRows || (xx >= x + radius && xx < x + w - radius)) {
+                blend(xx, yy, rgb, alpha);
+                continue;
+            }
             float cx = clampf((float)xx + 0.5f, (float)(x + radius), (float)(x + w - radius));
             float cy = clampf((float)yy + 0.5f, (float)(y + radius), (float)(y + h - radius));
             float dx = xx + 0.5f - cx, dy = yy + 0.5f - cy;
@@ -77,18 +89,26 @@ static void fill_round_rect(int x, int y, int w, int h, int radius, uint32_t rgb
 
 // --- Background -------------------------------------------------------------
 
-static uint32_t* bgRows;        // the gradient, one colour per row
+static uint32_t* bgImage;       // the gradient, whole screen
 
 static void make_background(void) {
-    bgRows = (uint32_t*)malloc(sizeof(uint32_t) * fbH);
+    bgImage = (uint32_t*)malloc(sizeof(uint32_t) * fbW * fbH);
     for (int y = 0; y < fbH; y++) {
         float t = (float)y / (fbH - 1);
         // #0A1A3A at the top to #13407A at the bottom
         int r = (int)(0x0a + (0x13 - 0x0a) * t);
         int g = (int)(0x1a + (0x40 - 0x1a) * t);
         int b = (int)(0x3a + (0x7a - 0x3a) * t);
-        bgRows[y] = (r << 16) | (g << 8) | b;
+        uint32_t c = 0xff000000 | (r << 16) | (g << 8) | b;
+        for (int x = 0; x < fbW; x++) {
+            bgImage[y * fbW + x] = c;
+        }
     }
+}
+
+// The rows the waves can reach; only these change from frame to frame
+static int wave_top(void) {
+    return (int)(fbH * 0.81f) - 60;
 }
 
 static float wave_y(int wave, float x, float t) {
@@ -97,14 +117,7 @@ static float wave_y(int wave, float x, float t) {
                 + 16.0f * sinf(x * 0.0047f - t * (0.22f + 0.05f * wave) + wave * 0.6f);
 }
 
-static void draw_background(float t) {
-    for (int y = 0; y < fbH; y++) {
-        uint32_t c = bgRows[y];
-        uint32_t* row = &fb[y * fbW];
-        for (int x = 0; x < fbW; x++) {
-            row[x] = c;
-        }
-    }
+static void draw_waves(float t) {
     // A faint band between the first and last wave, then the waves
     for (int x = 0; x < fbW; x++) {
         int top = (int)wave_y(0, (float)x, t), bottom = (int)wave_y(2, (float)x, t);
@@ -447,22 +460,20 @@ static const char* const keyNames[] = { "Up", "Down", "Left", "Right", "Fire / s
     "*", "#", "Clear", "Nothing" };
 #define KEY_CHOICES ((int)(sizeof(keyCodes) / sizeof(keyCodes[0])))
 
-static int key_index(int code) {
-    for (int i = 0; i < KEY_CHOICES; i++) {
-        if (keyCodes[i] == code) {
-            return i;
-        }
-    }
-    return KEY_CHOICES - 1;
-}
+// The buttons screen lists every phone key except "Nothing", then Reset
+#define KEY_ROWS (KEY_CHOICES - 1)
+#define WAIT_MS 5000
 
 typedef struct {
     int inGame;
     int screen;             // 0 main, 1 buttons
     int selected;           // main list
-    int buttonSel;          // buttons list (last row: reset)
-    int buttonTop;          // first visible button row
+    int buttonSel;          // buttons list: a phone key, or KEY_ROWS for Reset
+    int buttonTop;          // first visible row
     int confirmClose;
+    int waiting;            // waiting for a controller button for buttonSel
+    Uint32 waitStart;
+    Uint32 noteUntil;       // "L1, R1 and the touchpad are fixed"
     float highlightY;       // animated highlight position
 } menu_state;
 
@@ -512,48 +523,77 @@ static void draw_main(const menu_state* m, const psn_menu_host* host) {
     }
 }
 
+// The controller buttons that send a phone key, e.g. "Square, Options"; the
+// left stick always sends the arrows
+static void buttons_for_key(const psn_menu_host* host, int key, char* out, int size) {
+    out[0] = 0;
+    if (key >= -4 && key <= -1) {
+        strncat(out, "Left stick", size - 1);
+    }
+    for (int i = 0; i < host->button_count(); i++) {
+        if (host->get_button_key(i) == key) {
+            if (out[0] != 0) {
+                strncat(out, ", ", size - strlen(out) - 1);
+            }
+            strncat(out, host->button_name(i), size - strlen(out) - 1);
+        }
+    }
+}
+
 static void draw_buttons(const menu_state* m, const psn_menu_host* host) {
-    int count = host->button_count();
+    char assigned[96];
     draw_icon(ICON_GAMEPAD, LIST_X + 40, 200, 44, TEXT_BRIGHT, 255);
     draw_text(FONT_LARGE, LIST_X + 100, 170, "Assign buttons", TEXT_BRIGHT, 255);
-    fill_round_rect(LIST_X - 20, (int)m->highlightY - 12, LIST_W, 70, 16, 0xe6f1ff, 34);
+    fill_round_rect(LIST_X - 20, (int)m->highlightY - 12, LIST_W, 70, 16, 0xe6f1ff,
+                    m->waiting ? 70 : 34);
     for (int row = 0; row < BTN_ROWS; row++) {
         int i = m->buttonTop + row;
         int y = BTN_TOP + row * BTN_STEP;
-        if (i > count) {
+        if (i > KEY_ROWS) {
             break;
         }
         int sel = i == m->buttonSel;
         uint32_t colour = sel ? TEXT_BRIGHT : TEXT_NORMAL;
-        if (i == count) {
+        if (i == KEY_ROWS) {
             draw_icon(ICON_RESTART, LIST_X + 40, y + 24, 34, colour, 255);
             draw_text(FONT_MEDIUM, LIST_X + 100, y, "Reset to default", colour, 255);
-        } else {
-            draw_text(FONT_MEDIUM, LIST_X + 40, y, host->button_name(i), colour, 255);
-            draw_value(y + 6, keyNames[key_index(host->get_button_key(i))], sel);
+            continue;
         }
+        draw_text(FONT_MEDIUM, LIST_X + 40, y, keyNames[i], colour, 255);
+        if (sel && m->waiting) {
+            char prompt[64];
+            int left = (int)(WAIT_MS - (SDL_GetTicks() - m->waitStart) + 999) / 1000;
+            snprintf(prompt, sizeof(prompt), "Press a button...  %d", left < 1 ? 1 : left);
+            draw_text_right(FONT_SMALL, LIST_X + LIST_W - 40, y + 6, prompt, 0xffe08a, 255);
+            continue;
+        }
+        buttons_for_key(host, keyCodes[i], assigned, sizeof(assigned));
+        draw_text_right(FONT_SMALL, LIST_X + LIST_W - 40, y + 6,
+                        assigned[0] ? assigned : "Not assigned",
+                        assigned[0] ? (sel ? TEXT_BRIGHT : TEXT_NORMAL) : TEXT_DIM, 255);
     }
-    if (m->buttonTop > 0) {
+    if (m->buttonTop > 0 && SDL_GetTicks() >= m->noteUntil) {
         draw_text_centered(FONT_SMALL, LIST_X + LIST_W / 2 - 20, BTN_TOP - 50, "More above",
                            TEXT_DIM, 200);
     }
-    if (m->buttonTop + BTN_ROWS <= count) {
+    if (m->buttonTop + BTN_ROWS <= KEY_ROWS) {
         draw_text_centered(FONT_SMALL, LIST_X + LIST_W / 2 - 20, BTN_TOP + BTN_ROWS * BTN_STEP,
                            "More below", TEXT_DIM, 200);
     }
+    if (SDL_GetTicks() < m->noteUntil) {
+        draw_text_centered(FONT_SMALL, LIST_X + LIST_W / 2 - 20, BTN_TOP - 50,
+                           "L1, R1 and the touchpad can't be assigned", 0xffe08a, 255);
+    }
 }
 
-static void draw_menu(const menu_state* m, const psn_menu_host* host, float t) {
-    char clock[16];
-    time_t now = time(NULL);
-    struct tm tmv;
-    draw_background(t);
+// The background with the game on the left, which only changes with the
+// display shape (the paused game's picture follows it)
+static uint32_t* baseBuf;
+static int baseView = -1;
+
+static void draw_base(const menu_state* m, const psn_menu_host* host) {
+    memcpy(fb, bgImage, sizeof(uint32_t) * fbW * fbH);
     draw_text(FONT_SMALL, 80, 60, "PSNokia", TEXT_NORMAL, 255);
-    if (localtime_r(&now, &tmv) != NULL) {
-        snprintf(clock, sizeof(clock), "%02d:%02d", tmv.tm_hour, tmv.tm_min);
-        draw_text_right(FONT_SMALL, fbW - 80, 60, clock, TEXT_NORMAL, 255);
-    }
-    // The game
     int cx = 440;
     if (m->inGame && frameCopy != NULL) {
         draw_game_frame(host, cx, 440, 520, 440);
@@ -562,13 +602,28 @@ static void draw_menu(const menu_state* m, const psn_menu_host* host, float t) {
     }
     draw_text_centered(FONT_LARGE, cx, 700, host->title ? host->title : "", TEXT_BRIGHT, 255);
     draw_text_centered(FONT_SMALL, cx, 770, host->subtitle ? host->subtitle : "", TEXT_DIM, 255);
+}
+
+// Everything but the waves and the hints, into staticBuf
+static void draw_static(const menu_state* m, const psn_menu_host* host, const char* clock) {
+    if (baseView != host->get_view()) {
+        fb = baseBuf;
+        draw_base(m, host);
+        baseView = host->get_view();
+    }
+    fb = staticBuf;
+    memcpy(fb, baseBuf, sizeof(uint32_t) * fbW * fbH);
+    draw_text_right(FONT_SMALL, fbW - 80, 60, clock, TEXT_NORMAL, 255);
 
     if (m->screen == 0) {
         draw_main(m, host);
     } else {
         draw_buttons(m, host);
     }
-    // Hints
+}
+
+// The button hints at the bottom right, over the waves
+static void draw_hints(const menu_state* m) {
     int x = fbW - 80;
     const char* back = m->screen == 0 ? (m->inGame ? "Back to game" : "") : "Back";
     if (*back) {
@@ -577,7 +632,7 @@ static void draw_menu(const menu_state* m, const psn_menu_host* host, float t) {
         draw_icon(ICON_CIRCLE, x - 30, fbH - 72, 36, TEXT_NORMAL, 255);
         x -= 90;
     }
-    const char* select = m->screen == 1 ? "Change" : "Select";
+    const char* select = m->screen == 1 ? "Assign" : "Select";
     x -= text_width(FONT_SMALL, select);
     draw_text(FONT_SMALL, x, fbH - 90, select, TEXT_NORMAL, 255);
     draw_icon(ICON_CROSS, x - 30, fbH - 72, 36, TEXT_NORMAL, 255);
@@ -664,20 +719,19 @@ static int step_item(const menu_state* m, int from, int delta) {
 // Returns -1 to stay in the menu, else a PSN_MENU_ action
 static int handle_input(menu_state* m, const psn_menu_host* host, int in) {
     if (m->screen == 1) {
-        int count = host->button_count();
         if (in == IN_UP || in == IN_DOWN) {
-            m->buttonSel = (m->buttonSel + (in == IN_UP ? count : 1)) % (count + 1);
+            m->buttonSel = (m->buttonSel + (in == IN_UP ? KEY_ROWS : 1)) % (KEY_ROWS + 1);
             if (m->buttonSel < m->buttonTop) m->buttonTop = m->buttonSel;
             if (m->buttonSel >= m->buttonTop + BTN_ROWS) m->buttonTop = m->buttonSel - BTN_ROWS + 1;
-        } else if ((in == IN_LEFT || in == IN_RIGHT || in == IN_OK) && m->buttonSel < count) {
-            int k = key_index(host->get_button_key(m->buttonSel));
-            k = (k + (in == IN_LEFT ? KEY_CHOICES - 1 : 1)) % KEY_CHOICES;
-            host->set_button_key(m->buttonSel, keyCodes[k]);
-        } else if (in == IN_OK && m->buttonSel == count) {
+        } else if (in == IN_OK && m->buttonSel < KEY_ROWS) {
+            // The next controller button pressed sends this key
+            m->waiting = 1;
+            m->waitStart = SDL_GetTicks();
+        } else if (in == IN_OK) {
             host->reset_buttons();
         } else if (in == IN_BACK) {
-            host->save_buttons();
             m->screen = 0;
+            m->highlightY = (float)(MAIN_TOP + m->selected * MAIN_STEP);
         }
         return -1;
     }
@@ -744,24 +798,37 @@ int psn_menu_run(SDL_Window* window, int in_game, const psn_menu_host* host) {
         return PSN_MENU_RESUME;
     }
     if (!initialised) {
+        char line[128];
         fbW = screen->w;
         fbH = screen->h;
-        fb = (uint32_t*)malloc(sizeof(uint32_t) * fbW * fbH);
+        staticBuf = (uint32_t*)malloc(sizeof(uint32_t) * fbW * fbH);
+        frameBuf = (uint32_t*)malloc(sizeof(uint32_t) * fbW * fbH);
+        baseBuf = (uint32_t*)malloc(sizeof(uint32_t) * fbW * fbH);
         make_background();
         load_fonts();
         load_game_icon();
         initialised = 1;
-        menu_log(haveFont ? "MENU: ready\n" : "MENU: ready without text\n");
+        snprintf(line, sizeof(line), "MENU: ready%s, window %dx%d, format %s\n",
+                 haveFont ? "" : " without text", fbW, fbH,
+                 SDL_GetPixelFormatName(screen->format->format));
+        menu_log(line);
     }
-    if (fb == NULL) {
+    if (staticBuf == NULL || frameBuf == NULL || baseBuf == NULL || bgImage == NULL) {
         return PSN_MENU_RESUME;
     }
-    SDL_Surface* fbSurface = SDL_CreateRGBSurfaceFrom(fb, fbW, fbH, 32, fbW * 4,
-                                                      0x00ff0000, 0x0000ff00, 0x000000ff, 0);
+    // Opaque ARGB8888 like the pixels, copied without blending: a plain
+    // memory copy when the window has the same format
+    SDL_Surface* fbSurface = SDL_CreateRGBSurfaceFrom(frameBuf, fbW, fbH, 32, fbW * 4,
+                                                      0x00ff0000, 0x0000ff00, 0x000000ff,
+                                                      0xff000000);
+    if (fbSurface != NULL) {
+        SDL_SetSurfaceBlendMode(fbSurface, SDL_BLENDMODE_NONE);
+    }
     if (host->game_frame != NULL && in_game) {
         SDL_Surface* frame = host->game_frame();
         frameCopy = frame ? SDL_ConvertSurfaceFormat(frame, SDL_PIXELFORMAT_RGB888, 0) : NULL;
     }
+    baseView = -1;              // a new paused picture: redraw the left side
     menu_state m;
     memset(&m, 0, sizeof(m));
     m.inGame = in_game;
@@ -773,21 +840,88 @@ int psn_menu_run(SDL_Window* window, int in_game, const psn_menu_host* host) {
 
     Uint32 start = SDL_GetTicks();
     int result = -1;
+    int drawnOnce = 0, staticDraws = 0, frames = 0;
+    Uint32 frameTime = 0;
     while (result < 0) {
         Uint32 frameStart = SDL_GetTicks();
         int in;
-        while ((in = read_input()) != IN_NONE && result < 0) {
-            result = handle_input(&m, host, in);
+        if (m.waiting) {
+            // Assigning: the next controller button, whichever it is
+            SDL_Event e;
+            while (m.waiting && SDL_PollEvent(&e)) {
+                if (e.type != SDL_JOYBUTTONDOWN) {
+                    continue;
+                }
+                int button = host->button_from_sdl(e.jbutton.button);
+                if (button < 0) {
+                    m.noteUntil = SDL_GetTicks() + 2000;
+                    continue;
+                }
+                host->set_button_key(button, keyCodes[m.buttonSel]);
+                m.waiting = 0;
+                heldDir = IN_NONE;
+            }
+            if (m.waiting && SDL_GetTicks() - m.waitStart >= WAIT_MS) {
+                m.waiting = 0;      // nothing pressed: unchanged
+            }
+        } else {
+            while ((in = read_input()) != IN_NONE && result < 0) {
+                result = handle_input(&m, host, in);
+                if (m.waiting) {
+                    break;
+                }
+            }
         }
         float target = m.screen == 0 ? (float)(MAIN_TOP + m.selected * MAIN_STEP)
                                      : (float)(BTN_TOP + (m.buttonSel - m.buttonTop) * BTN_STEP);
-        m.highlightY += (target - m.highlightY) * 0.35f;
-        draw_menu(&m, host, (SDL_GetTicks() - start) / 1000.0f);
+        m.highlightY += (target - m.highlightY) * 0.45f;
+        if (fabsf(target - m.highlightY) < 0.5f) {
+            m.highlightY = target;
+        }
+
+        // Redraw the still parts only when something on them changed
+        char clock[16] = "";
+        time_t now = time(NULL);
+        struct tm tmv;
+        if (localtime_r(&now, &tmv) != NULL) {
+            snprintf(clock, sizeof(clock), "%02d:%02d", tmv.tm_hour, tmv.tm_min);
+        }
+        int keys = 0;
+        for (int i = 0; i < host->button_count(); i++) {
+            keys = keys * 31 + host->get_button_key(i);
+        }
+        int look[] = { m.screen, m.selected, m.buttonSel, m.buttonTop, m.waiting,
+                       m.waiting ? (int)((SDL_GetTicks() - m.waitStart) / 1000) : 0,
+                       SDL_GetTicks() < m.noteUntil, m.confirmClose, host->get_view(),
+                       host->get_smooth(), (int)m.highlightY, keys, clock[3], clock[4] };
+        static int lastLook[sizeof(look) / sizeof(look[0])];
+        int redraw = !drawnOnce || memcmp(look, lastLook, sizeof(look)) != 0;
+        if (redraw) {
+            memcpy(lastLook, look, sizeof(look));
+            fb = staticBuf;
+            draw_static(&m, host, clock);
+            staticDraws++;
+        }
+        // The waves' rows (all of them after a redraw), then the waves
+        fb = frameBuf;
+        int top = redraw || !drawnOnce ? 0 : wave_top();
+        memcpy(frameBuf + top * fbW, staticBuf + top * fbW, sizeof(uint32_t) * fbW * (fbH - top));
+        drawnOnce = 1;
+        draw_waves((SDL_GetTicks() - start) / 1000.0f);
+        draw_hints(&m);
         if (fbSurface != NULL) {
             SDL_BlitSurface(fbSurface, NULL, screen, NULL);
         }
         SDL_UpdateWindowSurface(window);
+
         Uint32 spent = SDL_GetTicks() - frameStart;
+        frameTime += spent;
+        if (++frames == 180) {
+            char line[96];
+            snprintf(line, sizeof(line), "MENU: %.1f ms per frame, %d redraws of the still parts\n",
+                     frameTime / 180.0f, staticDraws);
+            menu_log(line);
+        }
         if (spent < 16) {
             SDL_Delay(16 - spent);
         }

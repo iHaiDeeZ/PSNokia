@@ -412,6 +412,7 @@ int ps4_button_key(int i);
 void ps4_set_button_key(int i, int key);
 void ps4_reset_buttons(void);
 void ps4_save_buttons(void);
+int ps4_button_from_sdl(int sdlButton);
 
 static SDL_Surface *menu_game_frame(void) { return PS4_Converted; }
 static int menu_view_count(void) { return VIEW_COUNT; }
@@ -467,6 +468,7 @@ static void ps4_menu(int in_game)
   host.set_button_key = ps4_set_button_key;
   host.reset_buttons = ps4_reset_buttons;
   host.save_buttons = ps4_save_buttons;
+  host.button_from_sdl = ps4_button_from_sdl;
   SDL_PauseAudio(1);
   action = psn_menu_run(Native_SDL_Window, in_game, &host);
   if (action == PSN_MENU_RESTART)

@@ -313,6 +313,15 @@ void ps4_reset_buttons(void)
   ps4_save_buttons();
 }
 
+/* The assignable button (index in ps4_buttons) for an SDL joystick button
+ * number, or -1 (L1/R1, the touchpad) */
+int ps4_button_from_sdl(int sdlButton)
+{ int vita = ps4_to_vita_button(sdlButton), i;
+  for (i = 0; i < PS4_BUTTON_COUNT; i++)
+       if (ps4_buttons[i].vita == vita) return i;
+  return -1;
+}
+
 /* The phone key assigned to a button (Vita index) */
 static int ps4_key_for(int vita)
 { int i;
